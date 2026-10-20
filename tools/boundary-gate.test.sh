@@ -58,9 +58,10 @@ run_gate() { git add -A >/dev/null 2>&1; bash tools/boundary-gate.sh >"$TMP/out"
 # blocks DESC FILE CONTENT: the gate must FAIL and name the file
 blocks() {
   local d=$1 f=$2 c=$3
+  mkdir -p "$(dirname "$f")"
   printf '%s\n' "$c" > "$f"
   if run_gate; then bad "$d (the gate passed)"; else
-    grep -q "^$f:" "$TMP/out" && ok "$d" || bad "$d (failed, but did not name $f)"
+    if grep -q "^$f:" "$TMP/out"; then ok "$d"; else bad "$d (failed, but did not name $f)"; fi
   fi
   rm -f "$f"
 }
@@ -68,6 +69,7 @@ blocks() {
 # allows DESC FILE CONTENT: the gate must PASS
 allows() {
   local d=$1 f=$2 c=$3
+  mkdir -p "$(dirname "$f")"
   printf '%s\n' "$c" > "$f"
   if run_gate; then ok "$d"; else bad "$d (the gate blocked: $(head -1 "$TMP/out"))"; fi
   rm -f "$f"
@@ -102,22 +104,109 @@ blocks "always scope is NOT skipped there. A private path is blocked everywhere"
 allows "an ID-only private reference is allowed" \
   "docs/design.md" 'This implements SPEC-0358 and closes BUG-0213.'
 
+# --- narrative document boundaries do not depend on operational exemptions ----
+blocks "mixed-case nested specification directory is blocked" \
+  "pkg/example/SpEcS/overview.md" '# Protocol design'
+blocks "nested architecture decision document is blocked" \
+  "notes/decisions/ADR-0123-choice.MD" '# Decision'
+blocks "nested planning directory is blocked" \
+  "nested/Planning/release.txt" 'Release sequence'
+blocks "planning filename is blocked" \
+  "docs/release-plan.md" '# Release sequence'
+blocks "case-insensitive obsolete docs are blocked" \
+  "nested/DoCs/OlD/manual.md" '# User manual'
+blocks "obsolete docs cannot hide behind the github exemption" \
+  ".github/Docs/Old/usage.md" '# Usage'
+blocks "specification title with a neutral filename is blocked" \
+  "docs/protocol.md" '# Specification: capture protocol'
+blocks "numbered specification title is blocked" \
+  "docs/protocol.md" '# SPEC-1234: Capture protocol'
+blocks "ADR title with a neutral filename is blocked" \
+  "docs/choice.md" '# Architecture Decision Record: storage'
+blocks "requirements document title is blocked" \
+  "docs/capture.md" '# Requirements Specification: capture'
+blocks "German requirements document title is blocked" \
+  "docs/capture.md" '# Anforderungsspezifikation: Erfassung'
+blocks "setext document title is blocked" \
+  "docs/storage.rst" $'Specification: storage\n======================'
+blocks "bold Markdown specification title is blocked" \
+  "docs/protocol.md" '# **Specification**: internal design'
+blocks "italic Markdown decision title is blocked" \
+  "docs/protocol.md" '# _ADR-1234_: internal decision'
+blocks "RST dashed specification title is blocked" \
+  "docs/protocol.rst" $'Specification: internal design\n------------------------------'
+blocks "HTML h1 specification title is blocked" \
+  "docs/protocol.html" '<h1>Specification: internal design</h1>'
+blocks "HTML document title is blocked" \
+  "docs/protocol.html" '<html><head><title>Requirements: internal design</title></head></html>'
+blocks "multiline HTML title with nested markup is blocked" \
+  "docs/protocol.html" $'<H1 class="document-title">\n<strong>Specification</strong>: internal design\n</H1>'
+blocks "AsciiDoc specification title is blocked" \
+  "docs/protocol.adoc" '= Specification: protocol'
+blocks "Org requirements title is blocked" \
+  "docs/protocol.org" '* Requirements: protocol'
+blocks "specification ID without a separator is blocked" \
+  "docs/SPEC0188.md" '# Capture design'
+blocks "nested specification package is blocked" \
+  "nested/Spec-1234/overview.md" '# Capture design'
+blocks "obsolete documentation assets are blocked" \
+  "asset-check/Docs/Old/assets/diagram.svg" '<svg></svg>'
+blocks "neutral filename with a release plan title is blocked" \
+  "docs/work.md" '# Release Plan: rollout'
+blocks "generic plan title is blocked" \
+  "docs/work.md" '# Plan: release work'
+blocks "top-level implementation plan is blocked" \
+  "docs/work.md" '# Implementation Plan: rollout'
+
+allows "source file named for a specification remains legal" \
+  "tests/test_spec0188_tools.py" 'def test_spec0188_tools(): pass'
+allows "test fixture containing a specification title remains legal" \
+  "pkg/parser/testdata/SPEC-1234.md" '# Specification: parser fixture'
+allows "nested fixture containing an ADR remains legal" \
+  "tests/fixtures/ADR-1234.md" '# Architecture Decision Record: parser fixture'
+allows "skill instructions remain legal" \
+  ".claude/skills/spec-review/SKILL.md" '# Specification review'
+allows "OpenAPI contract remains legal" \
+  "api/specs/openapi.yaml" $'openapi: 3.1.0\ninfo: {title: API, version: 1.0.0}'
+allows "JSON schema remains legal" \
+  "api/specs/capture.schema.json" '{"type":"object"}'
+allows "runtime dependency requirements remain legal" \
+  "requirements.txt" 'requests==2.32.0'
+allows "test dependency requirements remain legal" \
+  "tests/requirements.txt" 'pytest==8.0.0'
+allows "user manual requirements section remains legal" \
+  "docs/user-manual.md" $'# User Manual\n\n## Requirements\nInstall the client. Implementation follows SPEC-1234.'
+allows "manual with an implementation plan subsection remains legal" \
+  "docs/user-manual.md" $'# User Manual\n\n## Implementation Plan\nSee the separately managed deployment plan.'
+allows "API reference with inline references remains legal" \
+  "docs/api-reference.md" $'# API Reference\n\nThe endpoint implements SPEC-1234 and ADR-0123.'
+allows "normal HTML API reference remains legal" \
+  "docs/protocol.html" '<html><head><title>API Reference</title></head><body><h1>API Reference</h1><p>Implements SPEC-1234.</p></body></html>'
+allows "HTML lower-level requirements section remains legal" \
+  "docs/protocol.html" '<title>User Manual</title><h1>User Manual</h1><h2>Requirements</h2>'
+allows "RST API reference remains legal" \
+  "docs/protocol.rst" $'API Reference\n-------------\nImplements SPEC-1234.'
+allows "Markdown requirements subsection stays legal" \
+  "docs/protocol.md" $'# User Manual\n\nRequirements\n------------\nInstall the client.'
+allows "documented heading examples remain legal" \
+  "docs/user-manual.md" $'# User Manual\n\n```markdown\n# Specification: example heading\n```'
+
 # --- the table is the source of truth ------------------------------------------
 n_patterns=$(grep -cvE '^[[:space:]]*(#|$)' tools/leak-patterns.txt)
-[ "$n_patterns" -ge 5 ] && ok "the pattern table is loaded ($n_patterns patterns)" \
-                        || bad "the pattern table looks empty ($n_patterns patterns)"
+if [ "$n_patterns" -ge 5 ]; then ok "the pattern table is loaded ($n_patterns patterns)";
+else bad "the pattern table looks empty ($n_patterns patterns)"; fi
 
 : > tools/leak-patterns.txt
 if run_gate; then bad "an empty pattern table must not pass silently"; else
-  grep -q 'no patterns loaded' "$TMP/out" && ok "an empty pattern table fails loudly" \
-    || bad "an empty pattern table failed, but not with the expected message"
+  if grep -q 'no patterns loaded' "$TMP/out"; then ok "an empty pattern table fails loudly";
+  else bad "an empty pattern table failed, but not with the expected message"; fi
 fi
 cp "$PATTERNS" tools/leak-patterns.txt
 
 rm -f tools/leak-patterns.txt
 if run_gate; then bad "a missing pattern table must not pass silently"; else
-  grep -q 'missing tools/leak-patterns.txt' "$TMP/out" && ok "a missing pattern table fails loudly" \
-    || bad "a missing pattern table failed, but not with the expected message"
+  if grep -q 'missing tools/leak-patterns.txt' "$TMP/out"; then ok "a missing pattern table fails loudly";
+  else bad "a missing pattern table failed, but not with the expected message"; fi
 fi
 cp "$PATTERNS" tools/leak-patterns.txt
 

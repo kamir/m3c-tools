@@ -360,8 +360,8 @@ nicht. `skillctl token list --host <host>` zeigt, was hinterlegt ist, und gibt
 weder einen Token noch ein Datum aus:
 
 ```
-$ skillctl token list --host git.kieback-peter.de
-credentials for git.kieback-peter.de
+$ skillctl token list --host git.example.com
+credentials for git.example.com
   protected store: macOS Keychain
 
   gitlab    read   not provisioned              env: M3C_GITLAB_RO_TOKEN

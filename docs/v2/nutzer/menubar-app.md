@@ -275,4 +275,4 @@ rm -rf /Applications/M3C-Tools.app
 
 ---
 
-Back: [Getting Started](getting-started) | [Home](/)
+Back: [Getting Started](getting-started.md) | [Home](/)

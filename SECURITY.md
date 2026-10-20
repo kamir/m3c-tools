@@ -69,4 +69,6 @@ offline and fail-closed:
 skillctl verify-sig my-skill.skb --pubkey trusted.pub   # no network
 ```
 
-See [docs/v2/betrieb/releasing.md](docs/v2/betrieb/releasing.md) for the full signing and provenance flow.
+The [product release workflow](.github/workflows/release.yml) and
+[skillctl release workflow](.github/workflows/skillctl-release.yml) define the
+signing and provenance steps for each release line.

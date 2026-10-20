@@ -17,8 +17,9 @@ Only the **latest** released version of each line is supported:
 - **product**: `vX.Y.Z` (`m3c-tools` and the bundled binaries);
 - **skillctl**: `skillctl/vX.Y.Z` (the signed trust CLI, its own version series).
 
-The two lines version independently (see [docs/v2/betrieb/releasing.md](docs/v2/betrieb/releasing.md): a
-release cuts them from the same commit under two separate tags). Older tags are not
+The two lines version independently under separate tags; see the
+[product release workflow](.github/workflows/release.yml) and
+[skillctl release workflow](.github/workflows/skillctl-release.yml). Older tags are not
 maintained; **security fixes land on the latest release** of each line. This mirrors
 [SECURITY.md](SECURITY.md#supported-versions): the supported set is exactly what
 receives fixes.
@@ -40,7 +41,7 @@ A change that breaks callers ships **only with a MAJOR version bump**, and **alw
 with a migration note** in the release. "Breaking" is a statement about callers, so it
 is never derived automatically from a diff, the MAJOR bump is a deliberate act
 (`make release-major`; the derive-bump rule never issues MAJOR on its own, see
-[docs/v2/betrieb/releasing.md](docs/v2/betrieb/releasing.md#choosing-the-version-bump)).
+[scripts/derive-bump.sh](scripts/derive-bump.sh)).
 
 ## `.skb` bundle format
 
@@ -104,6 +105,7 @@ These guarantees are not honour-system where a check exists:
   writes and reads with one build, so it pins self-consistency; only the fixture
   test can fail when a change moves the writer and the reader together.
 
-See [docs/v2/betrieb/releasing.md](docs/v2/betrieb/releasing.md) for how a version is chosen and cut, and
+See [CONTRIBUTING.md](CONTRIBUTING.md#commit-messages-conventional-commits) for version selection and
+[Makefile](Makefile) for release entry points, and
 [SECURITY.md](SECURITY.md) for the supported-version and reporting policy this document
 tracks.

@@ -3,8 +3,8 @@
 # check-installer-version.sh: die Installer duerfen KEINE Fassung einbacken.
 #
 # Warum es dieses Tor gibt, und das gilt unveraendert weiter.
-# docs/v2/betrieb/releasing-skillctl-windows.md fuehrte als Release-Schritt: "tools/
-# skillctl-install.sh RELEASE_BASE default raised to skillctl/vX.Y.Z". Beim
+# Der fruehere Release-Ablauf verlangte, die Vorgabe RELEASE_BASE in
+# tools/skillctl-install.sh auf die neue Version zu setzen. Beim
 # Schnitt von skillctl/v0.5.0 am 2026-09-10 ist dieser Handgriff ausgefallen,
 # und nichts hat es gemerkt. Die Folge, am 2026-09-16 gemessen: der in README.md
 # und drei Doku-Dateien gepinnte Einzeiler lieferte eine install.ps1, deren

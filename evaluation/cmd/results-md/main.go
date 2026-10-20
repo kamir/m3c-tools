@@ -52,7 +52,7 @@ func main() {
 	})
 
 	var b strings.Builder
-	b.WriteString("# SPEC-0280 Evaluation Results (E1–E10)\n\n")
+	b.WriteString("# Trust-Layer Evaluation Results (E1–E10)\n\n")
 	b.WriteString("> Generated from `RESULTS.csv` by `evaluation/cmd/results-md`. Do not hand-edit;\n")
 	b.WriteString("> re-run the harness (`RUN_EVAL=1 go test ./evaluation/...`) then regenerate.\n\n")
 
@@ -65,7 +65,7 @@ func main() {
 	fmt.Fprintf(&b, "- OS/arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
 	fmt.Fprintf(&b, "- Logical CPUs: %d\n", runtime.NumCPU())
 	fmt.Fprintf(&b, "- Go: %s\n", runtime.Version())
-	b.WriteString("- Population: **synthetic** for all metrics except **E4** (the real committed SPEC-0246 corpus).\n\n")
+	b.WriteString("- Population: **synthetic** for all metrics except **E4** (the real committed behaviour-scan corpus).\n\n")
 
 	b.WriteString("## Results\n\n")
 	b.WriteString("| Metric | Driver | Measured | Value | Population | Note |\n")
@@ -78,9 +78,9 @@ func main() {
 			md(r[0]), md(r[1]), md(r[2]), md(r[3]), md(r[4]), md(r[5]))
 	}
 	b.WriteString("\nE6 is recorded as `N/A, deferred (gated P3-P2)`: the OIDC/JWKS binding ")
-	b.WriteString("(SPEC-0277 P2) is not built, so there is no path to measure, no number is fabricated.\n")
+	b.WriteString("is not built, so there is no path to measure, no number is fabricated.\n")
 
-	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
 	if err := os.WriteFile(mdPath, []byte(b.String()), 0o644); err != nil {
 		fmt.Fprintf(os.Stderr, "results-md: write %s: %v\n", mdPath, err)
 		os.Exit(1)

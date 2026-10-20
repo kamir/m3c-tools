@@ -1,4 +1,4 @@
-# SPEC-0280: Trust-Layer Evaluation Harness (E1–E10)
+# Trust-Layer Evaluation Harness (E1–E10)
 
 A reproducible, committed harness that measures the **shipped** m3c-tools trust
 layer (`pkg/skillctl/{verify,signing,translog,agentid,bodyscan,datascope}` + the
@@ -87,7 +87,7 @@ go test ./evaluation/ -run x -bench 'E1|E5|E7' -benchmem -cpu 1
   (both should show zero `connect()` to a non-loopback address).
 - **E4 uses the REAL committed corpus** at
   `../pkg/skillctl/bodyscan/testdata/corpus` (40 adversarial + 32 benign). TP/FP
-  use the same correctness bar as the shipped SPEC-0246 §4.6 gate, so E4 is an
+  use the same correctness bar as the shipped behaviour-scan gate, so E4 is an
   honest re-measurement of the production acceptance criterion.
 - **E5** reports *two* honest figures: the cached-mandate gate (`AuthorizeSkill`
   only) and the re-verify-each-call gate (`agentid.Verify` + `AuthorizeSkill`),
@@ -101,9 +101,10 @@ go test ./evaluation/ -run x -bench 'E1|E5|E7' -benchmem -cpu 1
 
 ## Threats to validity
 
-Recorded in `EVALUATION-SECTION.md`: the population is **synthetic** (except E4,
-which is the real corpus); results are **single-platform** (the hardware recorded
-in `RESULTS.md`); corpus **representativeness** bounds E4. E6 is honestly deferred.
+The population is **synthetic** (except E4,
+which is the real corpus); results are **single-platform** (hardware details are
+recorded in the generated `results/RESULTS.md` report); corpus
+**representativeness** bounds E4. E6 is honestly deferred.
 
 ## Constraint
 

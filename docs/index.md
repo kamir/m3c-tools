@@ -22,9 +22,4 @@ auch als [Doku-Seite](v2/pages/wegweiser.html).
 [Manual: skillctl](v2/referenz/manual-skillctl.md) ·
 [CLI-VERBS](v2/referenz/CLI-VERBS.md) ·
 [Program-Index](program-index.md) · [Service-Index](service-index.md) ·
-[Component-Index](component-index.md) · [docs/security/](security/)
-
-Der fruehere Prosa-Bestand dieser Ebene liegt unter [`docs/old/`](old/);
-kanonisch ist er nicht mehr.
-The former prose inventory of this level sits under `docs/old/` and is no
-longer canonical.
+[Component-Index](component-index.md) · [docs/security/](security)

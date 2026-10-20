@@ -6,15 +6,15 @@ Gedacht für den echten Betrieb bei einem Kunden mit eigener GitLab-Instanz.
 Zielgruppe: die Person, die eine Maschine einrichtet, und die Person, die das
 Registry betreibt. Beide brauchen jeweils nur ihren eigenen Abschnitt.
 
-**Die Instanz.** Entschieden am 2026-09-06: produktiv ist `git.kieback-peter.de`.
-Der Registry-Locator lautet dort
+**Beispielinstanz.** Ersetzen Sie `git.example.com` durch Ihre eigene
+GitLab-Instanz und `<gruppe>` durch Ihre Projektgruppe. Der Registry-Locator lautet
 
 ```
-gitlab://git.kieback-peter.de/<gruppe>/skill-registry
+gitlab://git.example.com/<gruppe>/skill-registry
 ```
 
 und `<gitlab-host>` in allen Kommandos unten ist entsprechend
-`git.kieback-peter.de`. Die Instanz spricht HTTPS, also bleibt `M3C_GIT_HTTP`
+`git.example.com`. Fuer eine Instanz mit HTTPS bleibt `M3C_GIT_HTTP`
 ungesetzt; die Variable ist nur fuer eine LAN-Instanz ohne TLS gedacht.
 
 ## Die Grundregel in einem Satz
@@ -51,7 +51,7 @@ Der Token wird **einmal** angezeigt. Danach nie wieder.
 macOS und Windows, ein Kommando:
 
 ```bash
-skillctl token set --backend gitlab --host git.kieback-peter.de --read-only
+skillctl token set --backend gitlab --host git.example.com --read-only
 ```
 
 Danach den Token einfügen und mit Ctrl-D abschliessen. **Der Token wird von stdin
@@ -71,7 +71,7 @@ export M3C_GITLAB_RO_TOKEN='<token>'      # Git-Registry
 export M3C_REGISTRY_RO_TOKEN='<token>'    # HTTP-Registry
 ```
 
-Was wo liegt, zeigt `skillctl token list --host git.kieback-peter.de`, und zwar
+Was wo liegt, zeigt `skillctl token list --host git.example.com`, und zwar
 **ohne den Token auszugeben**. Die interessante Spalte ist die Quelle: eine
 gesetzte Umgebungsvariable schlägt den geschützten Speicher, und ein vergessenes
 `export` erklärt einen Fehlschlag, den der abgelegte Token nicht verursacht hätte.
@@ -113,7 +113,7 @@ Token scheitert beim Push, und die Fehlermeldung sagt nicht, warum.
 **3. Ablegen wie in Teil A**, aber ohne `--read-only`, also im Schreib-Tier:
 
 ```bash
-skillctl token set --backend gitlab --host git.kieback-peter.de
+skillctl token set --backend gitlab --host git.example.com
 ```
 
 **4. Struktur anlegen und hochspiegeln.**
@@ -123,7 +123,7 @@ skillctl token set --backend gitlab --host git.kieback-peter.de
 Verbindung aufgebaut wird:
 
 ```
-$ skillctl registry init --registry gitlab://git.kieback-peter.de/<gruppe>/skill-registry
+$ skillctl registry init --registry gitlab://git.example.com/<gruppe>/skill-registry
 registry init: only local:// registries are created locally (got "gitlab://…").
   For gitlab://github:// create the project on the server; for ER1 use the self tenant.
 $ echo $?
@@ -139,11 +139,11 @@ skillctl registry init --registry local://~/registry/skill-registry.git
 
 # b) einmal in das leere GitLab-Projekt spiegeln
 git -C ~/registry/skill-registry.git push --mirror \
-  https://git.kieback-peter.de/<gruppe>/skill-registry.git
+  https://git.example.com/<gruppe>/skill-registry.git
 
 # c) ab jetzt direkt gegen GitLab veröffentlichen
 skillctl publish <name> --bundle <datei>.skb --version <v> \
-  --registry gitlab://git.kieback-peter.de/<gruppe>/skill-registry \
+  --registry gitlab://git.example.com/<gruppe>/skill-registry \
   --key <autor>.priv --identity id:<du>@m3c --yes
 ```
 
@@ -207,8 +207,8 @@ entschieden am 2026-09-06):
 
 | Registry | Zweck | Inhaber | Ausgestellt | Läuft ab | Widerrufen am |
 |---|---|---|---|---|---|
-| `gitlab://git.kieback-peter.de/<gruppe>/skill-registry` | lesen, Laptop Anna | Anna | 2026-09-06 | 2027-09-01 | n/a |
-| `gitlab://git.kieback-peter.de/<gruppe>/skill-registry` | schreiben, publish | Projekt | 2026-09-06 | 2027-09-01 | n/a |
+| `gitlab://git.example.com/<gruppe>/skill-registry` | lesen, Laptop Alice | Alice | 2026-09-06 | 2027-09-01 | n/a |
+| `gitlab://git.example.com/<gruppe>/skill-registry` | schreiben, publish | Projekt | 2026-09-06 | 2027-09-01 | n/a |
 
 Kein Token im Register, nur die Tatsache seiner Existenz. Wer das Register liest,
 soll wissen, **was abläuft**, nicht **womit man sich anmeldet**.
@@ -247,7 +247,7 @@ Netzfehler, sondern den Fehlschlag des git-Push.
 
 | # | Wer | Was | Ergebnis |
 |---|---|---|---|
-| 1 | Registry-Betreiber | leeres Projekt `<gruppe>/skill-registry` auf `git.kieback-peter.de` | leeres Repo, kein README |
+| 1 | Registry-Betreiber | leeres Projekt `<gruppe>/skill-registry` auf `git.example.com` | leeres Repo, kein README |
 | 2 | Registry-Betreiber | Project Access Token, Maintainer, `write_repository`, Ablauf setzen | Teil B, Schritt 2 |
 | 3 | Registry-Betreiber | Registerzeile schreiben, **bevor** der Token benutzt wird | `OPS/token-register.md` |
 | 4 | Registry-Betreiber | `registry init --registry local://…`, dann `git push --mirror` auf das GitLab-Projekt, danach den Standard-Branch pruefen | die Struktur liegt im Repo, siehe Teil B Schritt 4 |

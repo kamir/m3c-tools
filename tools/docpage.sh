@@ -19,15 +19,14 @@
 #
 # Aufruf:
 #   tools/docpage.sh <markdown> [ausgabe.html]
-#   tools/docpage.sh docs/v2/betrieb/ops-human-agent-team.de.md docs/v2/pages/ops-human-agent-team.html
+#   tools/docpage.sh docs/v2/index.md docs/v2/pages/wegweiser.html
 #
 # Vorgabe fuer die Ausgabe: docs/v2/pages/<basisname-ohne-sprachsuffix>.html
 # Der eigene Ordner ist Absicht: Jekyll uebersetzt docs/x.md nach x.html, eine
 # erzeugte docs/x.html wuerde also mit der Uebersetzung kollidieren.
 #
 # Der Titel kommt aus der ersten H1 der Markdown, ohne die Gattungsangabe
-# davor: "# Ops-Runbook: ein Mensch-Agent-Team einrichten" wird zu
-# "Ein Mensch-Agent-Team einrichten". Mit --title laesst sich das ueberschreiben.
+# davor: "# Nutzer: Einstieg" wird zu "Einstieg". Mit --title laesst sich das ueberschreiben.
 #
 # Exit: 0 erzeugt · 1 ein Fehler · 2 Aufrufproblem
 set -euo pipefail

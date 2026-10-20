@@ -1,6 +1,6 @@
 ---
 layout: default
-title: Quickstart: m3c-tools
+title: "Quickstart: m3c-tools"
 ---
 
 # Quickstart: m3c-tools
@@ -12,7 +12,7 @@ YouTube transcript fetched and (optionally) uploaded.
 > **What is m3c-tools?** A capture pipeline: it turns YouTube videos, audio, screenshots
 > and voice notes into structured, multimodal observations stored on *your* ER1 server.
 > On macOS it's a native menu-bar app; on Linux/Windows it's a full CLI. For the exhaustive
-> command reference, see the [m3c-tools manual](../v2/referenz/manual-m3c-tools.md).
+> command reference, see the [m3c-tools manual](../referenz/manual-m3c-tools.md).
 
 ---
 
@@ -56,7 +56,7 @@ m3c-tools help
 
 > **Prefer to build from source?** You need Go 1.25+. On macOS the menu-bar GUI also needs
 > `brew install pkg-config portaudio ffmpeg` and `python3 -m pip install openai-whisper`.
-> Then `make install`. See [Build from source](../../README.md#build-from-source).
+> Then `make install`. See [Build from source](../../../README.md#build-from-source).
 
 ---
 
@@ -91,7 +91,7 @@ ER1_API_KEY=your-api-key
 ER1_CONTEXT_ID=your-context-id
 ```
 
-Full variable reference: [m3c-tools manual → Configuration](../v2/referenz/manual-m3c-tools.md#configuration).
+Full variable reference: [m3c-tools manual → Configuration](../referenz/manual-m3c-tools.md#configuration-reference).
 
 ---
 
@@ -196,6 +196,6 @@ m3c-tools pocket ...            # see: m3c-tools pocket --help
 
 ## Next steps
 
-- **Every command and flag:** [m3c-tools manual](../v2/referenz/manual-m3c-tools.md)
+- **Every command and flag:** [m3c-tools manual](../referenz/manual-m3c-tools.md)
 - **Govern the skills your agents run:** [Quickstart: skillctl](quickstart-skillctl.md)
-- **Platform-specific behavior:** [Platform differences](../v2/referenz/PLATFORM-DIFFERENCES.md)
+- **Platform-specific behavior:** [Platform differences](../referenz/PLATFORM-DIFFERENCES.md)

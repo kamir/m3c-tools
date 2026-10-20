@@ -71,8 +71,7 @@ nothing until it has been shown to find a planted occurrence.
 Unlike the prose rule below, this one has no hook behind it. It was written
 after an adversarial re-read of nine changes found the same failure class in
 seven of them: a sentence printed beside measurements gets read as a
-measurement. Derivation and the five measures: `PLAN/QG-0001-fruehwarnung.md`
-in the maintenance repository.
+measurement. Derivation and the five measures: QG-0001 on the maintenance plane.
 
 ## Branching, and what merges without you
 
@@ -96,6 +95,10 @@ A CWD `.env` is read only with `M3C_DOTENV=1`. See `.env.example`.
 - `ER1_VERIFY_SSL`: `false` is allowed only for loopback
 
 SPECs and ER1 requirements live in the private maintenance plane.
+Keep only useful current product and contributor documentation here. Before
+removing documents, archive their original bytes under `Archiv` on the private
+maintenance plane, recording original path, source commit and SHA-256 digest.
+See [CONTENT-TOPOLOGY.md](CONTENT-TOPOLOGY.md).
 
 ## Context Efficiency
 

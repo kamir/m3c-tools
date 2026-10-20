@@ -558,7 +558,7 @@ release-minor: code-review check-docs
 release-major: code-review check-docs
 	@./scripts/release.sh major
 
-# ── skillctl release chain (docs/v2/betrieb/releasing.md · skill: /release-skillctl) ──────
+# ── skillctl release chain (.github/workflows/skillctl-release.yml) ──────
 # skillctl is a SEPARATE, tag-driven line (skillctl/vX.Y.Z → skillctl-release.yml);
 # `release-skillctl` runs every PRE-TAG gate for it, then prints the derived
 # version context + the next step. It deliberately does NOT tag. Tagging
@@ -574,7 +574,7 @@ release-skillctl: build-skillctl build-skillctl-demo vet lint check-docs
 	 echo "  commits since     : $$(git rev-list --count $$last..origin/master 2>/dev/null) on origin/master"; \
 	 echo ""; \
 	 echo "  ✓ pre-tag gates green. Next: sync CHANGELOG, then tag origin/master BY HASH"; \
-	 echo "    (skillctl/vX.Y.Z) + push: see docs/v2/betrieb/releasing.md / the /release-skillctl skill."
+	 echo "    (skillctl/vX.Y.Z) + push: review .github/workflows/skillctl-release.yml before publishing."
 
 # Smoke-test a PUBLISHED skillctl release build (Phase 4). VERSION defaults to latest tag.
 #   make skillctl-smoke                     # smoke the latest published skillctl/v*

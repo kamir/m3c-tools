@@ -67,12 +67,18 @@ refactor is not.
 - **Code** lives in this repository.
 - **Plans, SPECs and design docs** live in the sibling private maintenance repository, not in
   this tree. The boundary is enforced by [`tools/boundary-gate.sh`](tools/boundary-gate.sh).
+  Keep only current user/API/security and contributor documentation alongside the code.
+  Before removing obsolete or internal documents, archive their original bytes under
+  `Archiv` in the private maintenance repository, with original path, commit and
+  SHA-256 digest. Update public links and generated pages in the same change.
+  Test fixtures, schemas and dependency manifests remain part of the code.
   Contributor/release tooling resolves it via `M3C_MAINTENANCE_DIR` (see the README).
 
 ## Releasing
 
-Releases are tag-driven and signed in CI. The full runbook is in
-**[docs/v2/betrieb/releasing.md](docs/v2/betrieb/releasing.md)**.
+Releases are tag-driven and signed in CI. See the release targets in
+[Makefile](Makefile) and the [release workflow](.github/workflows/release.yml).
+Internal release approval and acceptance records stay on the maintenance plane.
 
 ## Security
 

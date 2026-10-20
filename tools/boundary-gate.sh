@@ -98,8 +98,92 @@ scan_pattern() {
   done < <(grep -InE "$pat" "$f" 2>/dev/null || true)
 }
 
+# Narrative design and planning documents belong outside the shipped source.
+# Source files, machine-readable contracts, skill instructions and test fixtures
+# are not design documents just because their names contain an identifier.
+check_narrative_document() {
+  local f=$1 lower base
+  lower=$(printf '%s' "$f" | LC_ALL=C tr '[:upper:]' '[:lower:]')
+  base=${lower##*/}
+  # These are fixture directories, not a blanket exemption for tests or source.
+  if [[ "$lower" =~ (^|/)(testdata|fixtures)(/|$) ]]; then return 0; fi
+  if [[ "$lower" =~ (^|/)docs/old(/|$) ]]; then
+    emit "$f:1: archived-document: obsolete documentation is not shipped"
+    return 0
+  fi
+  case "$lower" in
+    *.md|*.markdown|*.rst|*.txt|*.adoc|*.asciidoc|*.org|*.html|*.htm|*.pdf|*.docx|*.odt) ;;
+    *) return 0 ;;
+  esac
+  case "$base" in
+    skill.md|requirements.txt) return 0 ;;
+  esac
+  if [[ "$lower" =~ (^|/)(specs?|specifications?|adrs?|architecture-decision-records?|plans?|planning|planung|requirements|anforderungen|konzepte)([-_.[:space:]][^/]*|[0-9][^/]*)?(/|$) ]] ||
+     [[ "$base" =~ (^|[-_.[:space:]])(specs?|specifications?|adrs?|plans?|planning|planung|requirements?|anforderungen|konzept|roadmap)([0-9]+)?([-_.[:space:]]|$) ]]; then
+    emit "$f:1: private-design-document: specification, decision or planning document is not shipped"
+    return 0
+  fi
+
+  grep -Iq . "$f" 2>/dev/null || return 0
+
+  # Titles declare the purpose of a document. Lower-level manual sections such
+  # as "## Requirements", API references and inline ID references remain legal.
+  # Ignore fenced examples so a documented heading example is not a document title.
+  local title_pattern
+  title_pattern='(specs?([[:space:]-]*[0-9]+)?|specifications?|spezifikation(en)?|adr([[:space:]-]*[0-9]+)?|architecture[[:space:]]+decision[[:space:]]+record|requirements([[:space:]]+specification)?|anforderungen|anforderungsspezifikation|(implementation|hardening|migration|release|rollout|development|remediation)[[:space:]]+plan|plan|planning|implementierungsplan|umsetzungsplan|massnahmenplan|konzept)([[:space:]:.()-]|$)'
+  while IFS= read -r match; do
+    [ -n "$match" ] && emit "$f:$match: private-design-title: specification, decision or planning title is not shipped"
+  done < <(awk -v pattern="$title_pattern" -v filename="$lower" '
+    function normalize_title(value) {
+      gsub(/<[^>]*>/, "", value)
+      gsub(/[*_`]/, "", value)
+      gsub(/&nbsp;|&#32;|&#x20;/, " ", value)
+      sub(/^[[:space:]]+/, "", value)
+      return value
+    }
+    function scan_html(line) {
+      while (length(line)) {
+        if (!html_open) {
+          if (!match(line, /<(h1|title)([[:space:]][^>]*)?>/)) return
+          html_open = 1
+          html_line = NR
+          html_title = ""
+          line = substr(line, RSTART + RLENGTH)
+        }
+        if (match(line, /<\/(h1|title)[[:space:]]*>/)) {
+          html_title = html_title substr(line, 1, RSTART - 1)
+          if (normalize_title(html_title) ~ "^" pattern) print html_line
+          html_open = 0
+          line = substr(line, RSTART + RLENGTH)
+        } else {
+          html_title = html_title line " "
+          return
+        }
+      }
+    }
+    /^[[:space:]]*(```|~~~)/ { fenced = !fenced; previous = ""; next }
+    fenced { next }
+    {
+      text = tolower($0)
+      if (filename ~ /[.]html?$/) scan_html(text)
+      title = text
+      if (title ~ /^#[[:space:]]+/ ||
+          (filename ~ /[.](adoc|asciidoc)$/ && title ~ /^=[[:space:]]+/) ||
+          (filename ~ /[.]org$/ && title ~ /^[*][[:space:]]+/)) {
+        sub(/^[#=*][[:space:]]+/, "", title)
+        if (normalize_title(title) ~ "^" pattern) print NR
+      }
+      if ((text ~ /^[=][=]+[[:space:]]*$/ ||
+          (filename ~ /[.]rst$/ && text ~ /^[-][-]+[[:space:]]*$/)) &&
+          normalize_title(previous) ~ "^" pattern) print NR-1
+      previous = text
+    }
+  ' "$f")
+}
+
 check() {
   local f=$1
+  check_narrative_document "$f"
   match_exact  "$f" "${BASE_EXACT[@]}"  && return 0
   match_prefix "$f" "${BASE_PREFIX[@]}" && return 0
   grep -Iq . "$f" 2>/dev/null || return 0        # skip binary / empty files
@@ -119,9 +203,9 @@ check() {
   done
 }
 
-while IFS= read -r f; do
+while IFS= read -r -d '' f; do
   [ -n "$f" ] && check "$f"
-done < <(git ls-files)
+done < <(git ls-files -z)
 
 if [ "$fail" -ne 0 ]; then
   echo "boundary-gate: FAIL: public-plane file(s) embed private-plane content (SPEC-0358)" >&2

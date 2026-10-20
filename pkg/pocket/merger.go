@@ -65,7 +65,7 @@ func MergeGroup(group RecordingGroup, outputDir string) (string, error) {
 		return "", err
 	}
 
-	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return "", fmt.Errorf("creating output dir: %w", err)
 	}
@@ -80,7 +80,7 @@ func MergeGroup(group RecordingGroup, outputDir string) (string, error) {
 		}
 		lines = append(lines, fmt.Sprintf("file '%s'", escaped))
 	}
-	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
 	if err := os.WriteFile(listPath, []byte(strings.Join(lines, "\n")+"\n"), 0644); err != nil {
 		return "", fmt.Errorf("writing file list: %w", err)
 	}

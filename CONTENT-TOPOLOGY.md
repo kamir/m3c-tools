@@ -27,7 +27,19 @@ and governance artefacts:
 - **FR / Bug / CR**: feature requests, bug reports, change requests.
 - **Onboarding-Guide material**: publisher runbooks and customer onboarding manuals.
 
-These never ship in this repo.
+These never ship in this repo. Public implementation overviews and current operator
+instructions remain here when they explain the shipped product. Internal plans,
+acceptance records, audit backlogs and obsolete documentation do not.
+
+Before removing or rewriting an obsolete document, save its original bytes in the
+private maintenance repository under **`Archiv`**. Preserve its original relative
+path, source commit and SHA-256 digest in the archive manifest. Record a replacement
+path when a current user guide moves. Archive first, then remove the public copy;
+do not discard history or replace useful instructions with broken links.
+
+Keep runtime assets, test fixtures, machine-readable schemas, dependency manifests
+and active CI inputs. A filename containing an ID does not make source code or a
+test fixture a narrative specification.
 
 ## The cross-reference rule (ID-ONLY)
 
@@ -49,6 +61,8 @@ documented allowlist) and fails on:
 
 | Reason                     | Pattern                       | Scope |
 |----------------------------|-------------------------------|-------|
+| narrative specification or plan | document name or top-level title | narrative documents |
+| obsolete documentation | `docs/old/` | all tracked contents |
 | private-repo path reference| a path into the private repo  | all files |
 | internal endpoint          | `127.0.0.1:8081`              | narrative surface* |
 | ER1 context-id             | `<digits>___<slug>`           | narrative surface* |

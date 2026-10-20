@@ -200,11 +200,10 @@ prose that fails it.
 
 ### The rule for agents, applied before the text exists
 
-A gate that fires after the fact is a retry loop. The rule an agent has to hold
-*while writing* lives in **[`.claude/rules/prose-style.md`](.claude/rules/prose-style.md)**,
-is referenced from `CLAUDE.md` so every session in this repository loads it, and
-is backed by the `PreToolUse` hook `.claude/hooks/no-emdash-guard.sh`, which
-refuses a `Write` or `Edit` whose payload contains U+2014 before it reaches disk.
+Agents must apply the rule in this document while writing.
+[CLAUDE.md](CLAUDE.md) points to it for repository sessions. The checked-in
+[scripts/check-no-emdash.sh](scripts/check-no-emdash.sh) enforces it locally and
+in CI; machine-local agent hooks are not distributed with this repository.
 
 ---
 

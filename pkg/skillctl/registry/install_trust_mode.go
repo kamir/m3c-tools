@@ -452,7 +452,7 @@ func installOne(b *StagedBundle, opts InstallOpts) (*InstallResult, error) {
 	}
 
 	// Extract into a temp dir, then atomically rename onto target.
-	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
 	if err := os.MkdirAll(skillsDir, 0o755); err != nil {
 		return nil, fmt.Errorf("install: mkdir %s: %w", skillsDir, err)
 	}
@@ -498,7 +498,7 @@ func installOne(b *StagedBundle, opts InstallOpts) (*InstallResult, error) {
 	// on-disk body to the signed bundle (catches post-install tampering). The
 	// gate finds any top-level *.skb; the name is cosmetic.
 	skbName := strings.ReplaceAll(b.Name, string(filepath.Separator), "_") + ".skb"
-	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
 	if err := os.WriteFile(filepath.Join(tmp, skbName), skb, 0o644); err != nil {
 		cleanup()
 		return nil, fmt.Errorf("install: stash .skb: %w", err)
@@ -612,7 +612,7 @@ func writeProvenance(path string, side ProvenanceSidecar) error {
 	if err != nil {
 		return err
 	}
-	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
 	return os.WriteFile(path, out, 0o644)
 }
 
@@ -738,7 +738,7 @@ func installAgent(b *StagedBundle, man skillbundle.BundleManifest, skb []byte, o
 	}
 
 	agentsDir := agentsDirFor(opts.SkillsDir)
-	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
 	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
 		return nil, fmt.Errorf("install: mkdir %s: %w", agentsDir, err)
 	}
@@ -773,7 +773,7 @@ func installAgent(b *StagedBundle, man skillbundle.BundleManifest, skb []byte, o
 		_ = os.Remove(tmpName)
 		return nil, fmt.Errorf("install: close %s: %w", target, err)
 	}
-	// #nosec G302 -- Klassenentscheidung: nicht geheimes lokales Artefakt; die Agentendatei muss fuer den Loader lesbar sein. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
+	// #nosec G302 -- Klassenentscheidung: nicht geheimes lokales Artefakt; die Agentendatei muss fuer den Loader lesbar sein.
 	if err := os.Chmod(tmpName, 0o644); err != nil {
 		_ = os.Remove(tmpName)
 		return nil, fmt.Errorf("install: chmod %s: %w", target, err)
@@ -792,7 +792,7 @@ func installAgent(b *StagedBundle, man skillbundle.BundleManifest, skb []byte, o
 	// machine whose digest cannot be checked after the fact, and SPEC-0432 §5
 	// asks for more care with agents than with skills, not less.
 	provDir := filepath.Join(agentsDir, ".provenance")
-	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
 	if err := os.MkdirAll(provDir, 0o755); err != nil {
 		return nil, fmt.Errorf("install: mkdir %s: %w", provDir, err)
 	}

@@ -172,4 +172,4 @@ rm -rf /Applications/M3C-Tools.app
 
 ---
 
-Next: [Menu Bar App](menubar-app) | [Home](/)
+Next: [Menu Bar App](menubar-app.md) | [Home](/)

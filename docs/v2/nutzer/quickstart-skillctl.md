@@ -1,6 +1,6 @@
 ---
 layout: default
-title: Quickstart: skillctl
+title: "Quickstart: skillctl"
 ---
 
 # Quickstart: skillctl
@@ -12,7 +12,7 @@ no server required. Then see how the same bundle flows through admit → install
 > a verifiable identity and a full lifecycle, **author → pack → sign → admit → attest →
 > verify / install → use → audit → revoke**, so nothing an agent runs is unauthorized or
 > unprovable. The trust-chain check is **offline-verifiable**: no hosted CA sits in the
-> verification path. For every command and flag, see the [skillctl manual](../v2/referenz/manual-skillctl.md).
+> verification path. For every command and flag, see the [skillctl manual](../referenz/manual-skillctl.md).
 
 ---
 
@@ -49,7 +49,7 @@ Override the target dir or the release with `INSTALL_DIR=…` / `RELEASE_BASE=�
 pin inside it). Verify the fetched bytes out-of-band before trusting them, expected SHA-256:
 `tools/skillctl-install.ps1` → `a00826f30599439718f5ea126f81b8a78b4c28aa96980e1b136db65396a34177`;
 `tools/skillctl-install.sh` → `dea4b86b78d20eeff28524240034efcb0c96c35016238434a8e7c97c7278dabc`.
-The [README Install section](../../README.md#install) has a copy-paste verify-then-run recipe. On
+The [README Install section](../../../README.md#install) has a copy-paste verify-then-run recipe. On
 each new signed release, bump the pinned commit **and** these hashes together.
 
 **Manual install (signed release, raw binary):** the **only** skillctl distribution channel is
@@ -130,8 +130,7 @@ This is stage 1 by design: build reproducibility and the test suite. It is **not
 and release gate. Lint, `govulncheck`, gosec, the coverage gate, the boundary gate and the
 Windows e2e smoke run in [CI](https://github.com/kamir/m3c-tools/actions) and in
 `make ci` / `make release-skillctl`; the Windows lifecycle proof is
-[`scripts/skillctl-quickstart-windows.ps1`](https://github.com/kamir/m3c-tools/blob/master/scripts/skillctl-quickstart-windows.ps1),
-described in [Windows release verification](../v2/betrieb/releasing-skillctl-windows.md).
+[`scripts/skillctl-quickstart-windows.ps1`](https://github.com/kamir/m3c-tools/blob/master/scripts/skillctl-quickstart-windows.ps1).
 
 ---
 
@@ -385,7 +384,7 @@ intents*, and it verifies offline, no authority in the path.
 
 ## Next steps
 
-- **Every command, flag and exit code:** [skillctl manual](../v2/referenz/manual-skillctl.md)
+- **Every command, flag and exit code:** [skillctl manual](../referenz/manual-skillctl.md)
 - **Build it yourself and run the suite:** the [source self-test](#1b-optional-prove-it-on-your-own-machine-source-self-test) one-liners above
 - **Run our CI on your own machine:** the [enterprise gate](#1c-stage-2-run-our-ci-on-your-own-machine-enterprise-gate) and its trust report
 - **Prove you can operate it, not just that it builds:** the [Test Ride](#1d-the-human-half-the-test-ride)

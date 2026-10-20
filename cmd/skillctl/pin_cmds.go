@@ -123,7 +123,7 @@ func runPinGenerate(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, strictWarning)
 	}
 	if *out != "" {
-		// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
+		// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
 		if err := os.WriteFile(*out, b, 0o644); err != nil {
 			fmt.Fprintf(stderr, "skillctl pin generate: write %s: %v\n", *out, err)
 			return pinExitError
@@ -299,7 +299,7 @@ func pinRootWrite(target string, content []byte, targetExists bool, existing []b
 		fmt.Fprintf(stderr, "skillctl pin install: %s is a symlink: refusing to write through it.\n", target)
 		return pinExitError
 	}
-	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		fmt.Fprintf(stderr, "skillctl pin install: mkdir %s: %v\n", filepath.Dir(target), err)
 		return pinExitError
@@ -310,14 +310,14 @@ func pinRootWrite(target string, content []byte, targetExists bool, existing []b
 			fmt.Fprintf(stderr, "skillctl pin install: backup path %s is a symlink: refusing.\n", backup)
 			return pinExitError
 		}
-		// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
+		// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
 		if err := os.WriteFile(backup, existing, 0o644); err != nil {
 			fmt.Fprintf(stderr, "skillctl pin install: backup %s: %v\n", backup, err)
 			return pinExitError
 		}
 		fmt.Fprintf(stdout, "backed up existing managed settings → %s\n", backup)
 	}
-	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
 	if err := os.WriteFile(target, content, 0o644); err != nil {
 		fmt.Fprintf(stderr, "skillctl pin install: write %s: %v\n", target, err)
 		return pinExitError

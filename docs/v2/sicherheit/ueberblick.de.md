@@ -36,22 +36,20 @@ Massstab, an dem dieses Repository gemessen werden will.
 |---|---|---|
 | 1 | [THREAT_MODEL.md](../../../THREAT_MODEL.md) | Laufzeit-Trust-Kette: Bedrohungen R01 bis R12 mit Mitigationen, Tests und den dokumentiert geschlossenen frueheren GAPs |
 | 2 | [SECURITY.md](../../../SECURITY.md) | Meldeweg (privat, GitHub Security Advisories), unterstuetzte Versionen, Supply-Chain-Zusagen |
-| 3 | [docs/security/required-checks.txt](../../security/required-checks.txt) | die Pflicht-Checks auf `master` und warum die Namensbindung im Baum liegt |
-| 4 | [gosec-backlog](../../security/gosec-backlog.md) und [codeql-backlog](../../security/codeql-backlog.md) | der offene Static-Analysis-Bestand, klassifiziert, mit Datum |
-| 5 | [gosec-diff-gate.yml](../../../.github/workflows/gosec-diff-gate.yml) | das blockierende no-new-findings-Tor: Pflicht-Check auf `master` (required-checks.txt), prueft gegen die Signatur-Baseline `gosec-inci-baseline.txt`; die aeltere SARIF-Punktaufnahme [gosec-baseline](../../security/gosec-baseline.md) ist ein anderes, unverdrahtetes Artefakt |
-| 6 | [Release flow, "What CI signs"](../betrieb/releasing.md) | was ein Release signiert und woran ein Installierender es prueft |
-| 7 | [Ops-Runbook: Incident Response](../betrieb/ops-incident-response.de.md) | kompromittierter Schluessel oder Registry: erkennen, widerrufen, rotieren, neu pinnen |
-| 8 | [Ops-Routine: Zugangstoken](../betrieb/ops-registry-tokens.de.md) | Token-Lebenszyklus inkl. Ausscheiden: Lese-Token endet mit dem Konto der Person, das Schreibtoken gehoert der Rolle und wird beim Personalwechsel rotiert |
-| 9 | [Runbook: die Audit-Spur](audit-spur.de.md) | die drei Traeger konsolidiert: `audit` urteilt je Skill, `auditlog` zeigt das Audit-Subsystem (SPEC-0403 §8), `translog` ist das L1-Transparenz-Log; die Manual-Abschnitte sind dort verlinkt, die Registry-Zeitleiste (admit, attest, revoke, install) liest das [Incident-Runbook, Abschnitt 1](../betrieb/ops-incident-response.de.md) |
+| 3 | [required-checks.txt](../../security/required-checks.txt) | das Manifest der vorgesehenen Pflicht-Checks |
+| 4 | [gosec-diff-gate.yml](../../../.github/workflows/gosec-diff-gate.yml) | das no-new-findings-Tor gegen die [Signatur-Baseline](../../security/gosec-inci-baseline.txt) |
+| 5 | [Supply-chain security](../../../SECURITY.md#verifying-a-release) | Signaturen und Provenance eines Downloads pruefen |
+| 6 | [Ops-Runbook: Incident Response](../betrieb/ops-incident-response.de.md) | kompromittierter Schluessel oder Registry: erkennen, widerrufen, rotieren, neu pinnen |
+| 7 | [Ops-Routine: Zugangstoken](../betrieb/ops-registry-tokens.de.md) | Token-Lebenszyklus inkl. Ausscheiden: Lese-Token endet mit dem Konto der Person, das Schreibtoken gehoert der Rolle und wird beim Personalwechsel rotiert |
+| 8 | [Runbook: die Audit-Spur](audit-spur.de.md) | die drei Traeger konsolidiert: `audit` urteilt je Skill, `auditlog` zeigt das Audit-Subsystem (SPEC-0403 §8), `translog` ist das L1-Transparenz-Log; die Manual-Abschnitte sind dort verlinkt, die Registry-Zeitleiste (admit, attest, revoke, install) liest das [Incident-Runbook, Abschnitt 1](../betrieb/ops-incident-response.de.md) |
 
 ## Vorfuehren statt behaupten
 
 | Format | Traeger | Sprache |
 |---|---|---|
-| Offline-Demo mit echten Exit-Codes: laut Quickstart wird ein vergiftetes Bundle mit Exit 10 abgewiesen und eine erzwungene Governance-Aktion mit Exit 2 verweigert | [Quickstart: skillctl-demo](../../old/quickstart-skillctl-demo.md) | EN |
-| Selbst nachvollziehen, offline, ohne Server | [Quickstart: skillctl](../../old/quickstart-skillctl.md) | EN |
-| Argumentation fuer Security-Expertin und CTO als Infografik | [CISO-Deck (EN)](../../old/skillctl-ciso-deck.html) · [CISO-Deck (DE)](../../old/skillctl-ciso-deck.de.html) | EN/DE |
-| Zwei-Personen-Nachweis ueber ER1, mit Pass-Kriterien | [Runbook: two-person ER1 exchange](../betrieb/runbook-two-person-er1-exchange.md) | EN |
+| Offline-Demo mit echten Exit-Codes: laut Quickstart wird ein vergiftetes Bundle mit Exit 10 abgewiesen und eine erzwungene Governance-Aktion mit Exit 2 verweigert | [Quickstart: skillctl-demo](../nutzer/quickstart-skillctl-demo.md) | EN |
+| Selbst nachvollziehen, offline, ohne Server | [Quickstart: skillctl](../nutzer/quickstart-skillctl.md) | EN |
+| Autor, Reviewer und Konsument getrennt einrichten | [Tutorial: erster signierter Skill](../nutzer/tutorial-szenario-02-erster-signierter-skill.de.md) | DE |
 
 ## Grenzen, die diese Seite nicht verschweigt
 
@@ -60,9 +58,9 @@ Massstab, an dem dieses Repository gemessen werden will.
 2. Es gibt zwei gosec-Baselines, und nur eine traegt ein Tor: das blockierende
    no-new-findings-Tor
    ([gosec-diff-gate.yml](../../../.github/workflows/gosec-diff-gate.yml),
-   Pflicht-Check auf `master`) prueft gegen die Signatur-Baseline
+   im CI-Workflow) prueft gegen die Signatur-Baseline
    `gosec-inci-baseline.txt`; die SARIF-Punktaufnahme
-   [gosec-baseline](../../security/gosec-baseline.md) (2026-09-03) ist
+   [gosec-baseline.sarif](../../security/gosec-baseline.sarif) ist
    unverdrahtet und dient nur der Triage.
 3. Ein Pflicht-Check ist an einen Job-NAMEN gebunden; eine Umbenennung
    entkoppelt die Durchsetzung lautlos. Die Begruendung steht in
