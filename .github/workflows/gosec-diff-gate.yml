@@ -19,8 +19,8 @@ name: gosec no-new-findings (in-CI diff gate)
 on:
   push:
     branches: [main, master]
+  # Security findings must also block stacked review branches.
   pull_request:
-    branches: [main, master]
 
 # Concurrency: one run per ref, and a superseded pull-request run is cancelled.
 # The group carries a LITERAL prefix rather than ${{ github.workflow }}, because
