@@ -2,6 +2,8 @@
 
 # m3c-tools
 
+Sprachen / Languages: [Deutsch](README.de.md) | [English](README.md)
+
 ### Give your agents a memory, and proof of what they're allowed to do.
 
 **Multi-Modal-Memory Tools** is a personal, sovereign toolkit for turning everything you
@@ -221,7 +223,7 @@ See the [secretctl reference](docs/v2/entwickler/secretctl.md).
 
 | Page | For |
 |------|-----|
-| [**Wegweiser: die Doku nach Rollen**](docs/v2/index.md) | The role-based entry point; canonical docs live under `docs/v2/` |
+| [**Wegweiser: die Doku nach Rollen**](docs/v2/index.en.md) | The role-based entry point; canonical docs live under `docs/v2/` |
 | [**Quickstart: m3c-tools**](docs/v2/nutzer/quickstart-m3c-tools.md) | Capture your first memory in 5 minutes |
 | [**Quickstart: skillctl**](docs/v2/nutzer/quickstart-skillctl.md) | Sign, install and verify a skill in 5 minutes |
 | [**Quickstart: skillctl-demo**](docs/v2/nutzer/quickstart-skillctl-demo.md) | Run the skill-trust scenarios offline on your own machine, 3 run live with real exit codes (S1/S2A/S5); the remaining panels render their story but run nothing (S3 is a built-but-not-run PARTIAL, S2BC/S4 are ROADMAP), plus hands-on Kata training (shipped): five Katas, each beat a real skillctl exit code (K5 demonstrates the offline revocation deny live) |
@@ -355,7 +357,7 @@ Report vulnerabilities privately using its disclosure instructions.
 
 ## Build from source
 
-Requires **Go 1.25+**. The macOS menu-bar GUI additionally needs `portaudio` + `ffmpeg` (cgo).
+Requires **Go 1.26.10+**. The macOS menu-bar GUI additionally needs `portaudio` + `ffmpeg` (cgo).
 
 ```bash
 git clone https://github.com/kamir/m3c-tools.git && cd m3c-tools
@@ -401,7 +403,7 @@ make vet           # go vet ./...
 three ways that matter. It does not stop at the first failure, so one run tells the whole story. A
 check that could **not** run does not count as passed: it is reported as skipped with the reason, and
 the verdict names how many, because a gate that reports green on nothing is worse than no gate. And
-it fixes the Go toolchain to the one `go.mod` names, because `toolchain go1.26.6` is a floor and not
+it fixes the Go toolchain to the one `go.mod` names, because the Go version declared in `go.mod` is a floor and not
 a pin: with a newer local Go you measure something else than CI does, and `pkg/skillbundle`'s digest
 test then fails on an untouched tree. `scripts/qa-all.sh --selbsttest` proves the runner can go red.
 
@@ -573,7 +575,8 @@ pkg/pocket/          Pocket capture-device sync
 pkg/timetracking/    Project time tracking + Gantt chart + PLM client
 ```
 
-Core logic (transcript, er1, impression) depends only on the Go standard library.
+Capture and document processing live in the Go packages transcript, er1 and impression.
+Platform-specific credential and private-file handling uses explicit OS integration.
 
 ---
 

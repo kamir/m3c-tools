@@ -105,8 +105,8 @@ func cmdInventory(args []string, stdout, stderr io.Writer) int {
 	}
 	fmt.Fprintln(stdout, ".")
 
-	if unerreichbar > 0 {
-		fmt.Fprintf(stdout, "\n%d Ort(e) konnten nicht befragt werden. Das Inventar ist damit UNVOLLSTAENDIG,\n", unerreichbar)
+	if sourceErr != nil || unlesbar > 0 || unerreichbar > 0 {
+		fmt.Fprintln(stdout, "\nQuelle oder Ablagen konnten nicht vollstaendig gelesen werden. Das Inventar ist UNVOLLSTAENDIG,")
 		fmt.Fprintln(stdout, "und kein Schritt einer Rotation darf auf dieser Grundlage als erledigt gelten.")
 		return 1
 	}

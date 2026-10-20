@@ -5,6 +5,8 @@ title: Menu Bar App
 
 # M3C Tools: macOS Menu Bar App
 
+[Deutsch](menubar-app.de.md) · [English](menubar-app.md)
+
 A native macOS menu bar app for capturing multimodal observations. Built in Go using `caseymrm/menuet` for the menu bar and native Cocoa (NSWindow, NSTabView) via cgo for the Observation Window.
 
 ## Features

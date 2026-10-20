@@ -1,5 +1,7 @@
 # skillctl CLI verb register
 
+[Deutsch](CLI-VERBS.de.md) | [English](CLI-VERBS.md)
+
 This file is the allocation table for the top-level `skillctl` verbs, analogous
 to the SPEC slot table that FR-0104 introduced for SPEC numbers. Its purpose is
 to turn verb allocation from a **read** into a **write**: before FR-0113 the only

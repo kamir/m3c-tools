@@ -1,5 +1,7 @@
 # Content topology: `m3c-tools` (public plane)
 
+Sprachen / Languages: [Deutsch](CONTENT-TOPOLOGY.de.md) | [English](CONTENT-TOPOLOGY.md)
+
 `m3c-tools` is the **PUBLIC / open-source plane**: it is meant to be given away. Its
 private sibling, the **maintenance plane**, holds the *reasoning* behind the code.
 This split implements **SPEC-0358** ("ship the code, keep the reasoning"). The
@@ -76,3 +78,17 @@ agent instructions, root files) against an accidental paste. A **path into the p
 repo is always a leak, in any file**, and is checked everywhere.
 
 Bare `SPEC-1234` / `ADR-1234` identifiers match no pattern and are always allowed.
+
+## Documentation languages / Dokumentationssprachen
+
+Published documentation must be available in German and English with the same
+substantive content. Link each language version to its counterpart. Keep CLI
+commands, flags, examples and machine-readable contracts unchanged. Review both
+versions whenever behaviour or instructions change; do not label a summary as a
+translation. Record reviewed pairs in `docs/languages.json`.
+
+Veroeffentlichte Dokumentation muss auf Deutsch und Englisch mit demselben
+fachlichen Inhalt vorliegen. Jede Sprachfassung verlinkt die Gegenfassung.
+CLI-Befehle, Flags, Beispiele und maschinenlesbare Vertraege bleiben unveraendert.
+Bei fachlichen Aenderungen beide Fassungen pruefen und die geprueften Paare in
+`docs/languages.json` aktualisieren. Eine Zusammenfassung ersetzt keine Uebersetzung.

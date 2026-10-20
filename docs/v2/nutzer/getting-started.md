@@ -5,10 +5,12 @@ title: Getting Started
 
 # Getting Started
 
+[Deutsch](getting-started.de.md) · [English](getting-started.md)
+
 ## Prerequisites
 
 - **macOS** (menu bar app uses native Cocoa via cgo)
-- **Go 1.25+** (build from source)
+- **Go 1.26.10+** (build from source)
 - **Homebrew dependencies**, install all at once:
   ```bash
   brew install pkg-config portaudio ffmpeg

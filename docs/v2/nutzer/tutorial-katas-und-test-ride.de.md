@@ -5,6 +5,8 @@ title: "Tutorial: Katas und Test Ride, üben statt zusehen"
 
 # Tutorial: Katas und Test Ride
 
+[Deutsch](tutorial-katas-und-test-ride.de.md) · [English](tutorial-katas-und-test-ride.en.md)
+
 **Für wen:** Sie haben `skillctl` installiert und wollen es **können**, nicht nur darüber
 gelesen haben. Oder Sie geben eine Schulung und brauchen einen Ablauf, der am Ende einen
 Beleg produziert.
@@ -264,5 +266,5 @@ Ride ändert das nichts.
 
 - Eigene Skills auf mehreren Maschinen: [Szenario 01](tutorial-szenario-01-eigene-skills-mehrere-maschinen.de.md)
 - Der erste signierte Skill mit Prüfung durch einen Zweiten: [Szenario 02](tutorial-szenario-02-erster-signierter-skill.de.md)
-- Alle Modi, Flags und Szenarien des Demo-Werkzeugs: [Quickstart skillctl-demo](quickstart-skillctl-demo.md)
-- Jedes Kommando, jedes Flag, jeder Exit-Code: [Manual](../referenz/manual-skillctl.md)
+- Alle Modi, Flags und Szenarien des Demo-Werkzeugs: [Quickstart skillctl-demo](quickstart-skillctl-demo.de.md)
+- Jedes Kommando, jedes Flag, jeder Exit-Code: [Manual](../referenz/manual-skillctl.de.md)

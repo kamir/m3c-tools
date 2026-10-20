@@ -5,6 +5,8 @@ title: "Quickstart: m3c-tools"
 
 # Quickstart: m3c-tools
 
+[Deutsch](quickstart-m3c-tools.de.md) · [English](quickstart-m3c-tools.md)
+
 Capture your first multimodal memory in about five minutes. By the end you'll have
 `m3c-tools` installed, connected to an [ER1](https://er1.io) knowledge server, and a
 YouTube transcript fetched and (optionally) uploaded.
@@ -54,7 +56,7 @@ m3c-tools version
 m3c-tools help
 ```
 
-> **Prefer to build from source?** You need Go 1.25+. On macOS the menu-bar GUI also needs
+> **Prefer to build from source?** You need Go 1.26.10+. On macOS the menu-bar GUI also needs
 > `brew install pkg-config portaudio ffmpeg` and `python3 -m pip install openai-whisper`.
 > Then `make install`. See [Build from source](../../../README.md#build-from-source).
 

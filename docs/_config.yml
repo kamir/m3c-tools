@@ -10,14 +10,13 @@ plugins:
 nav:
   - title: Home
     url: /
-  - title: Wegweiser (Doku nach Rollen)
+  - title: Deutsch
     url: /v2/pages/wegweiser.html
+  - title: English
+    url: /v2/pages/wegweiser.en.html
 
 # Build settings
 markdown: kramdown
 kramdown:
   input: GFM
   hard_wrap: false
-
-exclude:
-  - old/ui-mockup.html

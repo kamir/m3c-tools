@@ -1,5 +1,7 @@
 # Ops-Runbook: Registry-Backup und Restore
 
+Sprachen / Languages: [Deutsch](ops-registry-backup-restore.de.md) | [English](ops-registry-backup-restore.en.md)
+
 Wie ein Skill-Registry gesichert und wiederhergestellt wird, je Backend, mit
 einer Probe, die den Restore prüfbar macht, und mit der Voraussetzung, ohne die
 sie statt des Restores den Prüfenden misst.

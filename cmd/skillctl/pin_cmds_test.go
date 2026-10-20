@@ -232,3 +232,131 @@ func TestRunPinInstall_RootRefusesSymlinkTarget(t *testing.T) {
 		t.Errorf("expected a symlink refusal message:\n%s", errb.String())
 	}
 }
+
+func TestPinWriteExclusiveRefusesExistingEntries(t *testing.T) {
+	for _, kind := range []string{"file", "symlink", "hardlink"} {
+		t.Run(kind, func(t *testing.T) {
+			dirPath := t.TempDir()
+			original := filepath.Join(dirPath, "original")
+			if err := os.WriteFile(original, []byte("preserve"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			backup := filepath.Join(dirPath, "backup")
+			var err error
+			switch kind {
+			case "file":
+				err = os.WriteFile(backup, []byte("previous backup"), 0o600)
+			case "symlink":
+				err = os.Symlink(original, backup)
+			case "hardlink":
+				err = os.Link(original, backup)
+			}
+			if err != nil {
+				if runtime.GOOS == "windows" && kind != "file" {
+					t.Skipf("link creation unavailable: %v", err)
+				}
+				t.Fatal(err)
+			}
+			dir, err := os.OpenRoot(dirPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = pinWriteExclusive(dir, "backup", []byte("replacement"), 0o644)
+			if closeErr := dir.Close(); closeErr != nil {
+				t.Fatal(closeErr)
+			}
+			if !os.IsExist(err) {
+				t.Fatalf("existing %s: expected exclusive-create rejection, got %v", kind, err)
+			}
+			got, err := os.ReadFile(original)
+			if err != nil || string(got) != "preserve" {
+				t.Fatalf("original changed: %q, %v", got, err)
+			}
+			if kind == "file" {
+				got, err := os.ReadFile(backup)
+				if err != nil || string(got) != "previous backup" {
+					t.Fatalf("previous backup changed: %q, %v", got, err)
+				}
+			}
+		})
+	}
+}
+
+func TestRunPinInstall_RootReplacesHardlinkWithoutChangingOriginal(t *testing.T) {
+	withGeteuid(t, 0)
+	dir := t.TempDir()
+	original := filepath.Join(dir, "original.json")
+	const prior = `{"permissions":{"deny":["Bash(rm *)"]}}`
+	if err := os.WriteFile(original, []byte(prior), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(dir, "managed-settings.json")
+	if err := os.Link(original, target); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skipf("hardlink creation unavailable: %v", err)
+		}
+		t.Fatal(err)
+	}
+	var out, errb bytes.Buffer
+	if code := runPinInstall([]string{"--path", target, "--binary", "/usr/local/bin/skillctl", "--confirm"}, &out, &errb); code != pinExitOK {
+		t.Fatalf("install code=%d: %s", code, &errb)
+	}
+	got, err := os.ReadFile(original)
+	if err != nil || string(got) != prior {
+		t.Fatalf("hardlink source changed: %q, %v", got, err)
+	}
+	fi, err := os.Stat(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600 {
+		t.Fatalf("existing restrictive permissions changed: %o", fi.Mode().Perm())
+	}
+}
+
+func TestStagePinFileLinkSafety(t *testing.T) {
+	for _, kind := range []string{"symlink", "hardlink"} {
+		t.Run(kind, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			t.Setenv("USERPROFILE", home)
+			original := filepath.Join(home, "original")
+			if err := os.WriteFile(original, []byte("preserve"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			dir := filepath.Join(home, ".claude", "skillctl")
+			if err := os.MkdirAll(dir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			staged := filepath.Join(dir, "managed-settings.staged.json")
+			link := os.Link
+			if kind == "symlink" {
+				link = os.Symlink
+			}
+			if err := link(original, staged); err != nil {
+				if runtime.GOOS == "windows" {
+					t.Skipf("link creation unavailable: %v", err)
+				}
+				t.Fatal(err)
+			}
+			_, err := stagePinFile([]byte("replacement"))
+			if kind == "symlink" {
+				if err == nil {
+					t.Fatal("staging accepted a symlink destination")
+				}
+			} else {
+				if err != nil {
+					t.Fatal(err)
+				}
+				fi, err := os.Stat(staged)
+				if err != nil || (runtime.GOOS != "windows" && fi.Mode().Perm() != 0o600) {
+					t.Fatalf("staged file must be private: %v, %v", fi, err)
+				}
+			}
+			got, err := os.ReadFile(original)
+			if err != nil || string(got) != "preserve" {
+				t.Fatalf("linked file changed: %q, %v", got, err)
+			}
+		})
+	}
+}

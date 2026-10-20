@@ -1,5 +1,7 @@
 # Compatibility policy
 
+Sprachen / Languages: [Deutsch](COMPATIBILITY.de.md) | [English](COMPATIBILITY.md)
+
 What we promise not to break, and how far back a release reaches. `skillctl` is a
 trust tool: the artifacts it produces, signed `.skb` bundles and the events that
 attest to them, outlive any single CLI version and are verified on machines we do

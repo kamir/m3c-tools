@@ -5,6 +5,8 @@ title: Component Index
 
 # Component Index
 
+Sprachen / Languages: [Deutsch](component-index.de.md) | [English](component-index.md)
+
 **The building blocks.** Importable Go library packages (no `main`) that the
 [programs](program-index.md) and [services](service-index.md) are assembled from.
 Public packages live under `pkg/`; internal-only packages under `internal/`.

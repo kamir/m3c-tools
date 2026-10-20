@@ -5,6 +5,8 @@ title: "Tutorial, Szenario 01: eigene Skills auf mehreren Maschinen"
 
 # Tutorial, Szenario 01: eigene Skills auf mehreren Maschinen
 
+[Deutsch](tutorial-szenario-01-eigene-skills-mehrere-maschinen.de.md) · [English](tutorial-szenario-01-eigene-skills-mehrere-maschinen.en.md)
+
 **Für wen:** Sie nutzen Ihre eigenen Skills auf mehr als einem Rechner (Laptop, Desktop,
 Windows-Maschine) und wollen zusätzlich fremde, bereits signierte Skills einsetzen.
 Sie sind der einzige Autor Ihrer eigenen Skills.
@@ -16,8 +18,8 @@ Skill blockiert, bevor der Agent ihn lädt.
 
 **Dauer:** etwa 45 Minuten für den ersten Durchlauf, danach Minuten pro Skill.
 
-**Verwandte Dokumente:** [Quickstart skillctl](quickstart-skillctl.md) (Installation und
-Grundbegriffe), [Manual](../referenz/manual-skillctl.md) (jedes Kommando, jedes Flag),
+**Verwandte Dokumente:** [Quickstart skillctl](quickstart-skillctl.de.md) (Installation und
+Grundbegriffe), [Manual](../referenz/manual-skillctl.de.md) (jedes Kommando, jedes Flag),
 [Szenario 02](tutorial-szenario-02-erster-signierter-skill.de.md) (zwei Personen, eine
 Freigabe).
 
@@ -579,4 +581,4 @@ Alles oben gilt, mit drei Unterschieden:
 
 - Zwei Personen, eine Freigabe: [Szenario 02](tutorial-szenario-02-erster-signierter-skill.de.md)
 - Üben, bis es sitzt: [Katas und Test Ride](tutorial-katas-und-test-ride.de.md)
-- Jedes Kommando, jedes Flag: [Manual](../referenz/manual-skillctl.md)
+- Jedes Kommando, jedes Flag: [Manual](../referenz/manual-skillctl.de.md)

@@ -1,5 +1,7 @@
 # Trust-Layer Evaluation Harness (E1–E10)
 
+[Deutsch](README.de.md) · [English](README.md)
+
 A reproducible, committed harness that measures the **shipped** m3c-tools trust
 layer (`pkg/skillctl/{verify,signing,translog,agentid,bodyscan,datascope}` + the
 `export-verification-kit` CLI). Each metric is a Go driver that exercises a real

@@ -1,5 +1,7 @@
 # Trust Freeze release evidence
 
+[Deutsch](README.de.md) | [English](README.md)
+
 What a platform may claim about Trust Freeze, and what backs the claim. The levels are separate statements
 and never collapse into one word such as "supported" (SPEC-0471, TF06-R6 and TF06-R7):
 

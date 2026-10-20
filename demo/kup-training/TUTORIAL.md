@@ -1,5 +1,7 @@
 # The Test Ride: prove the skill trust chain with your own hands
 
+[Deutsch](TUTORIAL.de.md) · [English](TUTORIAL.md)
+
 **Who this is for:** anyone who will publish, review, install or run agent skills with
 `skillctl`. No prior knowledge of the tool. You will not read about trust; you will break
 a bundle and watch the tool refuse it.
@@ -191,6 +193,6 @@ See [Quickstart: skillctl-demo](../../docs/v2/nutzer/quickstart-skillctl-demo.md
 
 - Every command, flag and exit code: [skillctl manual](../../docs/v2/referenz/manual-skillctl.md)
 - Install, author, sign, verify in five minutes: [Quickstart: skillctl](../../docs/v2/nutzer/quickstart-skillctl.md)
-- Publish and install a signed skill: [Signed skill tutorial](../../docs/v2/nutzer/tutorial-szenario-02-erster-signierter-skill.de.md)
+- Publish and install a signed skill: [Signed skill tutorial](../../docs/v2/nutzer/tutorial-szenario-02-erster-signierter-skill.en.md)
 - What this directory is for the maintainer, and the four release gates it asserts:
   [README.md](README.md)

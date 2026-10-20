@@ -1,11 +1,13 @@
 # Contributing
 
+Sprachen / Languages: [Deutsch](CONTRIBUTING.de.md) | [English](CONTRIBUTING.md)
+
 Thanks for helping improve **m3c-tools** and **skillctl**. This guide covers the local setup,
 the checks CI enforces, and the conventions that keep the two tools releasable at all times.
 
 ## Prerequisites
 
-- **Go 1.25+**.
+- **Go 1.26.10+**.
 - For the macOS menu-bar GUI only: `portaudio` + `ffmpeg` (cgo). The CLIs and `skillctl` need
   neither.
 
@@ -30,6 +32,12 @@ make check-docs    # documentation ↔ implementation consistency
 - **Document CLI flags.** Every CLI flag must be described in its manual
   (`docs/v2/referenz/manual-m3c-tools.md` / `docs/v2/referenz/manual-skillctl.md`), and only real flags may be
   documented. Undocumented or phantom flags are treated as a defect.
+
+The macOS Keychain round-trip is an explicit integration test. Enable it with
+`M3C_TEST_KEYCHAIN=1` only on a test account whose Keychain may be changed. It uses
+a unique synthetic account and removes its entry. Temporary `HOME`/`USERPROFILE`
+and `M3C_TOKEN_STORE=file` do not isolate that native backend. Without the opt-in,
+the round-trip is skipped; the other credential-store tests still run.
 
 ## Commit messages: Conventional Commits
 
@@ -88,3 +96,17 @@ Please report vulnerabilities privately: see [SECURITY.md](SECURITY.md).
 
 By contributing you agree that your contributions are licensed under the project's
 **Apache-2.0** license (see [LICENSE](LICENSE)).
+
+## Documentation languages / Dokumentationssprachen
+
+Published documentation must be available in German and English with the same
+substantive content. Link each language version to its counterpart. Keep CLI
+commands, flags, examples and machine-readable contracts unchanged. Review both
+versions whenever behaviour or instructions change; do not label a summary as a
+translation. Record reviewed pairs in `docs/languages.json`.
+
+Veroeffentlichte Dokumentation muss auf Deutsch und Englisch mit demselben
+fachlichen Inhalt vorliegen. Jede Sprachfassung verlinkt die Gegenfassung.
+CLI-Befehle, Flags, Beispiele und maschinenlesbare Vertraege bleiben unveraendert.
+Bei fachlichen Aenderungen beide Fassungen pruefen und die geprueften Paare in
+`docs/languages.json` aktualisieren. Eine Zusammenfassung ersetzt keine Uebersetzung.

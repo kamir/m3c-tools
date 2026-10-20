@@ -570,7 +570,7 @@ func envBool(key string, fallback bool) bool {
 }
 
 // WriteConfig writes ER1 and Plaud configuration to ~/.m3c-tools.env.
-// It creates or overwrites the file with 0600 permissions.
+// It atomically replaces regular files with an owner-only file and refuses symlinks.
 func WriteConfig(apiURL, apiKey, contextID string, verifySSL bool, defaultTags string) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -588,7 +588,7 @@ func WriteConfig(apiURL, apiKey, contextID string, verifySSL bool, defaultTags s
 	b.WriteString("\n# Plaud sync defaults\n")
 	fmt.Fprintf(&b, "PLAUD_DEFAULT_TAGS=%s\n", defaultTags)
 
-	if err := os.WriteFile(path, []byte(b.String()), 0600); err != nil {
+	if err := config.WritePrivateFile(path, []byte(b.String())); err != nil {
 		return fmt.Errorf("write config: %w", err)
 	}
 	return nil

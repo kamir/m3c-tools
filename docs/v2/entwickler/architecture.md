@@ -1,5 +1,7 @@
 # Reference: architecture overview
 
+Sprachen / Languages: [Deutsch](architecture.de.md) | [English](architecture.md)
+
 What the repository is made of and how data flows through it, on one page,
 with links into the gate-checked indexes for every detail. Where this page and
 an index disagree, the index wins: [program-index](../../program-index.md) and
@@ -36,9 +38,10 @@ er1.Queue.Add(entry)                 -> JSON retry queue, on failure
 
 Three properties carry the design:
 
-1. **Stdlib-only core.** `pkg/transcript`, `pkg/er1` and `pkg/impression` use
-   only the Go standard library; external dependencies (menuet, portaudio)
-   stay in POC and desktop layers (`CLAUDE.md`, "Zero external deps").
+1. **Focused Go core.** `pkg/transcript`, `pkg/er1` and `pkg/impression` implement
+   capture and document processing. Credential storage and private-file permissions
+   use explicit platform helpers; Windows ACL handling uses `golang.org/x/sys/windows`.
+   GUI and audio dependencies (menuet, portaudio) stay in the desktop layers.
 2. **No YouTube API key.** `pkg/transcript` is a complete port of
    youtube-transcript-api on YouTube's InnerTube API (the internal API the
    YouTube clients themselves use, so no official key is needed); the API

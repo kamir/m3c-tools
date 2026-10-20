@@ -120,3 +120,26 @@ Treat conversation history as **disposable working memory**. Durable project sta
 **At task completion**, produce a compact handoff (no transcript): objective · facts established · decisions made · files changed · tests/results · open questions · next action · relevant files (name 3–10, don't load broadly).
 
 Context budget: 🟢 <20k normal · 🟡 20–60k prune + checkpoint · 🔴 >60k or task-switch: finish the atomic operation, write the handoff, start a fresh session. See SPEC-0357 (`context-handoff`) for the sealed, provider-neutral handoff contract.
+
+## Documentation languages / Dokumentationssprachen
+
+Published documentation must be available in German and English with the same
+substantive content. Link each language version to its counterpart. Keep CLI
+commands, flags, examples and machine-readable contracts unchanged. Review both
+versions whenever behaviour or instructions change; do not label a summary as a
+translation. Record reviewed pairs in `docs/languages.json`.
+
+Veroeffentlichte Dokumentation muss auf Deutsch und Englisch mit demselben
+fachlichen Inhalt vorliegen. Jede Sprachfassung verlinkt die Gegenfassung.
+CLI-Befehle, Flags, Beispiele und maschinenlesbare Vertraege bleiben unveraendert.
+Bei fachlichen Aenderungen beide Fassungen pruefen und die geprueften Paare in
+`docs/languages.json` aktualisieren. Eine Zusammenfassung ersetzt keine Uebersetzung.
+
+## Implementation discipline
+
+Prefer the simplest concrete implementation that meets the contract. Be explicit
+at trust boundaries, error paths, resource ownership and persistent writes. Use
+small consumer-side interfaces only where substitution is needed. Follow the
+DE/EN rules in CODESTYLE.md; review exceptions rather than adding blanket skips.
+Tests must use temporary HOME and USERPROFILE values and local fake services;
+never run configuration tests against a developer home or live credentials.

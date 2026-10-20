@@ -1,50 +1,42 @@
-# Wegweiser: die Dokumentation nach Rollen / the documentation, by role
+# Wegweiser: Dokumentation nach Rollen
 
-Diese Seite beantwortet eine Frage: **wer bist du, und welche Seite brauchst du
-jetzt?** Die tor-gebundenen Dateien liegen an ihrem Rollenplatz unter `docs/v2/`
-und werden von hier verlinkt, nie kopiert.
+Sprachen / Languages: [Deutsch](index.md) | [English](index.en.md)
 
-This page answers one question: **who are you, and which page do you need right
-now?** The gate-bound files live at their role place under `docs/v2/` and are
-linked from here, never copied.
+Diese Seite hilft bei der Auswahl der passenden Anleitung. Sie richtet sich an
+Personen, die das Repository erstmals öffnen oder eine bestimmte Seite suchen.
+Referenzen liegen unter `referenz/`, Anleitungen unter `nutzer/`, Betriebsanleitungen
+unter `betrieb/`; Programm-, Dienst- und Komponentenindizes liegen unter `docs/`.
 
-Zielgruppe: jede Person, die dieses Repository zum ersten Mal oeffnet, und jede,
-die eine bestimmte Seite sucht und nicht weiss, wo sie liegt.
+## Verbindliche Inhalte und Sprachfassungen
 
-Rolle: alle · Sprache: DE/EN · Stand: 2026-09-16
+Deutsch und Englisch enthalten dieselben fachlichen Aussagen. Beide Fassungen
+werden gemeinsam geprüft. Die implementierungsbezogenen Prüfungen lesen weiterhin
+die bestehenden Originalpfade: docaudit, verbaudit, exitaudit, tutorial-smoke und
+check-index. `check-doc-languages.py` prüft die Sprachpaare, ihre nach dem Review
+gespeicherten Prüfsummen und identische Codebeispiele. Die Prüfsummen erkennen
+nachträgliche Änderungen; sie beweisen keine korrekte Übersetzung.
+`check-docpages` hält die erzeugten HTML-Seiten mit ihren Quellen synchron.
 
-## Die Grundregel in einem Satz
+## Nach Rolle einsteigen
 
-**Tor-gebundene Seiten werden verlinkt, nie kopiert:** die Manuals, das
-Verb-Register, die Indizes, die Tutorials und die Ops-Runbooks tragen maschinelle
-Pruefungen (docaudit, verbaudit, exitaudit, tutorial-smoke, check-index,
-check-docpages), und ein Duplikat waere ab der zweiten Aenderung eine zweite,
-abweichende Aussage.
-
-Referenzen liegen unter `referenz/`, Anleitungen und Quickstarts unter
-`nutzer/`, Betriebsanleitungen unter `betrieb/`. Die Programm-, Service- und
-Komponentenindizes liegen unter `docs/`.
-
-## Wer bist du, was suchst du, wohin gehst du
-
-| Wer bist du | Was suchst du | Wohin gehst du |
+| Rolle | Gesuchter Inhalt | Einstieg |
 |---|---|---|
-| **Nutzerin / Nutzer** | m3c-tools installieren, erste Aufnahme, Menueleisten-App, die drei Tutorials | [Anleitung: der Einstieg (DE)](nutzer/einstieg.de.md) |
-| **Entwicklerin / Entwickler** | Architektur, Pakete, Datenfluss | [Reference: architecture overview (EN)](entwickler/architecture.md) |
-| **Entwicklerin / Entwickler** | bauen, testen, die Tore, beitragen | [Guide: developer setup, build, test, gates (EN)](entwickler/getting-started.md) |
-| **Betrieb** | Registry betreiben, Token, Backup, Monitoring, Incident | [Ops-Ueberblick: Betrieb und Runbooks (DE)](betrieb/ueberblick.de.md) |
-| **Sicherheit / CISO** | Vertrauensmodell, Threat Model, Nachweise | [Ueberblick: Sicherheits- und Vertrauensmodell (DE)](sicherheit/ueberblick.de.md) |
+| Nutzung | Installation, erste Aufnahme, Menüleisten-App und Tutorials | [Einstieg](nutzer/einstieg.de.md) |
+| Entwicklung | Architektur, Pakete und Datenfluss | [Architekturübersicht](entwickler/architecture.de.md) |
+| Entwicklung | Bauen, testen, Qualitätsprüfungen und Beiträge | [Entwicklungsumgebung](entwickler/getting-started.de.md) |
+| Betrieb | Registry, Token, Sicherung, Monitoring und Vorfälle | [Betriebsübersicht](betrieb/ueberblick.de.md) |
+| Sicherheit / CISO | Vertrauensmodell, Bedrohungen und Nachweise | [Sicherheitsübersicht](sicherheit/ueberblick.de.md) |
 
-## Direktzugriffe / direct routes
+## Direktzugriffe
 
-| Seite | Was sie ist | Sprache |
-|---|---|---|
-| [Manual: m3c-tools](referenz/manual-m3c-tools.md) | jedes Kommando, jedes Flag, jede Konfigurationsvariable; docaudit-getort | EN |
-| [Manual: skillctl](referenz/manual-skillctl.md) | der volle Trust-Lebenszyklus, Kommando fuer Kommando; docaudit- und exitaudit-getort | EN |
-| [CLI-VERBS](referenz/CLI-VERBS.md) | das Allokationsregister der skillctl-Verben; verbaudit-getort | EN |
-| [Program-Index](../program-index.md) · [Service-Index](../service-index.md) · [Component-Index](../component-index.md) | was man startet, was laeuft, woraus alles gebaut ist; Index-Tor auf Program und Component | EN |
-| [Tutorial Szenario 01](nutzer/tutorial-szenario-01-eigene-skills-mehrere-maschinen.de.md) · [Szenario 02](nutzer/tutorial-szenario-02-erster-signierter-skill.de.md) · [Katas und Test Ride](nutzer/tutorial-katas-und-test-ride.de.md) | die drei gefuehrten Tutorials; Szenario 01 und 02 sind tutorial-smoke-getort | DE |
-| [Runbook: skillctl-sim](entwickler/skillctl-sim.md) | die Trust-Plane-Simulation lesen | EN |
-| [Reference: secretctl](entwickler/secretctl.md) | wer ein Geheimnis haelt und ob es noch gilt; liest und vergleicht, druckt nie einen Wert; check-docpages-getort | EN |
-| [Runbook: die Audit-Spur](sicherheit/audit-spur.de.md) | die drei Traeger audit, auditlog, translog konsolidiert | DE |
-| [docs/security/](../security/required-checks.txt) | Scanner-Baselines, Release-Evidence-Schema und Pflicht-Checks | EN |
+| Seite | Inhalt |
+|---|---|
+| [m3c-tools-Handbuch](referenz/manual-m3c-tools.de.md) | Alle Befehle, Flags und Konfigurationsvariablen; Original durch docaudit geprüft |
+| [skillctl-Handbuch](referenz/manual-skillctl.de.md) | Vollständiger Vertrauenslebenszyklus; Original durch docaudit und exitaudit geprüft |
+| [CLI-Verben](referenz/CLI-VERBS.de.md) | Zuordnung der skillctl-Verben; Original durch verbaudit geprüft |
+| [Programme](../program-index.de.md) · [Dienste](../service-index.de.md) · [Komponenten](../component-index.de.md) | Ausführbare Programme, laufende Dienste und Bibliotheken; Programm- und Komponentenoriginal durch check-index geprüft |
+| [Szenario 01](nutzer/tutorial-szenario-01-eigene-skills-mehrere-maschinen.de.md) · [Szenario 02](nutzer/tutorial-szenario-02-erster-signierter-skill.de.md) · [Katas und Test Ride](nutzer/tutorial-katas-und-test-ride.de.md) | Geführte Tutorials; Szenarien 01 und 02 durch tutorial-smoke geprüft |
+| [skillctl-sim](entwickler/skillctl-sim.de.md) | Simulation der Vertrauensebene auswerten |
+| [secretctl](entwickler/secretctl.de.md) | Halter und Aktualität von Geheimnissen prüfen, ohne Werte auszugeben |
+| [Audit-Spur](sicherheit/audit-spur.de.md) | Die drei Protokollträger audit, auditlog und translog |
+| [Technische Sicherheitsnachweise](../security/required-checks.txt) | Scanner-Baselines, Release-Evidence-Schema und Pflichtprüfungen |

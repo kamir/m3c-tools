@@ -27,7 +27,7 @@
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$ROOT"
+cd "$ROOT" || exit 2
 
 SCHNELL=0
 SELBSTTEST=0
@@ -47,14 +47,14 @@ LOG="$(mktemp -d)"
 trap 'rm -rf "$LOG"' EXIT
 
 # Die Toolchain, gegen die gemessen wird. Das ist keine Kosmetik: go.mod nennt
-# `toolchain go1.26.6`, und das ist fuer Go eine UNTERGRENZE, kein Pin. Wer ein
+# eine Mindestversion und optional eine bevorzugte Toolchain. Das ist kein Pin. Wer ein
 # neueres Go hat, benutzt sein eigenes, waehrend die CI genau die genannte
 # Fassung installiert. Gemessen am 2026-09-25: der Bundle-Digest von
 # pkg/skillbundle entsteht ueber den gzip-Strom, dessen Ausgabe sich zwischen
 # Go-Fassungen aendert, also faellt TestDigestStability mit go1.27.1 und besteht
 # mit go1.26.6. Ein Lauf mit einer anderen Fassung als die CI sagt weniger ueber
 # die CI, darum wird sie hier festgelegt, und wenn das nicht geht, gesagt.
-TOOLCHAIN="$(sed -n 's/^toolchain \(go[0-9.]*\)$/\1/p' go.mod | head -1)"
+TOOLCHAIN="$(awk '$1 == "go" { version = "go" $2 } $1 == "toolchain" { version = $2 } END { print version }' go.mod)"
 TOOLCHAIN_HINWEIS=""
 if [ -n "$TOOLCHAIN" ]; then
   if GOTOOLCHAIN="$TOOLCHAIN" go version >/dev/null 2>&1; then

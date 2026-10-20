@@ -5,6 +5,8 @@ title: Program Index
 
 # Program Index
 
+Sprachen / Languages: [Deutsch](program-index.de.md) | [English](program-index.md)
+
 **What you run.** Every buildable/runnable entry point in the `m3c-tools`
 repository: Go binaries, Python MCP servers, and the evaluation harness.
 
@@ -46,7 +48,8 @@ See also: [Service Index](service-index.md) (what stays running) ·
 
 ### Subcommand surfaces
 
-Both CLIs parse `os.Args` by hand (no cobra/flag). Neither verb list is
+Both CLIs dispatch through `os.Args` without Cobra. `m3c-tools` parses arguments
+by hand; individual `skillctl` commands also use the standard-library `flag` package. Neither verb list is
 duplicated here: a copy in this file was how five subcommands that do not exist
 came to be documented while ten real ones were not. Each binary is its own
 source of truth, and both are gated:

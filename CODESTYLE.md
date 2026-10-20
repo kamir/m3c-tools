@@ -1,5 +1,7 @@
 # CODESTYLE.md: the m3c-tools code-quality baseline
 
+[Deutsch](CODESTYLE.de.md) · [English](CODESTYLE.md)
+
 The rationale behind the machine-enforced rules. `.golangci.yml` is what CI runs;
 this file says **why**, and, just as importantly, states honestly what is
 **not** enforced yet, so nobody mistakes an intention for a gate.
@@ -10,81 +12,89 @@ AI-slop / overclaim audit).
 
 ---
 
-## The pragmatic+ baseline
+## The pragmatic baseline
 
-"Pragmatic+" means: **report first, block only where the rule is unambiguous.**
-A finding is closed by changing the code, or by a written, scoped exemption,
-never by quietly loosening a rule.
+Keep the implementation straightforward and make security decisions explicit.
+Fix defects before adding abstractions. A rule becomes blocking after its actual
+findings have been reviewed; exceptions belong at the call site with a concrete reason.
 
-| Area | Rule | Tooling |
-|------|------|---------|
-| Format | Deterministic gofmt superset, import groups std / external / `github.com/kamir/m3c-tools` | `gofumpt`, `gci` |
-| Correctness | `go vet` + `staticcheck` + `unused` + `errcheck` | `golangci-lint` |
-| Errors | Wrap with `%w`, sentinels named `ErrXxx`, no silent `_ =` in non-test code | `errorlint`, `errcheck` |
-| Doc comments | Exported identifiers documented; comments end with a period | `revive`, `godot` |
-| Cleanliness | No redundant conversions, no leaked response bodies, no loop-var aliasing | `gocritic`, `unconvert`, `bodyclose`, `copyloopvar`, `nilerr`, `misspell` |
-| Security (SAST) | Crypto, injection, hardcoded credentials | `gosec` |
-| Dependencies | Reachable CVEs, secret scan, `go mod tidy` is a no-op | `govulncheck`, `gitleaks`, CI job |
-| CLI surface | Every real flag documented, every documented flag real, every dispatched verb named by `--help` | `cmd/docaudit` (see below) |
-| Index freshness | Every `cmd/` binary and `pkg/` package indexed, every indexed one real, and both counts right | `scripts/check-index.sh` (CI `docs-gate` + `check-docs.sh` section 7) |
-| Exit codes | Every documented number is registered or has a named owner; manual and verb register agree per verb; the `pull` gate is read as code | `cmd/exitaudit` (see below) |
+| Area | Rule | Enforcement |
+|------|------|-------------|
+| Format | Deterministic standard Go formatting | `scripts/check-gofmt.sh` locally and in CI |
+| Correctness | Vet, static analysis, unused code and checked errors | `govet`, `staticcheck`, `unused`, `errcheck` in golangci-lint |
+| Resource handling | Close HTTP response bodies; remove redundant loop copies and conversions | `bodyclose`, `copyloopvar`, `unconvert` in golangci-lint |
+| Errors | Preserve relevant causes with `%w`; classify with `errors.Is`/`errors.As`; do not silently turn failures into success | Review, errcheck within its documented scope, regression tests |
+| Comments | Explain contracts, invariants and reasons; exported APIs need useful documentation | Review; no claim of universal comment linting |
+| Security analysis | Detect new findings relative to the committed baseline | Standalone gosec and its diff gate |
+| Dependencies | Check reachable vulnerabilities, leaked secrets and module consistency | govulncheck, gitleaks and the tidy gate in CI |
+| Coverage | Protect measured floors for the scoped trust packages | `.testcoverage.yml`, including the aggregate floor of 57 |
+| CLI surface | Keep real flags, documented flags and help dispatch consistent | docaudit |
+| Inventories and exits | Keep program/package indexes and documented exit codes consistent | check-index, verbaudit and exitaudit |
+| Release review | Command failure, missing scanner or incomplete scan blocks the review | code-review.sh and its failing-side contract tests |
 
 ### The honesty rule for comments
 
-A comment describes what **exists**. Scope limits are welcome and should be
-loud. `HONEST SCOPE:`, `NOT-YET-WIRED:`, "this is detectable, not impossible".
-Aspirational documentation (describing the design you intend, in the present
-tense, next to code that does not do it) is a defect, not a placeholder.
+A comment describes what exists. Name scope limits and intentional fallbacks.
+Do not describe a planned protection as present. A skipped check is not a pass;
+an unreadable holder is not a verified holder. Evidence must identify its scope.
 
----
+## Simple implementation, explicit boundaries
+
+- Prefer concrete types and the standard library. Add a dependency only when it
+  solves a demonstrated need; explain the reason and maintenance cost in the PR.
+- Define small interfaces at the consuming boundary when substitution is needed.
+  Do not create an interface, factory or framework for every struct.
+- Keep functions cohesive and control flow direct. Use early returns to make the
+  normal path clear; avoid hidden side effects and speculative generalization.
+- Validate untrusted paths, sizes, origins and formats at the boundary. Make
+  authorization, integrity, revocation and incomplete results explicit.
+- Pass `context.Context` first for cancellable I/O and propagate it to the actual
+  request or subprocess. Pure calculations do not need artificial contexts.
+- Own goroutine lifetimes: define cancellation, termination and who waits.
+  Prefer synchronous code when concurrency provides no demonstrated benefit.
+- Check writes, flushes, syncs, closes and renames that publish durable or secret
+  state. Ignoring a read-side cleanup error requires a local reason. Do not use
+  a deferred write as a substitute for a checked publication step.
+- Use established cryptographic primitives and `crypto/rand` for security values.
+  Keep secret bytes out of errors, process arguments and logs.
+- Tests use temporary homes, directories and stores. Set both `HOME` and
+  `USERPROFILE` when testing user paths. Live services and credentials require an
+  explicit opt-in; ordinary tests must not alter a developer's configuration.
+- Add focused failure-path and regression tests for trust decisions and persistence.
+  Run the race detector on affected concurrency paths. Do not replace meaningful
+  assertions with a blanket coverage target or tests that mirror implementation text.
+
+These conventions follow the [Go review guidance](https://go.dev/wiki/CodeReviewComments)
+and the [Go security guidance](https://go.dev/doc/security/).
 
 ## What is machine-enforced today
 
-Enabled in `.golangci.yml` and blocking in CI (`lint` job):
+The existing Lint & Vet job runs the configured golangci-lint version on native
+macOS and on the Linux and Windows build selections. The portable selections use
+`CGO_ENABLED=0`; they are static checks, not native execution on those platforms.
+Native tests remain separate. `make lint` uses the local tool; CI pins its version.
 
-- `go vet ./...`
-- `staticcheck`, `unused`, `errcheck` (with the curated exclusion list: every
-  entry names the fire-and-forget call it excuses)
+Errcheck currently excludes test files, formatted output functions and deferred
+calls. Those are real limits: it does not enforce every `_ =` assignment or every
+cleanup result. Review must still check durable-state operations. A justified
+platform-specific suppression names the affected rule and reason at that line.
 
-Blocking in CI as separate jobs: `govulncheck`, `gitleaks`, `go mod tidy`
-no-op check, the race-enabled test suites, and **`docaudit`** (the `docs-gate`
-job in `ci.yml`, `release.yml` and `skillctl-release.yml`).
+Separate CI jobs run govulncheck, gitleaks, tidy, race-enabled tests, documentation
+consistency and scoped coverage. `make ci` runs the Makefile's selected local
+checks and offline E2E list; it is not the complete CI package/race suite.
+The release-review script checks command exit statuses and runs package tests once;
+a missing or unsuccessful vulnerability scanner blocks that review.
 
-## Staged, and deliberately not yet blocking
+## Review rules that are not blanket lint gates
 
-Measured on this repo (golangci-lint v2.11.3, 2026-09-03): the numbers are here
-so the gap is a known quantity rather than a vague aspiration:
-
-| Rule | Current cost to adopt |
-|------|----------------------|
-| `gofumpt` + `gci` | **186 files** would change (mostly `0700` → `0o700` and import regrouping) |
-| `revive` | 50 findings |
-| `gocritic` | 31 findings |
-| `nilerr` | 22 findings |
-| `errorlint` | 9 findings |
-| `misspell` | 7 findings |
-| `unconvert` / `godot` | 3 each |
-| `copyloopvar` | 2 findings |
-| `bodyclose` | 1 finding |
-| `gosec` | n/a as a golangci-lint linter: gosec runs standalone in CI instead (see below) |
-| Coverage floor | not yet measured; **never** set a floor above what the suite already meets |
-
-The `gosec` row said "not yet measured (tool not installed in CI)" from
-2026-09-03 until 2026-09-15. Both halves were false almost immediately.
-`.github/workflows/gosec.yml` was added the same day and
-`gosec-diff-gate.yml` the day after; three required contexts on master carry
-gosec in their name (`gosec`, `gosec SAST (SARIF -> Code Scanning)`,
-`gosec no-new-findings (in-CI diff gate)`). And it is measured: the committed
-baseline `docs/security/gosec-inci-baseline.txt` has held 454 signatures since
-2026-09-10, and a run on 2026-09-15 reported 525 findings. Enabling gosec
-INSIDE golangci-lint would duplicate a tool that already gates, which is why
-the row now reads n/a rather than a cost.
-
-These are not enabled yet because a 186-file format sweep and ~128 lint findings
-must land as their own reviewable change. Riding along in an unrelated PR would
-bury both the sweep and the PR it hid in. Adopt them one linter at a time,
-cheapest first (`bodyclose`, `copyloopvar`, `unconvert`, `godot`, `misspell`),
-each with its own commit.
+`gofumpt`, `gci`, `revive`, `gocritic`, `nilerr`, `errorlint`, `godot` and
+`misspell` are not enabled as universal blockers here. Formatting is enforced by
+gofmt. Some diagnostic findings are intentional fallbacks or language-sensitive
+prose, and mechanically replacing `%v` with `%w` changes the exposed error API.
+Review each rule's actual findings before adopting it; never hide them by widening
+an exclusion. Gosec remains standalone rather than being run a second time inside
+golangci-lint. Do not raise coverage floors above demonstrated results or describe
+a baseline as proof that no vulnerabilities exist.
 
 ---
 

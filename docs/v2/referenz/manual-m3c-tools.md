@@ -1,9 +1,11 @@
 ---
 layout: default
-title: Manual: m3c-tools
+title: 'Manual: m3c-tools'
 ---
 
 # Manual: m3c-tools
+
+[Deutsch](manual-m3c-tools.de.md) | [English](manual-m3c-tools.md)
 
 `m3c-tools` (Multi-Modal-Memory Tools) is a capture pipeline: it turns YouTube videos,
 audio, screenshots and voice notes into structured, **multimodal observations** (text +
@@ -21,7 +23,7 @@ every command, flag and configuration variable.
 Grab the single binary from the
 [latest release](https://github.com/kamir/m3c-tools/releases/latest), or use the
 platform one-liners in the [Quickstart](../nutzer/quickstart-m3c-tools.md#1-install) and the
-[README](../../../README.md#build-from-source). To build from source (Go 1.25+):
+[README](../../../README.md#build-from-source). To build from source (Go 1.26.10+):
 
 ```bash
 go build -o m3c-tools ./cmd/m3c-tools   # plain Go build

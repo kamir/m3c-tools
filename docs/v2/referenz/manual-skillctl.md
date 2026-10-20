@@ -1,9 +1,11 @@
 ---
 layout: default
-title: Manual: skillctl
+title: 'Manual: skillctl'
 ---
 
 # Manual: skillctl
+
+[Deutsch](manual-skillctl.de.md) | [English](manual-skillctl.md)
 
 `skillctl` is the trust-and-governance CLI for agent skills. Every skill gets a verifiable
 identity and a full lifecycle, **author → pack → sign → admit → attest → verify / install →
@@ -83,7 +85,7 @@ most common setup error, so pick deliberately:
   applies only when `--key` is omitted.
 
 For a walkthrough with separate author, reviewer and consumer roles, see
-**[Tutorial: the first signed skill](../nutzer/tutorial-szenario-02-erster-signierter-skill.de.md)**.
+**[Tutorial: the first signed skill](../nutzer/tutorial-szenario-02-erster-signierter-skill.en.md)**.
 
 ---
 
@@ -1840,7 +1842,15 @@ non-privileged users and its deny is absolute, while the operator's own hooks ke
 root, or anyone who can write the managed-settings directory, can still remove it.
 
 **`pin generate`**: print the managed-settings JSON. **`pin install`**: stage the file and
-print the sudo runbook (as root, `--confirm` writes it). Both take:
+print the sudo runbook (as root, `--confirm` writes it).
+
+Installation replaces the target through a temporary file in the opened target
+directory, preserving existing POSIX permissions. Existing content is backed up
+under a timestamp plus random suffix; backups are created exclusively. Symlinks
+and non-regular targets are refused. The parent directory must remain controlled
+by the administrator; this does not coordinate concurrent policy edits.
+
+Both take:
 
 | Flag | Purpose |
 |------|---------|
@@ -2274,6 +2284,13 @@ skillctl export-verification-kit --bundle <file.skb> --out <dir> [flags]
 Builds a portable, offline verification kit that a third party can check with no network and
 no trust in you.
 
+The bundle filename must end in `.skb` and use only ASCII letters, digits, `@`, `+`,
+`_`, `-` and dots. Leading dots and Windows device names are rejected. This keeps
+filenames safe in the generated shell command and portable across supported platforms.
+Kit files are created exclusively: existing files or symlinks are not overwritten.
+Use a fresh output directory after a failed export. The optional ZIP contains only
+the generated kit entries, and an existing ZIP destination is refused.
+
 **Prerequisite, and it is easy to miss:** the kit is built around the `BundleMeta` envelope
 (`<name>.skbmeta.json`), which carries the author, registry and governance signatures and
 comes into existence when the bundle is **admitted to a registry**. No verb produces it
@@ -2648,7 +2665,7 @@ Wire the fail-closed gate so nothing runs unverified, it denies if it cannot ver
 ```
 
 Don't hand-edit an installed skill under `~/.claude/skills/`: `skillctl audit` flags the drift
-as `BROKEN`. See **[Tutorial: the first signed skill](../nutzer/tutorial-szenario-02-erster-signierter-skill.de.md)**
+as `BROKEN`. See **[Tutorial: the first signed skill](../nutzer/tutorial-szenario-02-erster-signierter-skill.en.md)**
 for the author, reviewer and consumer workflow.
 
 ---
@@ -2755,7 +2772,7 @@ step that actually stops it.
 
 The routine around all of this, including which token to ask GitLab for and why
 a write token belongs to the project rather than to a person:
-[Ops-Routine: Zugangstoken](../betrieb/ops-registry-tokens.de.md).
+[Ops-Routine: Zugangstoken](../betrieb/ops-registry-tokens.en.md).
 
 ---
 
@@ -2794,6 +2811,6 @@ ER1 credentials for registry-backed commands resolve via Keychain → Secret Man
 ## See also
 
 - **[Quickstart: skillctl](../nutzer/quickstart-skillctl.md)**: the happy path in five minutes.
-- **[Tutorial: the first signed skill](../nutzer/tutorial-szenario-02-erster-signierter-skill.de.md)**: separate author, reviewer and consumer roles.
+- **[Tutorial: the first signed skill](../nutzer/tutorial-szenario-02-erster-signierter-skill.en.md)**: separate author, reviewer and consumer roles.
 - **[Quickstart: the offline demo](../nutzer/quickstart-skillctl-demo.md)**: the `skillctl-demo` Kata walkthrough (CISO/booth).
 - **[Manual: m3c-tools](manual-m3c-tools.md)**: the memory-capture toolkit `skillctl` ships alongside.
