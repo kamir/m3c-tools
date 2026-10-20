@@ -9,6 +9,7 @@ import (
 	"encoding/pem"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -93,6 +94,34 @@ func TestTranslogCLI_AppendProveVerify(t *testing.T) {
 	}
 	if !strings.Contains(vout.String(), "OK: event included") {
 		t.Fatalf("verify output missing success line: %s", vout.String())
+	}
+}
+
+func TestTranslogCLI_ProveUsesOperatorOutputSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink creation may require additional privileges on Windows")
+	}
+	logDir, outputDir := t.TempDir(), t.TempDir()
+	logFile := filepath.Join(logDir, "log.jsonl")
+	privPath, pubPath, _ := writeLogKeypair(t, logDir)
+	var out, errb bytes.Buffer
+	if code := runTranslog([]string{"append", "attest", digestN(1), "--log", logFile, "--subject", "../../untrusted-output"}, &out, &errb); code != exitOK {
+		t.Fatalf("append code=%d: %s", code, &errb)
+	}
+	receipt := filepath.Join(outputDir, "chosen.json")
+	link := filepath.Join(outputDir, "receipt-link.json")
+	if err := os.Symlink(receipt, link); err != nil {
+		t.Fatal(err)
+	}
+	if code := runTranslog([]string{"prove", digestN(1), "--log", logFile, "--key", privPath, "--out", link}, &out, &errb); code != exitOK {
+		t.Fatalf("prove code=%d: %s", code, &errb)
+	}
+	if code := runTranslog([]string{"verify", "--receipt", receipt, "--log-pubkey", pubPath}, &out, &errb); code != exitOK {
+		t.Fatalf("verify operator destination code=%d: %s", code, &errb)
+	}
+	entries, err := os.ReadDir(outputDir)
+	if err != nil || len(entries) != 2 {
+		t.Fatalf("unexpected output files: %v, %v", entries, err)
 	}
 }
 

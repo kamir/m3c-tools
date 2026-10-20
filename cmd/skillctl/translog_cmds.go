@@ -381,8 +381,8 @@ func runTranslogProve(args []string, stdout, stderr io.Writer) int {
 		return exitGeneric
 	}
 	if *outPath != "" {
-		// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
-		if err := os.WriteFile(*outPath, append(data, '\n'), 0o644); err != nil { //nolint:gosec // receipt is public
+		// #nosec G306 G703 -- Public receipt; --out is an unrestricted local path explicitly selected by the operator, never taken from log entries or receipt content. Like shell redirection, it follows the operator's destination symlink.
+		if err := os.WriteFile(*outPath, append(data, '\n'), 0o644); err != nil {
 			fmt.Fprintln(stderr, err)
 			return exitGeneric
 		}

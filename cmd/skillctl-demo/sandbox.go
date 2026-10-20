@@ -20,6 +20,7 @@ package main
 // exit code the demo shows comes from the real skillctl process (see runner.go).
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
@@ -29,10 +30,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/kamir/m3c-tools/pkg/skillbundle"
@@ -162,7 +165,7 @@ func (sb *Sandbox) build() error {
 	if _, err := skillbundle.Pack(sb.poisonSrcDir, sb.PoisonSkb, packOpts()); err != nil {
 		return fmt.Errorf("pack poisoned bundle: %w", err)
 	}
-	if err := copyFile(sb.GoodMeta, metaSidecarPath(sb.PoisonSkb)); err != nil {
+	if err := sb.copyFile(sb.GoodMeta, metaSidecarPath(sb.PoisonSkb)); err != nil {
 		return err
 	}
 	return nil
@@ -237,46 +240,79 @@ func (sb *Sandbox) wipeSkills() error {
 // stashes the .skb and writes a green provenance sidecar (self registry). Mirrors
 // the lifecycle-tamper e2e fixture so the offline trust chain has real state.
 func (sb *Sandbox) installManaged(name string) error {
-	skb := filepath.Join(sb.Base, "install", name+".skb")
-	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
-	if err := os.MkdirAll(filepath.Dir(skb), 0o755); err != nil {
+	if err := validateSandboxSkillName(name); err != nil {
 		return err
 	}
-	digest, err := skillbundle.Pack(sb.srcDir, skb, packOpts())
+	root, err := os.OpenRoot(sb.Base)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	skills, err := filepath.Rel(sb.Base, sb.skillsDir())
+	if err != nil {
+		return err
+	}
+	var archive bytes.Buffer
+	digest, err := skillbundle.PackToWriter(sb.srcDir, &archive, packOpts())
 	if err != nil {
 		return fmt.Errorf("pack for install: %w", err)
 	}
-	blob, err := os.ReadFile(skb)
-	if err != nil {
-		return err
-	}
+	blob := archive.Bytes()
 	entries, err := skillbundle.Unpack(blob, skillbundle.UnpackOptions{StripWrapper: true, CanonicalizeMD: true})
 	if err != nil {
 		return fmt.Errorf("unpack for install: %w", err)
 	}
-	dst := filepath.Join(sb.skillsDir(), name)
-	if err := skillbundle.ExtractTo(entries, dst); err != nil {
-		return fmt.Errorf("extract install: %w", err)
+	dst := filepath.Join(skills, name)
+	for _, entry := range entries {
+		target := filepath.Join(dst, filepath.FromSlash(entry.Rel))
+		if entry.IsDir {
+			if err := root.MkdirAll(target, entry.Mode); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := root.MkdirAll(filepath.Dir(target), 0755); err != nil {
+			return err
+		}
+		if err := writeSandboxFile(root, target, entry.Content, entry.Mode); err != nil {
+			return err
+		}
 	}
-	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
-	if err := os.WriteFile(filepath.Join(dst, name+".skb"), blob, 0o644); err != nil {
+	// #nosec G306 -- Public demo bundle inside the private throwaway sandbox.
+	if err := writeSandboxFile(root, filepath.Join(dst, name+".skb"), blob, 0644); err != nil {
 		return err
 	}
 	side := registry.ProvenanceSidecar{
-		SchemaVersion:   registry.ProvenanceSchemaVersion,
-		Skill:           name,
-		Version:         demoVersion,
-		BundleDigest:    digest,
-		Registry:        "self",
-		GovernanceLevel: "green",
-		PulledAt:        time.Now().UTC().Format(time.RFC3339),
+		SchemaVersion: registry.ProvenanceSchemaVersion, Skill: name, Version: demoVersion,
+		BundleDigest: digest, Registry: "self", GovernanceLevel: "green",
+		PulledAt: time.Now().UTC().Format(time.RFC3339),
 	}
-	b, _ := json.MarshalIndent(side, "", "  ")
-	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
-	return os.WriteFile(filepath.Join(dst, registry.ProvenanceSidecarName), b, 0o644)
+	data, err := json.MarshalIndent(side, "", "  ")
+	if err != nil {
+		return err
+	}
+	// #nosec G306 -- Public provenance fixture inside the private throwaway sandbox.
+	return writeSandboxFile(root, filepath.Join(dst, registry.ProvenanceSidecarName), data, 0644)
+}
+
+func validateSandboxSkillName(name string) error {
+	if name == "" || name == "." || name == ".." {
+		return fmt.Errorf("invalid sandbox skill name %q", name)
+	}
+	for _, character := range name {
+		switch {
+		case character >= 'a' && character <= 'z', character >= 'A' && character <= 'Z', character >= '0' && character <= '9', strings.ContainsRune("._-", character):
+		default:
+			return fmt.Errorf("invalid sandbox skill name %q", name)
+		}
+	}
+	return nil
 }
 
 func (sb *Sandbox) placeUnverified(name string) error {
+	if err := validateSandboxSkillName(name); err != nil {
+		return err
+	}
 	dir := filepath.Join(sb.skillsDir(), name)
 	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -447,15 +483,44 @@ func appendToFile(path, s string) error {
 	return err
 }
 
-func copyFile(src, dst string) error {
-	b, err := os.ReadFile(src)
+func (sb *Sandbox) copyFile(src, dst string) error {
+	root, err := os.OpenRoot(sb.Base)
 	if err != nil {
 		return err
 	}
-	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+	defer root.Close()
+	source, err := filepath.Rel(sb.Base, src)
+	if err != nil {
 		return err
 	}
-	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
-	return os.WriteFile(dst, b, 0o644)
+	destination, err := filepath.Rel(sb.Base, dst)
+	if err != nil {
+		return err
+	}
+	content, err := root.ReadFile(source)
+	if err != nil {
+		return err
+	}
+	// #nosec G301 -- Public demo fixtures inside the private throwaway sandbox.
+	if err := root.MkdirAll(filepath.Dir(destination), 0755); err != nil {
+		return err
+	}
+	// #nosec G306 -- Public demo fixtures inside the private throwaway sandbox.
+	return writeSandboxFile(root, destination, content, 0644)
+}
+
+// New files only: root confines parent resolution, O_EXCL rejects existing
+// symlinks and hardlinks instead of modifying an inode outside the sandbox.
+func writeSandboxFile(root *os.Root, path string, content []byte, mode fs.FileMode) error {
+	file, err := root.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
+	if err != nil {
+		return err
+	}
+	if _, err := file.Write(content); err != nil {
+		return errors.Join(err, file.Close())
+	}
+	if err := file.Chmod(mode); err != nil {
+		return errors.Join(err, file.Close())
+	}
+	return file.Close()
 }
