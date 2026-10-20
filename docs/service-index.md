@@ -5,6 +5,8 @@ title: Service Index
 
 # Service Index
 
+Sprachen / Languages: [Deutsch](service-index.de.md) | [English](service-index.md)
+
 **What stays running.** Long-lived processes in the `m3c-tools` ecosystem, each
 paired with its **runtime wrapper**: the `deploy/*` stack, Dockerfile, compose
 file, or MCP registration that turns a [program](program-index.md) into a running

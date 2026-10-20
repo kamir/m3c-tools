@@ -1,5 +1,7 @@
 # Security policy
 
+Sprachen / Languages: [Deutsch](SECURITY.de.md) | [English](SECURITY.md)
+
 `skillctl` is a trust tool, so we hold its own supply chain to the standard it asks of others.
 This document says how to report a vulnerability and how to verify what you install.
 

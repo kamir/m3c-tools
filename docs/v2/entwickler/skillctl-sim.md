@@ -1,5 +1,7 @@
 # Runbook: skillctl-sim, the trust-plane simulation
 
+Sprachen / Languages: [Deutsch](skillctl-sim.de.md) | [English](skillctl-sim.md)
+
 How to run `cmd/skillctl-sim` and, more importantly, how to read what it
 prints. Everything below was read from `cmd/skillctl-sim/main.go`,
 `pkg/skillctl/sim/` and the `Makefile` (`sim`, `sim-deep`, `sim-theory`) on

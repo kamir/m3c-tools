@@ -1,5 +1,7 @@
 # Ops-Routine: Zugangstoken für Registry und Skill-Repository
 
+Sprachen / Languages: [Deutsch](ops-registry-tokens.de.md) | [English](ops-registry-tokens.en.md)
+
 Wer welchen Token besorgt, woher, wo er liegt, und was beim Ausscheiden passiert.
 Gedacht für den echten Betrieb bei einem Kunden mit eigener GitLab-Instanz.
 

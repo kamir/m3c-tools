@@ -1,5 +1,7 @@
 # Reference: secretctl, the life of a shared service secret
 
+Sprachen / Languages: [Deutsch](secretctl.de.md) | [English](secretctl.md)
+
 Who holds a shared service secret, whether each place holds the current value,
 and whether a service still accepts it: `cmd/secretctl` (SPEC-0438) answers
 those three questions and nothing else. Everything below was read from

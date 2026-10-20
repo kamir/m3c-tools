@@ -1,5 +1,7 @@
 # Reference: architecture overview
 
+Sprachen / Languages: [Deutsch](architecture.de.md) | [English](architecture.md)
+
 What the repository is made of and how data flows through it, on one page,
 with links into the gate-checked indexes for every detail. Where this page and
 an index disagree, the index wins: [program-index](../../program-index.md) and

@@ -1,5 +1,7 @@
 # CODESTYLE.md: the m3c-tools code-quality baseline
 
+[Deutsch](CODESTYLE.de.md) · [English](CODESTYLE.md)
+
 The rationale behind the machine-enforced rules. `.golangci.yml` is what CI runs;
 this file says **why**, and, just as importantly, states honestly what is
 **not** enforced yet, so nobody mistakes an intention for a gate.

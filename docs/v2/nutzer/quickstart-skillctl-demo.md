@@ -5,6 +5,8 @@ title: "Quickstart: skillctl-demo"
 
 # Quickstart: skillctl-demo
 
+[Deutsch](quickstart-skillctl-demo.de.md) · [English](quickstart-skillctl-demo.md)
+
 Show a CISO the trust plane **containing a live attack** (a poisoned bundle refused with
 exit `10`, a governance action that refuses to be forced with exit `2`) in about five
 minutes, on a locked-down, **offline** laptop. No install, no admin, no server.

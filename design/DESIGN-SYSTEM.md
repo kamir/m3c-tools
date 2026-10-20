@@ -1,5 +1,7 @@
 # M3C Tools: Design System
 
+[Deutsch](DESIGN-SYSTEM.de.md) · [English](DESIGN-SYSTEM.md)
+
 **Date:** 2026-04-02
 **Scope:** Go desktop app (menubar, native windows, web-based review UIs)
 

@@ -1,5 +1,7 @@
 # Guide: developer setup, build, test and the gates
 
+Sprachen / Languages: [Deutsch](getting-started.de.md) | [English](getting-started.md)
+
 How to get from a fresh clone to a passing local CI run, and which gates will
 judge your change before a human does. Commands below were read from the
 `Makefile` and `scripts/check-docs.sh` on 2026-09-16; run them from the

@@ -1,9 +1,11 @@
 ---
 layout: default
-title: Manual: skillctl
+title: 'Manual: skillctl'
 ---
 
 # Manual: skillctl
+
+[Deutsch](manual-skillctl.de.md) | [English](manual-skillctl.md)
 
 `skillctl` is the trust-and-governance CLI for agent skills. Every skill gets a verifiable
 identity and a full lifecycle, **author → pack → sign → admit → attest → verify / install →
@@ -83,7 +85,7 @@ most common setup error, so pick deliberately:
   applies only when `--key` is omitted.
 
 For a walkthrough with separate author, reviewer and consumer roles, see
-**[Tutorial: the first signed skill](../nutzer/tutorial-szenario-02-erster-signierter-skill.de.md)**.
+**[Tutorial: the first signed skill](../nutzer/tutorial-szenario-02-erster-signierter-skill.en.md)**.
 
 ---
 
@@ -2648,7 +2650,7 @@ Wire the fail-closed gate so nothing runs unverified, it denies if it cannot ver
 ```
 
 Don't hand-edit an installed skill under `~/.claude/skills/`: `skillctl audit` flags the drift
-as `BROKEN`. See **[Tutorial: the first signed skill](../nutzer/tutorial-szenario-02-erster-signierter-skill.de.md)**
+as `BROKEN`. See **[Tutorial: the first signed skill](../nutzer/tutorial-szenario-02-erster-signierter-skill.en.md)**
 for the author, reviewer and consumer workflow.
 
 ---
@@ -2755,7 +2757,7 @@ step that actually stops it.
 
 The routine around all of this, including which token to ask GitLab for and why
 a write token belongs to the project rather than to a person:
-[Ops-Routine: Zugangstoken](../betrieb/ops-registry-tokens.de.md).
+[Ops-Routine: Zugangstoken](../betrieb/ops-registry-tokens.en.md).
 
 ---
 
@@ -2794,6 +2796,6 @@ ER1 credentials for registry-backed commands resolve via Keychain → Secret Man
 ## See also
 
 - **[Quickstart: skillctl](../nutzer/quickstart-skillctl.md)**: the happy path in five minutes.
-- **[Tutorial: the first signed skill](../nutzer/tutorial-szenario-02-erster-signierter-skill.de.md)**: separate author, reviewer and consumer roles.
+- **[Tutorial: the first signed skill](../nutzer/tutorial-szenario-02-erster-signierter-skill.en.md)**: separate author, reviewer and consumer roles.
 - **[Quickstart: the offline demo](../nutzer/quickstart-skillctl-demo.md)**: the `skillctl-demo` Kata walkthrough (CISO/booth).
 - **[Manual: m3c-tools](manual-m3c-tools.md)**: the memory-capture toolkit `skillctl` ships alongside.

@@ -1,5 +1,7 @@
 # Contributing
 
+Sprachen / Languages: [Deutsch](CONTRIBUTING.de.md) | [English](CONTRIBUTING.md)
+
 Thanks for helping improve **m3c-tools** and **skillctl**. This guide covers the local setup,
 the checks CI enforces, and the conventions that keep the two tools releasable at all times.
 
@@ -88,3 +90,17 @@ Please report vulnerabilities privately: see [SECURITY.md](SECURITY.md).
 
 By contributing you agree that your contributions are licensed under the project's
 **Apache-2.0** license (see [LICENSE](LICENSE)).
+
+## Documentation languages / Dokumentationssprachen
+
+Published documentation must be available in German and English with the same
+substantive content. Link each language version to its counterpart. Keep CLI
+commands, flags, examples and machine-readable contracts unchanged. Review both
+versions whenever behaviour or instructions change; do not label a summary as a
+translation. Record reviewed pairs in `docs/languages.json`.
+
+Veroeffentlichte Dokumentation muss auf Deutsch und Englisch mit demselben
+fachlichen Inhalt vorliegen. Jede Sprachfassung verlinkt die Gegenfassung.
+CLI-Befehle, Flags, Beispiele und maschinenlesbare Vertraege bleiben unveraendert.
+Bei fachlichen Aenderungen beide Fassungen pruefen und die geprueften Paare in
+`docs/languages.json` aktualisieren. Eine Zusammenfassung ersetzt keine Uebersetzung.

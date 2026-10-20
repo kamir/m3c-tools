@@ -5,6 +5,8 @@ title: Prerequisites
 
 # Prerequisites: what a machine needs before the first run
 
+[Deutsch](prerequisites.de.md) · [English](prerequisites.md)
+
 Two tools, on every platform: **git** and **Go 1.25 or newer**. Everything else is
 optional and named as such below. If `git --version` and `go version` both answer, skip to
 [Quickstart: skillctl](quickstart-skillctl.md).

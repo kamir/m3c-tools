@@ -5,6 +5,8 @@ title: Getting Started
 
 # Getting Started
 
+[Deutsch](getting-started.de.md) · [English](getting-started.md)
+
 ## Prerequisites
 
 - **macOS** (menu bar app uses native Cocoa via cgo)

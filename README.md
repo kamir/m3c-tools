@@ -2,6 +2,8 @@
 
 # m3c-tools
 
+Sprachen / Languages: [Deutsch](README.de.md) | [English](README.md)
+
 ### Give your agents a memory, and proof of what they're allowed to do.
 
 **Multi-Modal-Memory Tools** is a personal, sovereign toolkit for turning everything you
@@ -221,7 +223,7 @@ See the [secretctl reference](docs/v2/entwickler/secretctl.md).
 
 | Page | For |
 |------|-----|
-| [**Wegweiser: die Doku nach Rollen**](docs/v2/index.md) | The role-based entry point; canonical docs live under `docs/v2/` |
+| [**Wegweiser: die Doku nach Rollen**](docs/v2/index.en.md) | The role-based entry point; canonical docs live under `docs/v2/` |
 | [**Quickstart: m3c-tools**](docs/v2/nutzer/quickstart-m3c-tools.md) | Capture your first memory in 5 minutes |
 | [**Quickstart: skillctl**](docs/v2/nutzer/quickstart-skillctl.md) | Sign, install and verify a skill in 5 minutes |
 | [**Quickstart: skillctl-demo**](docs/v2/nutzer/quickstart-skillctl-demo.md) | Run the skill-trust scenarios offline on your own machine, 3 run live with real exit codes (S1/S2A/S5); the remaining panels render their story but run nothing (S3 is a built-but-not-run PARTIAL, S2BC/S4 are ROADMAP), plus hands-on Kata training (shipped): five Katas, each beat a real skillctl exit code (K5 demonstrates the offline revocation deny live) |

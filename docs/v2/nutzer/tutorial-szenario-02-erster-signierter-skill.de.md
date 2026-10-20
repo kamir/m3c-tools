@@ -5,6 +5,8 @@ title: "Tutorial, Szenario 02: der erste signierte Skill, mit Prüfung durch ein
 
 # Tutorial, Szenario 02: der erste signierte Skill
 
+[Deutsch](tutorial-szenario-02-erster-signierter-skill.de.md) · [English](tutorial-szenario-02-erster-signierter-skill.en.md)
+
 **Für wen:** Sie haben mit Claude Code lokal einen Skill gebaut und wollen ihn erstmals
 signieren und veröffentlichen. Ihr Vorgesetzter oder eine Kollegin prüft ihn vorher.
 In diesem Text heißen die drei Rollen **Mitarbeiter** (Autor), **Alice** (Reviewer und
@@ -18,7 +20,7 @@ Prüfung stattgefunden hat, nicht weil ihm jemand gesagt hat, sie habe stattgefu
 Vorgang) etwa eine Stunde beim ersten Mal, danach Minuten.
 
 **Verwandte Dokumente:** [Szenario 01](tutorial-szenario-01-eigene-skills-mehrere-maschinen.de.md)
-(eine Person, mehrere Maschinen), [Manual](../referenz/manual-skillctl.md).
+(eine Person, mehrere Maschinen), [Manual](../referenz/manual-skillctl.de.md).
 
 ---
 
@@ -779,4 +781,4 @@ nicht registriert (`POST /api/skills/identities`, Vorlage
 
 - Eigene Skills auf mehreren Maschinen: [Szenario 01](tutorial-szenario-01-eigene-skills-mehrere-maschinen.de.md)
 - Üben, bis es sitzt: [Katas und Test Ride](tutorial-katas-und-test-ride.de.md)
-- Jedes Kommando, jedes Flag, jeder Exit-Code: [Manual](../referenz/manual-skillctl.md)
+- Jedes Kommando, jedes Flag, jeder Exit-Code: [Manual](../referenz/manual-skillctl.de.md)

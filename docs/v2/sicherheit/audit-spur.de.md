@@ -1,9 +1,11 @@
 # Runbook: die Audit-Spur, drei Traeger, drei Fragen
 
+Sprachen / Languages: [Deutsch](audit-spur.de.md) | [English](audit-spur.en.md)
+
 Wer die Audit-Spur von skillctl lesen will, steht vor drei Verben, die
 aehnlich klingen und drei verschiedene Fragen beantworten. Diese Seite
 konsolidiert sie. Grundlage: die drei Abschnitte im
-[Manual: skillctl](../referenz/manual-skillctl.md) (`audit`, `auditlog`,
+[Manual: skillctl](../referenz/manual-skillctl.de.md) (`audit`, `auditlog`,
 `translog`) und der Code (`pkg/skillctl/audit/audit.go`,
 `cmd/skillctl/auditlog_cmds.go`, SPEC-0278), gelesen am 2026-09-16.
 
@@ -100,5 +102,5 @@ Die Nummern `23/24/25` sind die dokumentierten Befund-Codes der
 translog-Pruefungen; das Register dahinter prueft `cmd/exitaudit` gegen
 `pkg/skillctl/exitcode` bei jedem Lauf von `scripts/check-docs.sh`. Diese
 Seite zitiert Manual und Code, sie ersetzt weder das
-[Manual](../referenz/manual-skillctl.md) noch das Verb-Register
-[CLI-VERBS](../referenz/CLI-VERBS.md).
+[Manual](../referenz/manual-skillctl.de.md) noch das Verb-Register
+[CLI-VERBS](../referenz/CLI-VERBS.de.md).

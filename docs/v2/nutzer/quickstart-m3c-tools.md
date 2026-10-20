@@ -5,6 +5,8 @@ title: "Quickstart: m3c-tools"
 
 # Quickstart: m3c-tools
 
+[Deutsch](quickstart-m3c-tools.de.md) · [English](quickstart-m3c-tools.md)
+
 Capture your first multimodal memory in about five minutes. By the end you'll have
 `m3c-tools` installed, connected to an [ER1](https://er1.io) knowledge server, and a
 YouTube transcript fetched and (optionally) uploaded.

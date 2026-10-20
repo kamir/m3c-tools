@@ -1,5 +1,7 @@
 # Ops-Ueberblick: der Betrieb und seine Runbooks
 
+Sprachen / Languages: [Deutsch](ueberblick.de.md) | [English](ueberblick.en.md)
+
 Anleitungen fuer die Person, die ein Registry, eine Skill-Installation oder
 die Capture-Pipeline betreibt. Die einzelnen Runbooks beschreiben die
 Handgriffe und ihre Grenzen.
@@ -15,7 +17,7 @@ Rolle: Betrieb · Sprache: DE
 | Registry sichern und wiederherstellen | [Registry-Backup und Restore](ops-registry-backup-restore.de.md) |
 | Zustand pruefen und Ueberwachung anbinden | [Monitoring und Alarmierung](ops-monitoring.de.md) |
 | Uploads schlagen fehl oder warten in der Queue | [Capture-Betrieb und Wiederanlauf](runbook-m3c-tools-capture.de.md) |
-| Eine neue Maschine einrichten | [Voraussetzungen](../nutzer/prerequisites.md), [Quickstart: m3c-tools](../nutzer/quickstart-m3c-tools.md), [Quickstart: skillctl](../nutzer/quickstart-skillctl.md) |
+| Eine neue Maschine einrichten | [Voraussetzungen](../nutzer/prerequisites.de.md), [Quickstart: m3c-tools](../nutzer/quickstart-m3c-tools.de.md), [Quickstart: skillctl](../nutzer/quickstart-skillctl.de.md) |
 | Signierte Skills zwischen Maschinen austauschen | [Szenario 01](../nutzer/tutorial-szenario-01-eigene-skills-mehrere-maschinen.de.md) |
 | Autor, Reviewer und Konsument arbeiten getrennt | [Szenario 02](../nutzer/tutorial-szenario-02-erster-signierter-skill.de.md) |
 

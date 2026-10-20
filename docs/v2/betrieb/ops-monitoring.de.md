@@ -1,5 +1,7 @@
 # Ops-Runbook: Monitoring und Alarmierung
 
+Sprachen / Languages: [Deutsch](ops-monitoring.de.md) | [English](ops-monitoring.en.md)
+
 Was an einem skillctl-Betrieb heute beobachtbar ist, woran eine Überwachung
 andocken kann, und was mit den vorhandenen Mitteln **nicht** geht.
 

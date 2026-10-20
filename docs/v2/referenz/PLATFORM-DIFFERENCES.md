@@ -1,5 +1,7 @@
 # M3C Tools: Platform Differences
 
+[Deutsch](PLATFORM-DIFFERENCES.de.md) | [English](PLATFORM-DIFFERENCES.md)
+
 ## Feature Matrix
 
 | Feature | macOS | Windows | Linux |

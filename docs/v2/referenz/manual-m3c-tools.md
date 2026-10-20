@@ -1,9 +1,11 @@
 ---
 layout: default
-title: Manual: m3c-tools
+title: 'Manual: m3c-tools'
 ---
 
 # Manual: m3c-tools
+
+[Deutsch](manual-m3c-tools.de.md) | [English](manual-m3c-tools.md)
 
 `m3c-tools` (Multi-Modal-Memory Tools) is a capture pipeline: it turns YouTube videos,
 audio, screenshots and voice notes into structured, **multimodal observations** (text +

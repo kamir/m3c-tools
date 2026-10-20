@@ -1,5 +1,7 @@
 # Threat model: the `skillctl` trust layer
 
+Sprachen / Languages: [Deutsch](THREAT_MODEL.de.md) | [English](THREAT_MODEL.md)
+
 `skillctl` is the *capability plane* of m3c-tools: it signs, admits, verifies, installs and
 revokes the agent skills that read your memory and act on your behalf. Because it is a trust
 tool, this document holds its own threat model to the same evidence standard it asks of others
@@ -18,10 +20,10 @@ those pages already cover.
 
 **Scope note.** This model covers `skillctl` and the trust artefacts it produces and consumes. It
 does **not** cover the `m3c-tools` capture pipeline (YouTube/audio/screenshot → ER1), which is a
-data-capture tool with a different risk profile. It also does **not** cover `cmd/thinking-engine`
+data-capture tool with a different risk profile. It also does **not** cover the former thinking engine
 (HMAC to Flask, Kafka, local LLM) or the Python MCP servers (`mcp-skill-server`,
-`rag-mcp-server`). Those surfaces exist in this tree and are out of this model's evidence
-standard until they get their own. Where skillctl and capture meet, a skill acting on ER1 memory,
+`rag-mcp-server`). The engine has left this repository; the MCP servers remain outside
+this model's evidence standard until they get their own. Where skillctl and capture meet, a skill acting on ER1 memory,
 the boundary is the skill's declared `data_dependencies`, addressed in R11.
 
 ---

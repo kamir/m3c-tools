@@ -5,6 +5,8 @@ title: "Quickstart: skillctl"
 
 # Quickstart: skillctl
 
+[Deutsch](quickstart-skillctl.de.md) · [English](quickstart-skillctl.md)
+
 Package, sign and verify your first agent skill in about five minutes: entirely offline,
 no server required. Then see how the same bundle flows through admit → install → revoke.
 

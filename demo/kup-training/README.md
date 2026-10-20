@@ -1,5 +1,7 @@
 # KuP Skill-Manager Training: End-to-End Demo
 
+[Deutsch](README.de.md) · [English](README.md)
+
 > **Looking for the tutorial? It is [TUTORIAL.md](TUTORIAL.md).**
 > This directory serves two audiences and they want different things.
 > **Learner:** you want the 20-minute guided ride that ends with you having broken a

@@ -1,5 +1,7 @@
 # Local git-forge test environments (SPEC-0356)
 
+[Deutsch](README.de.md) · [English](README.md)
+
 Two disposable forges for testing the skillctl **git artifact backend**
 (`pkg/skillctl/backend/git`). The backend is provider-neutral, so the same code
 drives both; pick by what you're testing.

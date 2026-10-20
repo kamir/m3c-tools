@@ -72,6 +72,7 @@ BASE_EXACT=(
   tools/leak-patterns.txt
   scripts/bugtracker.test.sh
   CONTENT-TOPOLOGY.md
+  CONTENT-TOPOLOGY.de.md
 )
 BASE_PREFIX=(CHANGELOG .git)          # CHANGELOG*, .gitignore/.gitattributes/.github/...
 
