@@ -35,7 +35,6 @@ package main
 // DEFERRED: these verbs operate on locally-held STHs/proofs.
 
 import (
-	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -426,7 +425,7 @@ func runTranslogVerify(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, err)
 		return exitGeneric
 	}
-	if err := receipt.VerifyOffline(ed25519.PublicKey(pub)); err != nil {
+	if err := receipt.VerifyOffline(pub); err != nil {
 		fmt.Fprintf(stderr, "NOT INCLUDED: %v\n", err)
 		return exitTranslogNotIncluded
 	}
@@ -474,11 +473,11 @@ func runTranslogConsistency(args []string, stdout, stderr io.Writer) int {
 	}
 	// Both heads must be authentic (signed by the pinned key) before we
 	// trust their roots.
-	if err := translog.VerifySTH(ed25519.PublicKey(pub), s1); err != nil {
+	if err := translog.VerifySTH(pub, s1); err != nil {
 		fmt.Fprintf(stderr, "sth1 invalid: %v\n", err)
 		return exitGeneric
 	}
-	if err := translog.VerifySTH(ed25519.PublicKey(pub), s2); err != nil {
+	if err := translog.VerifySTH(pub, s2); err != nil {
 		fmt.Fprintf(stderr, "sth2 invalid: %v\n", err)
 		return exitGeneric
 	}
@@ -541,7 +540,7 @@ func runTranslogWitness(args []string, stdout, stderr io.Writer) int {
 	// Verify each STH against the pinned key: an unsigned/unpinned head is
 	// not admissible evidence and could otherwise hide or fabricate a split.
 	for i, s := range sths {
-		if err := translog.VerifySTH(ed25519.PublicKey(pub), s); err != nil {
+		if err := translog.VerifySTH(pub, s); err != nil {
 			fmt.Fprintf(stderr, "witness[%d] STH invalid under pinned key: %v\n", i, err)
 			return exitGeneric
 		}

@@ -5,6 +5,7 @@ linters:
   enable:
     - bodyclose
     - copyloopvar
+    - unconvert
     - staticcheck
     - unused
     - errcheck
