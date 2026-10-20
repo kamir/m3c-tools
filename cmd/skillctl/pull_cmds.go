@@ -311,6 +311,9 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 			marker = "↻"
 		}
 		fmt.Fprintf(stdout, "    %s  installed at %s  (provenance: %s)\n", marker, r.SkillPath, r.ProvenancePath)
+		if r.BackupPath != "" {
+			fmt.Fprintf(stderr, "    warning: installation succeeded; backup cleanup incomplete at %s\n", r.BackupPath)
+		}
 	}
 
 	if *emitInstalled {

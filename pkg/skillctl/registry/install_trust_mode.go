@@ -101,6 +101,7 @@ type InstallOpts struct {
 type InstallResult struct {
 	SkillPath      string // ~/.claude/skills/<name>
 	ProvenancePath string
+	BackupPath     string // backup directory left after incomplete post-commit cleanup
 	CreatedFresh   bool   // true if no <name>/ existed before
 	OverwroteOld   bool   // true if an existing <name>/ was replaced
 	OldDigest      string // if OverwroteOld, the previous sidecar's bundle_digest (or "" if unknown)
@@ -520,28 +521,54 @@ func installOne(b *StagedBundle, opts InstallOpts) (*InstallResult, error) {
 		SkillPath:      target,
 		ProvenancePath: filepath.Join(target, ProvenanceSidecarName),
 	}
-	// Atomic swap: if target exists, move it aside; rename tmp → target.
-	var oldDigest string
-	if old, err := os.Stat(target); err == nil && old.IsDir() {
-		if pre, err := loadProvenance(filepath.Join(target, ProvenanceSidecarName)); err == nil {
-			oldDigest = pre.BundleDigest
-		}
-		backup := target + ".old-" + strconv.FormatInt(time.Now().UTC().Unix(), 10)
-		if err := os.Rename(target, backup); err != nil {
-			cleanup()
-			return nil, fmt.Errorf("install: rename old → backup: %w", err)
-		}
-		res.OverwroteOld = true
-		res.OldDigest = oldDigest
-		defer os.RemoveAll(backup) // cleanup the backup once the new install is in place
-	} else {
-		res.CreatedFresh = true
+	if pre, err := loadProvenance(filepath.Join(target, ProvenanceSidecarName)); err == nil {
+		res.OldDigest = pre.BundleDigest
 	}
-	if err := os.Rename(tmp, target); err != nil {
+	overwrite, backupPath, err := commitInstallDirectory(tmp, target, os.Rename, os.RemoveAll)
+	if err != nil {
 		cleanup()
-		return nil, fmt.Errorf("install: rename tmp → target: %w", err)
+		return nil, err
 	}
+	res.BackupPath = backupPath
+	res.OverwroteOld = overwrite
+	res.CreatedFresh = !overwrite
 	return res, nil
+}
+
+// commitInstallDirectory restores the previous directory if the new rename fails.
+// A failed restore preserves the backup at the path included in the error.
+func commitInstallDirectory(tmp, target string, rename func(string, string) error, removeAll func(string) error) (bool, string, error) {
+	old, err := os.Lstat(target)
+	if os.IsNotExist(err) {
+		if err := rename(tmp, target); err != nil {
+			return false, "", fmt.Errorf("install: rename staged directory: %w", err)
+		}
+		return false, "", nil
+	}
+	if err != nil {
+		return false, "", fmt.Errorf("install: inspect target: %w", err)
+	}
+	if !old.IsDir() {
+		return false, "", fmt.Errorf("install: existing target is not a directory: %s", target)
+	}
+	backupDir, err := os.MkdirTemp(filepath.Dir(target), ".install-backup-*")
+	if err != nil {
+		return false, "", fmt.Errorf("install: reserve backup: %w", err)
+	}
+	backup := filepath.Join(backupDir, "previous")
+	if err := rename(target, backup); err != nil {
+		return false, "", errors.Join(fmt.Errorf("install: move previous version to backup: %w", err), os.Remove(backupDir))
+	}
+	if err := rename(tmp, target); err != nil {
+		if restoreErr := rename(backup, target); restoreErr != nil {
+			return false, "", fmt.Errorf("install: commit and restore failed; previous version retained at %s: %w", backup, errors.Join(err, restoreErr))
+		}
+		return false, "", errors.Join(fmt.Errorf("install: commit failed; previous version restored: %w", err), os.Remove(backupDir))
+	}
+	if err := removeAll(backupDir); err != nil {
+		return true, backupDir, nil
+	}
+	return true, "", nil
 }
 
 // extractSkb extracts a SPEC-0188 §3.1-shaped bundle (gzip + tar) into `target`.
