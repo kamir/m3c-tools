@@ -121,7 +121,11 @@ func TestNoCredentialRedirect_CapsChain(t *testing.T) {
 	defer srv.Close()
 	c := &http.Client{Timeout: 5 * time.Second, CheckRedirect: NoCredentialRedirect}
 	req, _ := http.NewRequest("GET", srv.URL+"/loop", nil)
-	if _, err := c.Do(req); err == nil {
+	resp, err := c.Do(req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
+	if err == nil {
 		t.Error("expected an error after the redirect cap, got nil")
 	}
 }
@@ -164,7 +168,11 @@ func TestNoCrossHostRedirect_RejectsCrossHost(t *testing.T) {
 		CheckRedirect: NoCrossHostRedirect,
 	}
 	req, _ := http.NewRequest("POST", "http://"+originHost+"/revoke", nil)
-	if _, err := c.Do(req); err == nil {
+	resp, err := c.Do(req)
+	if resp != nil {
+		defer resp.Body.Close()
+	}
+	if err == nil {
 		t.Fatal("expected a cross-host redirect to be refused, got nil error")
 	}
 	if reached {
