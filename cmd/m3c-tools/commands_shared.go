@@ -34,15 +34,6 @@ import (
 	"github.com/kamir/m3c-tools/pkg/whisper"
 )
 
-// plural is a tiny helper that mirrors setup.plural; kept inline so we don't
-// export it from pkg/setup.
-func plural(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
-}
-
 func cmdRetry(args []string) {
 	interval := 30
 	maxRetries := 10

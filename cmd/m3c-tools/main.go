@@ -680,6 +680,15 @@ func cmdSetupPocketKey(args []string) {
 	}
 }
 
+// plural is a tiny helper that mirrors setup.plural; kept inline so we don't
+// export it from pkg/setup.
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
+}
+
 func cmdSetup(args []string) {
 	// SPEC-0175 §3.1+§3.3: subcommand routing for the onboarding flow.
 	// `setup pocket-key <key>` validates a Pocket API key live and writes
