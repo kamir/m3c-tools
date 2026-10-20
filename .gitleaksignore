@@ -1,0 +1,8 @@
+# Exact locations of malformed PEM and redaction-only synthetic fixtures.
+# Real historical demo signing keys are intentionally not suppressed.
+2f7a16c700ee8a78605055b1674736afc16d1a31:pkg/skillctl/trustfreeze/redact/redactor_test.go:private-key:19
+2f7a16c700ee8a78605055b1674736afc16d1a31:pkg/skillctl/trustfreeze/redact/redactor_test.go:private-key:38
+d4ac81085664ff1b17d7ae2356f58d9ff6a20170:pkg/skillctl/signing/keygen_test.go:private-key:114
+pkg/skillctl/signing/keygen_test.go:private-key:159
+pkg/skillctl/trustfreeze/redact/redactor_test.go:private-key:19
+pkg/skillctl/trustfreeze/redact/redactor_test.go:private-key:38
