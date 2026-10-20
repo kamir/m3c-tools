@@ -47,7 +47,7 @@ func main() {
 	// help/version need no config: handle them WITHOUT loading the profile or
 	// ER1 config, so they never emit the ER1 placeholder FATAL (which would
 	// pollute clean help output, e.g. on a fresh machine or CI runner).
-	switch os.Args[1] {
+	switch command := os.Args[1]; command {
 	case "help", "--help", "-h", "version", "--version", "-v":
 		// fall through to the dispatch switch below (no config load)
 	default:
