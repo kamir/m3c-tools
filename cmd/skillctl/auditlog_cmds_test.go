@@ -182,6 +182,30 @@ func TestAuditlogFlush_EmptyIsHealthy(t *testing.T) {
 	}
 }
 
+func TestAuditlogFlush_InterruptedBatchIsVisible(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	spoolOne(t, home, "pending-batch", "2026-09-04T10:00:00Z")
+	path := filepath.Join(home, ".claude", "skillctl", "spool.jsonl")
+	if err := os.Rename(path, filepath.Join(filepath.Dir(path), "spool.pending.jsonl")); err != nil {
+		t.Fatal(err)
+	}
+	if got := countSpoolLines(path); got != 1 {
+		t.Fatalf("interrupted batch must remain visible, got %d", got)
+	}
+	var out, errb bytes.Buffer
+	if code := runAuditlog([]string{"flush", "--json"}, &out, &errb); code != auditlogExitOK {
+		t.Fatalf("resume failed: %d %s", code, errb.String())
+	}
+	var result auditlogFlushResult
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.SpoolBefore != 1 || result.Drained != 1 || result.SpoolAfter != 0 {
+		t.Fatalf("interrupted batch counts: %+v", result)
+	}
+}
+
 func TestAuditlogFlush_Unhealthy(t *testing.T) {
 	home := wedgeAuditHome(t)
 	t.Setenv("HOME", home)

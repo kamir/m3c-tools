@@ -399,9 +399,16 @@ func emitAuditlogObservability(w io.Writer, et auditevent.EventType, outcome aud
 	_ = d.Close()
 }
 
-// countSpoolLines counts the non-empty lines in the spool file. A missing file is
-// zero (nothing spooled), never an error.
+// countSpoolLines includes the active spool and any interrupted drain batch.
 func countSpoolLines(path string) int {
+	n := countSpoolFileLines(path)
+	if filepath.Base(path) == "spool.jsonl" {
+		n += countSpoolFileLines(filepath.Join(filepath.Dir(path), "spool.pending.jsonl"))
+	}
+	return n
+}
+
+func countSpoolFileLines(path string) int {
 	f, err := os.Open(path) // #nosec G304 -- path is the operator's own outbox spool, not attacker input.
 	if err != nil {
 		return 0
