@@ -1313,7 +1313,7 @@ func runAudioImportPipeline(sourceDir, dbPath, onlySourcePath string, app *menub
 		if upErr != nil {
 			summary.Failed++
 			_ = filesDB.RecordUploadError(imp.Hash, "audio", upErr.Error())
-			_, _ = er1.HandleUploadFailure(er1.DefaultQueuePath(), er1.DefaultMemoryPath(), imp.MemoryID, payload, imp.Tags, upErr)
+			_, _ = er1.HandleUploadFailure(er1.DefaultQueuePath(), er1.DefaultMemoryPath(), imp.MemoryID, payload, imp.Tags, upErr, er1Cfg)
 			log.Printf("[import] upload FAIL source=%s error=%v", imp.Source, upErr)
 			if onProgress != nil {
 				onProgress(menubar.BulkProgressEvent{
@@ -2289,9 +2289,9 @@ func cmdMenubar(args []string) {
 		5*time.Minute,
 		bgRetryCfg.MaxRetries,
 	)
-	bgRetry.OnLog = func(msg string) {
+	bgRetry.SetOnLog(func(msg string) {
 		log.Printf("%s", msg)
-	}
+	})
 	log.Printf("[bg-retry] background retry scheduler started (interval=5m, max-retries=%d)", bgRetryCfg.MaxRetries)
 
 	// Shutdown hook: stop retry scheduler, deactivate projects, stop syncer.
@@ -3686,11 +3686,9 @@ func menubarUploadER1(videoID string) (*menubar.ER1UploadResult, error) {
 	// Upload
 	cfg := er1.LoadConfig()
 	applyRuntimeER1Context(cfg)
-	resp, err := er1.Upload(cfg, payload)
+	queuePath := er1.DefaultQueuePath()
+	resp, entry, err := er1.UploadDurable(cfg, payload, queuePath, videoID)
 	if err != nil {
-		// Queue for retry on failure
-		queuePath := er1.DefaultQueuePath()
-		entry := er1.EnqueueFailure(queuePath, videoID, payload, tags, err)
 		if entry == nil {
 			return &menubar.ER1UploadResult{
 				VideoID: videoID,
@@ -4060,11 +4058,15 @@ func menubarUploadPayload(app *menubar.App, label string, payload *er1.UploadPay
 
 	cfg := er1.LoadConfig()
 	applyRuntimeER1Context(cfg)
-	resp, err := er1.Upload(cfg, payload)
+	queuePath := er1.DefaultQueuePath()
+	resp, entry, err := er1.UploadDurable(cfg, payload, queuePath, label)
 	if err != nil {
-		log.Printf("[%s] ER1 upload failed (queuing): %v", label, err)
-		queuePath := er1.DefaultQueuePath()
-		er1.EnqueueFailure(queuePath, label, payload, tags, err)
+		log.Printf("[%s] ER1 upload failed: %v", label, err)
+		if entry != nil {
+			app.Notify("Upload Pending", "Capture saved locally for retry")
+		} else {
+			app.Notify("Capture Failed", "Could not save capture to the retry queue")
+		}
 		app.SetStatus(menubar.StatusIdle)
 		return
 	}

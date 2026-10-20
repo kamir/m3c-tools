@@ -109,20 +109,17 @@ func StoreToER1(data *CaptureData) *StoreResult {
 	log.Printf("[store] START channel=%s tags=%q endpoint=%s", data.Channel, tags, cfg.APIURL)
 	start := time.Now()
 
-	resp, err := er1.Upload(cfg, payload)
+	queuePath := er1.DefaultQueuePath()
+	resp, entry, err := er1.UploadDurable(cfg, payload, queuePath, prefix)
 	elapsed := time.Since(start)
 
 	if err != nil {
 		log.Printf("[store] FAIL channel=%s error=%v elapsed=%s", data.Channel, err, elapsed.Round(time.Millisecond))
 
-		// Queue for retry.
-		queuePath := er1.DefaultQueuePath()
-		entry := er1.EnqueueFailure(queuePath, prefix, payload, tags, err)
-
-		queueID := "unknown"
-		if entry != nil {
-			queueID = entry.ID
+		if entry == nil {
+			return &StoreResult{Success: false, Message: "Upload was not sent: could not save capture for retry", Queued: false}
 		}
+		queueID := entry.ID
 
 		log.Printf("[store] QUEUED id=%s path=%s", queueID, queuePath)
 

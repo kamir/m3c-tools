@@ -62,9 +62,9 @@ func TestRetryRunnerProcessOnce(t *testing.T) {
 	t.Logf("ProcessOnce: %d successes, %d failures, %d dropped", successes, failures, dropped)
 }
 
-// TestRetryRunnerDropExceedMaxRetries verifies that entries exceeding
-// MaxRetries are dropped from the queue.
-func TestRetryRunnerDropExceedMaxRetries(t *testing.T) {
+// TestRetryRunnerRetainsExhaustedEntry verifies that entries exceeding
+// MaxRetries stop automatic retries but retain their original queue entry.
+func TestRetryRunnerRetainsExhaustedEntry(t *testing.T) {
 	tmpPath := t.TempDir() + "/retry-drop-queue.json"
 	q := er1.NewQueue(tmpPath)
 
@@ -75,11 +75,11 @@ func TestRetryRunnerDropExceedMaxRetries(t *testing.T) {
 		return fmt.Errorf("should not be called")
 	}
 
-	var droppedID string
+	var stoppedID string
 	runner := er1.NewRetryRunner(q, alwaysFail, 3)
 	runner.OnRetry = func(entry er1.QueueEntry, err error, removed bool) {
-		if removed && err != nil {
-			droppedID = entry.ID
+		if !removed && err != nil {
+			stoppedID = entry.ID
 		}
 	}
 
@@ -89,13 +89,13 @@ func TestRetryRunnerDropExceedMaxRetries(t *testing.T) {
 	if dropped != 1 {
 		t.Errorf("Expected 1 dropped, got %d", dropped)
 	}
-	if droppedID != "expired-1" {
-		t.Errorf("Expected dropped ID expired-1, got %q", droppedID)
+	if stoppedID != "expired-1" {
+		t.Errorf("Expected stopped ID expired-1, got %q", stoppedID)
 	}
-	if q.Len() != 0 {
-		t.Errorf("Expected empty queue after drop, got %d", q.Len())
+	if q.Len() != 1 {
+		t.Errorf("Expected retained queue entry after exhaustion, got %d", q.Len())
 	}
-	t.Log("Entries exceeding MaxRetries are correctly dropped")
+	t.Log("Entries exceeding MaxRetries remain available for recovery")
 }
 
 // TestRetryRunnerBackoff verifies that exponential backoff delays are calculated correctly.
