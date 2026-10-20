@@ -36,6 +36,13 @@ make check-docs    # documentation ↔ implementation consistency
   Nicht implementierte Flags dürfen nicht dokumentiert sein. Fehlende oder erfundene
   Flags gelten als Fehler.
 
+Der macOS-Keychain-Roundtrip ist ein ausdrücklicher Integrationstest. Nur mit
+`M3C_TEST_KEYCHAIN=1` auf einem Testkonto aktivieren, dessen Schlüsselbund geändert
+werden darf. Der Test nutzt ein eindeutiges synthetisches Konto und entfernt
+seinen Eintrag. Temporäre Werte für `HOME`/`USERPROFILE` und `M3C_TOKEN_STORE=file`
+isolieren dieses native Backend nicht. Ohne Aktivierung wird der Roundtrip
+übersprungen; die übrigen Credential-Store-Tests laufen weiterhin.
+
 ## Commit-Nachrichten: Conventional Commits
 
 Die Release-Versionsanhebung wird **aus den Commits abgeleitet**. Deshalb ist das Präfix

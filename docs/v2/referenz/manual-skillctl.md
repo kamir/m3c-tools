@@ -1842,7 +1842,15 @@ non-privileged users and its deny is absolute, while the operator's own hooks ke
 root, or anyone who can write the managed-settings directory, can still remove it.
 
 **`pin generate`**: print the managed-settings JSON. **`pin install`**: stage the file and
-print the sudo runbook (as root, `--confirm` writes it). Both take:
+print the sudo runbook (as root, `--confirm` writes it).
+
+Installation replaces the target through a temporary file in the opened target
+directory, preserving existing POSIX permissions. Existing content is backed up
+under a timestamp plus random suffix; backups are created exclusively. Symlinks
+and non-regular targets are refused. The parent directory must remain controlled
+by the administrator; this does not coordinate concurrent policy edits.
+
+Both take:
 
 | Flag | Purpose |
 |------|---------|
@@ -2275,6 +2283,13 @@ skillctl export-verification-kit --bundle <file.skb> --out <dir> [flags]
 
 Builds a portable, offline verification kit that a third party can check with no network and
 no trust in you.
+
+The bundle filename must end in `.skb` and use only ASCII letters, digits, `@`, `+`,
+`_`, `-` and dots. Leading dots and Windows device names are rejected. This keeps
+filenames safe in the generated shell command and portable across supported platforms.
+Kit files are created exclusively: existing files or symlinks are not overwritten.
+Use a fresh output directory after a failed export. The optional ZIP contains only
+the generated kit entries, and an existing ZIP destination is refused.
 
 **Prerequisite, and it is easy to miss:** the kit is built around the `BundleMeta` envelope
 (`<name>.skbmeta.json`), which carries the author, registry and governance signatures and

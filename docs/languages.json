@@ -179,8 +179,8 @@
     {
       "de": "docs/v2/referenz/manual-skillctl.de.md",
       "en": "docs/v2/referenz/manual-skillctl.md",
-      "de_sha256": "5f0db1092bf0c9b842cb0390877f3b111d9eab6aafe8cf4776176549cd724abb",
-      "en_sha256": "4bfb474af468bb67771d8793cd7f7102a6230fc606148ec3f99fda4cc127deed"
+      "de_sha256": "fea033e19941955a9695c8339a724b97a5bd5355aaca69670f44bba3aa2e8b51",
+      "en_sha256": "2ad0e15002503d94d7eb3391c18418c9dbd8fe28aec221d2a73b14f07741ccb5"
     },
     {
       "de": "docs/v2/sicherheit/audit-spur.de.md",
@@ -221,8 +221,8 @@
     {
       "de": "CONTRIBUTING.de.md",
       "en": "CONTRIBUTING.md",
-      "de_sha256": "e777cf77a471690d42a3ddfd102ad0c0aee068650c05923f36bc9f883b0bb28b",
-      "en_sha256": "af4dca9545fb733a0a84085ede399ffcf2b9eb32d2356fbfcc0fd62e60703f56"
+      "de_sha256": "963f91fade3eb735ca90098edd8cd52d7dce0ebccbe78fb875697240e50db56e",
+      "en_sha256": "2c23f15d00597783dd69c07b4df3804979c751d8ca05bb4b05013dfb5de18314"
     },
     {
       "de": "CONTENT-TOPOLOGY.de.md",
