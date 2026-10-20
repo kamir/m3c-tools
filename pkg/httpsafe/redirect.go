@@ -13,6 +13,7 @@ package httpsafe
 import (
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 // MaxRedirects caps any single redirect chain.
@@ -22,27 +23,53 @@ const MaxRedirects = 10
 // Stored in canonical (textproto) form so Header.Del matches regardless of the
 // case the caller used when setting them.
 var sensitiveHeaders = []string{
-	"X-Api-Key",     // X-API-KEY (ER1 long-lived key, the exposed credential)
-	"X-Context-Id",  // X-Context-ID
+	"X-Api-Key",    // X-API-KEY (ER1 long-lived key, the exposed credential)
+	"X-Context-Id", // X-Context-ID
+	"X-User-Id",
+	"X-Device-Id",
 	"Authorization", // Bearer device token; stdlib also strips this, belt & suspenders
 	"Cookie",
 }
 
 // NoCredentialRedirect returns a CheckRedirect that (1) caps the chain at
 // MaxRedirects and (2) deletes sensitiveHeaders from the upcoming request
-// whenever its host differs from the ORIGINATING request's host. Host
-// comparison uses the hostname only (a same-host port change, e.g. a local
-// load balancer: keeps the headers; a different hostname does not).
+// whenever its origin differs from the originating request's origin. Origins
+// include the scheme, hostname and effective port. HTTPS downgrades are refused.
 func NoCredentialRedirect(req *http.Request, via []*http.Request) error {
 	if len(via) >= MaxRedirects {
 		return fmt.Errorf("stopped after %d redirects", MaxRedirects)
 	}
-	if len(via) > 0 && !sameHost(req, via[0]) {
-		for _, h := range sensitiveHeaders {
-			req.Header.Del(h)
+	if len(via) > 0 {
+		previous := via[len(via)-1]
+		if (via[0].URL.Scheme == "https" || previous.URL.Scheme == "https") && req.URL.Scheme != "https" {
+			return fmt.Errorf("refusing HTTPS downgrade redirect")
+		}
+		if !sameOrigin(req, via[0]) {
+			if req.Body != nil && req.Body != http.NoBody {
+				return fmt.Errorf("refusing cross-origin redirect with request body")
+			}
+			for _, h := range sensitiveHeaders {
+				req.Header.Del(h)
+			}
 		}
 	}
 	return nil
+}
+
+func sameOrigin(a, b *http.Request) bool {
+	if !sameHost(a, b) || !strings.EqualFold(a.URL.Scheme, b.URL.Scheme) {
+		return false
+	}
+	port := func(r *http.Request) string {
+		if p := r.URL.Port(); p != "" {
+			return p
+		}
+		if strings.EqualFold(r.URL.Scheme, "https") {
+			return "443"
+		}
+		return "80"
+	}
+	return port(a) == port(b)
 }
 
 // NoCrossHostRedirect is a stricter CheckRedirect for trust-critical requests

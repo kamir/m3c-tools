@@ -168,23 +168,15 @@ func TestBackgroundRetryLogging(t *testing.T) {
 	}
 
 	runner := er1.NewRetryRunner(q, uploadFn, 5)
-	bg := er1.StartBackgroundRetryWithRunner(runner, 50*time.Millisecond)
-
 	var logCount int32
-	bg.OnLog = func(msg string) {
-		atomic.AddInt32(&logCount, 1)
-	}
-
-	// The OnLog on the BackgroundRetry is separate from the runner's OnRetry.
-	// The runner's OnRetry is set in StartBackgroundRetry (not StartBackgroundRetryWithRunner).
-	// For StartBackgroundRetryWithRunner, the runner's OnRetry is nil unless set explicitly.
+	// Configure the callback before starting the goroutine. Callbacks are not
+	// mutable while a runner is active.
 	runner.OnRetry = func(entry er1.QueueEntry, err error, removed bool) {
-		if bg.OnLog != nil {
-			if err == nil {
-				bg.OnLog(fmt.Sprintf("[bg-retry] SUCCESS: %s", entry.ID))
-			}
+		if err == nil {
+			atomic.AddInt32(&logCount, 1)
 		}
 	}
+	bg := er1.StartBackgroundRetryWithRunner(runner, 50*time.Millisecond)
 
 	time.Sleep(200 * time.Millisecond)
 	bg.Stop(2 * time.Second)

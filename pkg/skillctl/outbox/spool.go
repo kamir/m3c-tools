@@ -1,30 +1,20 @@
-// spool.go: the bounded JSONL fallback for R-2.4 hot-path safety.
-//
-// When Append can't reach the db (SQLITE_BUSY at the ~250ms pin, or an open
-// failure), the caller spools the row here so the DECISION RETURNS REGARDLESS
-// (R-2.4 / R-8.1 default). The spool is a single O_APPEND Write per line (0600),
-// which is cross-process atomic for lines below PIPE_BUF: the same discipline
-// the invocation-trail.jsonl appender uses. The next sync/enforce Reconcile
-// drains it into audit_events in occurred_at order (R-2.5).
-//
-// NOT-YET-BUILT (AC-5a): per-batch translog anchoring, stamping translog_seq and
-// emitting a signed tree head so the local trail becomes tamper-EVIDENT, is not
-// wired. BackfillTranslogSeq exists and is unit-tested, but NOTHING in the
-// sync/enforce drain calls it, so translog_seq stays NULL in production and there
-// is no local-monotonicity guarantee to preserve here. The tamper-detection claim
-// is therefore scoped to the sync DURABLE-SEQ path (a row is marked synced only on
-// a VALID counter-signed durable-seq ack), NOT to local translog monotonicity.
-// Reconcile only ORDERS rows by occurred_at; it does not anchor.
+// The fallback audit spool uses OS file locks and durable writes. Reconcile
+// rotates the active file into an immutable pending batch before database I/O,
+// so concurrent appends cannot be deleted by a drain. A process crash releases
+// locks; an unfinished pending batch is replayed using event_id deduplication.
 package outbox
 
 import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
+	"time"
 
 	"github.com/kamir/m3c-tools/pkg/skillgate"
 )
@@ -42,21 +32,15 @@ type spoolEntry struct {
 // SpoolPath is the fallback file beside outbox.db.
 func (s *Store) SpoolPath() string { return filepath.Join(s.dir, "spool.jsonl") }
 
-// Spool appends one row to spool.jsonl as a single O_APPEND Write (0600). It is
-// the fallback the caller invokes when Append fails; it performs no db I/O so it
-// cannot itself stall on the lock that made Append fail.
+// Spool durably appends one row to spool.jsonl. Lock contention is bounded;
+// filesystem write and sync latency depends on the underlying storage.
 func (s *Store) Spool(rec skillgate.InvocationRecord, payloadJSON, payloadHash string) error {
 	return spoolAppend(s.dir, rec, payloadJSON, payloadHash)
 }
 
-// SpoolTo appends one row to the home-anchored spool.jsonl WITHOUT opening the
-// SQLite db. It is the fallback for the case where Open ITSELF fails (a corrupt
-// outbox.db on an otherwise-writable dir): the row still lands durably in the
-// same 0700 dir the signed trail uses, so a later `skillctl sync` Reconcile drains
-// it: and, crucially for R-8.2, durability then tracks the same writable-dir
-// condition the trail write depends on (the two sinks fail together or succeed
-// together, so require_local_audit never fires a spurious deny while the trail
-// records the allow).
+// SpoolTo durably appends without opening the database, including when the
+// database cannot be opened. Errors from locking, writes, sync and close reach
+// the caller so it can enforce its local-audit requirement.
 func SpoolTo(home string, rec skillgate.InvocationRecord, payloadJSON, payloadHash string) error {
 	return spoolAppend(dirName(home), rec, payloadJSON, payloadHash)
 }
@@ -66,38 +50,129 @@ func spoolAppend(dir string, rec skillgate.InvocationRecord, payloadJSON, payloa
 	if err != nil {
 		return fmt.Errorf("outbox: spool marshal: %w", err)
 	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("outbox: spool mkdir: %w", err)
+	if err := ensureSpoolDir(dir); err != nil {
+		return err
 	}
-	f, err := os.OpenFile(filepath.Join(dir, "spool.jsonl"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	lock, err := acquireSpoolLock(filepath.Join(dir, "spool.lock"))
+	if err != nil {
+		return err
+	}
+	return errors.Join(writeSpoolLine(filepath.Join(dir, "spool.jsonl"), append(line, '\n')), lock.Close())
+}
+
+func writeSpoolLine(path string, line []byte) error {
+	// #nosec G304 -- caller constructs the fixed spool filename under its private local audit directory; no bundle or remote path is accepted.
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("outbox: spool open: %w", err)
 	}
-	defer f.Close()
-	if _, err := f.Write(append(line, '\n')); err != nil {
-		return fmt.Errorf("outbox: spool write: %w", err)
+	if err := persistSpoolLine(f, line); err != nil {
+		return fmt.Errorf("outbox: spool write/sync/close: %w", err)
+	}
+	return syncSpoolDir(filepath.Dir(path))
+}
+
+type spoolWriter interface {
+	Write([]byte) (int, error)
+	Sync() error
+	Close() error
+}
+
+func persistSpoolLine(f spoolWriter, line []byte) error {
+	n, writeErr := f.Write(line)
+	if writeErr == nil && n != len(line) {
+		writeErr = io.ErrShortWrite
+	}
+	if writeErr == nil {
+		writeErr = f.Sync()
+	}
+	return errors.Join(writeErr, f.Close())
+}
+
+func ensureSpoolDir(dir string) error {
+	var created []string
+	for path := dir; ; path = filepath.Dir(path) {
+		if _, err := os.Stat(path); err == nil {
+			break
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("outbox: spool directory stat: %w", err)
+		}
+		created = append(created, path)
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("outbox: spool mkdir: %w", err)
+	}
+	// Persist newly created directory entries through their existing ancestor.
+	for _, path := range created {
+		if err := syncSpoolDir(filepath.Dir(path)); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-// Reconcile drains spool.jsonl into audit_events in occurred_at order and, on
-// success, removes the spool file. It is idempotent end-to-end: each row is an
-// INSERT OR IGNORE keyed on event_id, so a crash between the inserts and the
-// unlink just replays the same no-ops on the next Reconcile. Returns the number
-// of rows drained (distinct inserts attempted, including dedup no-ops).
-//
-// Ordering (R-2.5): rows are sorted by occurred_at (then event_id) before insert
-// so a FUTURE translog anchor (AC-5a, NOT-YET-BUILT) could stamp translog_seq in a
-// stable order; today nothing anchors, so this ordering only fixes the insert
-// order of spilled rows. A malformed line is SKIPPED (counted) rather than
-// aborting the whole drain: one bad line must not strand the rest of the queue.
+// Lock files are never unlinked: replacing their inode would allow two callers
+// to hold apparently exclusive locks on different files. Close releases the OS
+// lock even if a process exits before its deferred cleanup runs.
+func acquireSpoolLock(path string) (*os.File, error) {
+	// #nosec G304 -- callers supply fixed lock filenames under the operator-owned audit directory, never paths from remote events.
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, fmt.Errorf("outbox: spool lock open: %w", err)
+	}
+	deadline := time.Now().Add(50 * time.Millisecond)
+	for {
+		err = trySpoolLock(f)
+		if err == nil {
+			return f, nil
+		}
+		if !spoolLockBusy(err) || !time.Now().Before(deadline) {
+			return nil, fmt.Errorf("outbox: spool lock: %w", errors.Join(err, f.Close()))
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// rotateSpool keeps a previously interrupted batch intact. Active writers take
+// the same lock only while the active filename is renamed, never during SQL.
+func (s *Store) rotateSpool() (path string, err error) {
+	lock, err := acquireSpoolLock(filepath.Join(s.dir, "spool.lock"))
+	if err != nil {
+		return "", err
+	}
+	defer func() { err = errors.Join(err, lock.Close()) }()
+	path = filepath.Join(s.dir, "spool.pending.jsonl")
+	if _, err := os.Stat(path); err == nil {
+		return path, nil
+	} else if !os.IsNotExist(err) {
+		return "", fmt.Errorf("outbox: pending spool stat: %w", err)
+	}
+	if err := renameSpool(s.SpoolPath(), path); err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("outbox: spool rotate: %w", err)
+	}
+	return path, syncSpoolDir(s.dir)
+}
+
+// Reconcile drains one immutable pending batch in occurred_at order. Rows are
+// deduplicated by event_id, so interrupted drains replay safely. Malformed
+// evidence is retained in the pending file and reported, never silently removed.
+// A subsequent call drains appends made while the previous batch was processing.
 func (s *Store) Reconcile() (drained int, err error) {
-	path := s.SpoolPath()
+	lock, err := acquireSpoolLock(filepath.Join(s.dir, "spool.drain.lock"))
+	if err != nil {
+		return 0, err
+	}
+	defer func() { err = errors.Join(err, lock.Close()) }()
+	path, err := s.rotateSpool()
+	if err != nil || path == "" {
+		return 0, err
+	}
+	// #nosec G304 -- rotateSpool returns only the fixed pending filename inside this store's local audit directory.
 	data, err := os.ReadFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return 0, nil // nothing spooled
-		}
 		return 0, fmt.Errorf("outbox: reconcile read: %w", err)
 	}
 
@@ -123,7 +198,7 @@ func (s *Store) Reconcile() (drained int, err error) {
 		return 0, fmt.Errorf("outbox: reconcile scan: %w", serr)
 	}
 
-	// occurred_at order (R-2.5), stable on event_id.
+	// Keep insertion order stable across retries.
 	sort.SliceStable(entries, func(i, j int) bool {
 		if entries[i].Record.OccurredAt != entries[j].Record.OccurredAt {
 			return entries[i].Record.OccurredAt < entries[j].Record.OccurredAt
@@ -140,12 +215,11 @@ func (s *Store) Reconcile() (drained int, err error) {
 		drained++
 	}
 
-	// All rows landed (dedup no-ops included). Remove the spool; a fresh failure
-	// re-creates it. Skipped malformed lines are dropped with the file. They are
-	// unusable evidence by definition (no valid event_id to anchor).
-	if rerr := os.Remove(path); rerr != nil && !os.IsNotExist(rerr) {
+	if skipped != 0 {
+		return drained, fmt.Errorf("outbox: reconcile retained %s: %d malformed line(s)", path, skipped)
+	}
+	if rerr := os.Remove(path); rerr != nil {
 		return drained, fmt.Errorf("outbox: reconcile cleanup: %w", rerr)
 	}
-	_ = skipped
-	return drained, nil
+	return drained, syncSpoolDir(s.dir)
 }

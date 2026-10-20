@@ -123,6 +123,12 @@ Person, weil dies ihr Zweck ist. Ein Ersatz durch einen Beispielnamen anonymisie
 nicht, sondern verfälscht Provenance. Das ist hier der schwerwiegendere Fehler.
 Die Prüfung nimmt diese Zeilen einzeln mit jeweils angegebener Begründung aus.
 
+Ein vom Betreiber triagierter historischer Scanner-Fingerprint muss seinen
+ursprünglichen Commit, Pfad, die Regel und Zeile behalten, um den Fund zuzuordnen.
+Der Namen-Wächter nimmt nur den geprüften exakten Fingerprint in seiner
+maschinenlesbaren Datei aus. Andere Zeilen, Dateien und Commits bleiben geprüft;
+sechs Regressionen schützen diese Grenze.
+
 Warum maschinell: Dieser Baum ist öffentlich und wird alle dreißig Minuten in das
 GitLab eines Kunden gespiegelt. Namen gelangen über viele einzeln harmlose Ergänzungen
 hinein. Wer sie in Prosa erkennt, übersieht sie möglicherweise in Fixtures,

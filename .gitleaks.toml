@@ -3,13 +3,8 @@
 
 title = "m3c-tools secret scanning"
 
-[allowlist]
-  description = "Known safe patterns"
-  paths = [
-    '''\.env\.example$''',
-    '''\.env\.samples$''',
-    '''go\.sum$''',
-  ]
+[extend]
+  useDefault = true
 
 # Custom rules for project-specific secrets
 [[rules]]
@@ -23,3 +18,160 @@ title = "m3c-tools secret scanning"
   description = "Plaud auth token (long alphanumeric)"
   regex = '''tokenstr.*[A-Za-z0-9]{40,}'''
   tags = ["token", "plaud"]
+
+# Exact synthetic fixtures only. Each exception requires both its file and value.
+
+[[rules]]
+  id = "generic-api-key"
+
+  [[rules.allowlists]]
+    description = "Synthetic test input used to exercise credential handling or redaction"
+    condition = "AND"
+    paths = ["^cmd/m3c\\-tools/doctor_test\\.go$"]
+    regexes = [
+      "^test-api-key-1234$",
+    ]
+
+  [[rules.allowlists]]
+    description = "Synthetic test input used to exercise credential handling or redaction"
+    condition = "AND"
+    paths = ["^cmd/skillctl/trustfreeze_hardening_test\\.go$"]
+    regexes = [
+      "^abcdef0123456789$",
+    ]
+
+  [[rules.allowlists]]
+    description = "Synthetic test input used to exercise credential handling or redaction"
+    condition = "AND"
+    paths = ["^pkg/config/doctor_test\\.go$"]
+    regexes = [
+      "^e25ce814-5bb6-4f99-9f08-88d603db391c$",
+    ]
+
+  [[rules.allowlists]]
+    description = "Synthetic test input used to exercise credential handling or redaction"
+    condition = "AND"
+    paths = ["^pkg/config/editor_test\\.go$"]
+    regexes = [
+      "^secret-key-1234567890$",
+    ]
+
+  [[rules.allowlists]]
+    description = "Documented nonfunctional configuration example"
+    condition = "AND"
+    paths = ["^pkg/config/initcfg\\.go$"]
+    regexes = [
+      "^kup-abc123def456$",
+    ]
+
+  [[rules.allowlists]]
+    description = "Synthetic test input used to exercise credential handling or redaction"
+    condition = "AND"
+    paths = ["^pkg/config/initcfg_test\\.go$"]
+    regexes = [
+      "^test-key-abc123$",
+    ]
+
+  [[rules.allowlists]]
+    description = "Synthetic test input used to exercise credential handling or redaction"
+    condition = "AND"
+    paths = ["^pkg/config/profile_test\\.go$"]
+    regexes = [
+      "^secret-key-1234567890$",
+      "^test-key-abc123$",
+    ]
+
+  [[rules.allowlists]]
+    description = "RFC 6455 WebSocket handshake nonce; not an authentication credential"
+    condition = "AND"
+    paths = ["^pkg/plaud/auth\\.go$"]
+    regexes = [
+      "^dGhlIHNhbXBsZSBub25jZQ==$",
+    ]
+
+  [[rules.allowlists]]
+    description = "Synthetic test input used to exercise credential handling or redaction"
+    condition = "AND"
+    paths = ["^pkg/session/session_test\\.go$"]
+    regexes = [
+      "^test-key-1234567890$",
+    ]
+
+  [[rules.allowlists]]
+    description = "Synthetic test input used to exercise credential handling or redaction"
+    condition = "AND"
+    paths = ["^pkg/skillctl/trustfreeze/capture/engine_test\\.go$"]
+    regexes = [
+      "^opaque-argument-secret-7788$",
+    ]
+
+  [[rules.allowlists]]
+    description = "Synthetic test input used to exercise credential handling or redaction"
+    condition = "AND"
+    paths = ["^pkg/skillctl/trustfreeze/platform/common/identity_test\\.go$"]
+    regexes = [
+      "^s3cr3t-ZXCVBNM-0123456789$",
+    ]
+
+  [[rules.allowlists]]
+    description = "Synthetic test input used to exercise credential handling or redaction"
+    condition = "AND"
+    paths = ["^pkg/skillctl/trustfreeze/platform/linux/ssh_test\\.go$"]
+    regexes = [
+      "^AAAAC3NzaC1lZDI1NTE5AAAAIIE5dw6ofRdfVqNUZsNMfszLjYqRtO43ol32D1uPybOU$",
+      "^AAAAC3NzaC1lZDI1NTE5AAAAIIqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c$",
+    ]
+
+  [[rules.allowlists]]
+    description = "Synthetic test input used to exercise credential handling or redaction"
+    condition = "AND"
+    paths = ["^pkg/skillctl/trustfreeze/probe/runner_exec_test\\.go$"]
+    regexes = [
+      "^s3cr3t-ZXCVBNM-0123456789$",
+    ]
+
+  [[rules.allowlists]]
+    description = "Synthetic test input used to exercise credential handling or redaction"
+    condition = "AND"
+    paths = ["^pkg/skillctl/trustfreeze/redact/policy_test\\.go$"]
+    regexes = [
+      "^AAAAC3NzaC1lZDI1NTE5$",
+    ]
+
+  [[rules.allowlists]]
+    description = "Synthetic test input used to exercise credential handling or redaction"
+    condition = "AND"
+    paths = ["^pkg/skillctl/trustfreeze/seal/approval_test\\.go$"]
+    regexes = [
+      "^abcdef0123456789$",
+    ]
+
+[[rules]]
+  id = "gitlab-pat"
+
+  [[rules.allowlists]]
+    description = "Synthetic test input used to exercise credential handling or redaction"
+    condition = "AND"
+    paths = ["^cmd/skillctl/token_cmds_test\\.go$"]
+    regexes = [
+      "^\\x67\\x6c\\x70\\x61\\x74\\x2d\\x73\\x68\\x6f\\x75\\x6c\\x64\\x2d\\x6e\\x6f\\x74\\x2d\\x62\\x65\\x2d\\x70\\x72\\x69\\x6e\\x74\\x65$",
+    ]
+
+  [[rules.allowlists]]
+    description = "Synthetic test input used to exercise credential handling or redaction"
+    condition = "AND"
+    paths = ["^pkg/skillctl/artifactauth/creds_windows_test\\.go$"]
+    regexes = [
+      "^\\x67\\x6c\\x70\\x61\\x74\\x2d\\x6d\\x75\\x73\\x74\\x2d\\x6e\\x6f\\x74\\x2d\\x61\\x70\\x70\\x65\\x61\\x72\\x2d\\x6f\\x6e\\x2d\\x64$",
+    ]
+
+[[rules]]
+  id = "jwt"
+
+  [[rules.allowlists]]
+    description = "Synthetic test input used to exercise credential handling or redaction"
+    condition = "AND"
+    paths = ["^pkg/skillctl/trustfreeze/redact/redactor_test\\.go$"]
+    regexes = [
+      "^eyJhbGciOiJIUzI1NiJ9\\.eyJzdWIiOiJ0ZXN0In0\\.c2lnbmF0dXJl$",
+    ]

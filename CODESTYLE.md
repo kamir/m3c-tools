@@ -122,6 +122,11 @@ anything; it falsifies provenance, which in this repository is the worse
 failure. The gate exempts those lines individually, with the reason written next
 to each.
 
+An owner-triaged historical scanner fingerprint must retain its original
+commit, path, rule and line to resolve the finding. The name gate admits only
+the reviewed exact fingerprint in its machine-readable file. Other lines,
+files and commits remain checked; six regression cases protect this boundary.
+
 Why mechanical: this tree is public and it is mirrored into a customer's GitLab
 every thirty minutes. A name arrives through a hundred small additions, each
 harmless alone, and a reviewer who catches the ones in prose still misses the
