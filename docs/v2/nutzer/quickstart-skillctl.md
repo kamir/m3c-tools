@@ -96,7 +96,7 @@ irm https://raw.githubusercontent.com/kamir/m3c-tools/master/scripts/skillctl-te
 curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/master/scripts/skillctl-test.sh | bash
 ```
 
-Prerequisites: **git** and **Go 1.25+** on `PATH`. Nothing else. Missing either, or on a
+Prerequisites: **git** and **Go 1.26.10+** on `PATH`. Nothing else. Missing either, or on a
 fresh Windows box, see [Prerequisites](prerequisites.md): one `winget` line per tool, the
 PATH reload that makes them visible in the session you already have open, and the
 no-admin-rights path. The scripts never touch your trust roots, never write outside the

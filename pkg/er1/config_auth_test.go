@@ -41,7 +41,9 @@ func TestLoadConfig_WarnsWhenNoAuth(t *testing.T) {
 	// exists on disk (the user has signed in). On a developer machine that file
 	// usually exists, so the test must isolate $HOME to a clean temp dir to
 	// reliably observe the warning.
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 
 	// Capture log output to verify warning is emitted.
 	var buf bytes.Buffer
@@ -83,7 +85,9 @@ func TestLoadConfig_PlaceholderKeyOnProdIsCleared(t *testing.T) {
 	os.Unsetenv("ER1_DEVICE_TOKEN")
 	t.Setenv("ER1_API_KEY", "minimal-key")
 	t.Setenv("ER1_API_URL", "https://onboarding.guide/upload_2")
-	t.Setenv("HOME", t.TempDir()) // suppress device-token.enc presence noise
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // suppress device-token.enc presence noise
 
 	// BUG-0163: FATAL is once-guarded across the process; reset so this
 	// test asserts a fresh emission regardless of earlier test order.
@@ -122,7 +126,9 @@ func TestLoadConfig_PlaceholderKeySilentWhenDeviceTokenPresent(t *testing.T) {
 	t.Setenv("ER1_DEVICE_TOKEN", "fake-bearer-token")
 	t.Setenv("ER1_API_KEY", "minimal-key")
 	t.Setenv("ER1_API_URL", "https://onboarding.guide/upload_2")
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 
 	// Reset the once-guard so this test is independent of any earlier test
 	// that may have consumed it in the same package run.
@@ -155,7 +161,9 @@ func TestLoadConfig_PlaceholderFatalFiresAtMostOnce(t *testing.T) {
 	os.Unsetenv("ER1_DEVICE_TOKEN")
 	t.Setenv("ER1_API_KEY", "minimal-key")
 	t.Setenv("ER1_API_URL", "https://onboarding.guide/upload_2")
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 
 	placeholderFatalOnce = sync.Once{}
 

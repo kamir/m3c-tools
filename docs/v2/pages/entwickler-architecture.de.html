@@ -336,10 +336,10 @@ er1.Queue.Add(entry)                 -> JSON retry queue, on failure
 
 Drei Eigenschaften tragen den Entwurf:
 
-1. **Kern nur mit Standardbibliothek.** `pkg/transcript`, `pkg/er1` und
-   `pkg/impression` verwenden ausschließlich die Go-Standardbibliothek;
-   externe Abhängigkeiten (menuet, portaudio) bleiben in POC- und
-   Desktop-Schichten (`CLAUDE.md`, "Zero external deps").
+1. **Fokussierter Go-Kern.** `pkg/transcript`, `pkg/er1` und `pkg/impression` bilden
+   Erfassung und Dokumentverarbeitung ab. Zugangsdaten und private Dateirechte
+   nutzen explizite Plattformhelfer; Windows-ACLs verwenden `golang.org/x/sys/windows`.
+   GUI- und Audioabhängigkeiten (menuet, portaudio) bleiben in den Desktop-Schichten.
 2. **Kein YouTube-API-Key.** `pkg/transcript` ist eine vollständige Portierung
    von youtube-transcript-api auf YouTubes InnerTube API (die interne API,
    die YouTube-Clients selbst nutzen; deshalb ist kein offizieller Schlüssel

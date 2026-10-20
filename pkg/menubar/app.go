@@ -541,7 +541,10 @@ func (a *App) buildHelpMenu() menuet.MenuItem {
 					Image: iconLogFile,
 					Clicked: func() {
 						// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL.
-						exec.Command("open", a.Config.LogPath).Run() //nolint:errcheck // fire-and-forget UI action: open the log file in the default app
+						if err := exec.Command("open", a.Config.LogPath).Run(); err != nil {
+							log.Printf("[menubar] open log file: %v", err)
+							return
+						}
 						a.fireAction(ActionOpenLog, a.Config.LogPath)
 					},
 				},

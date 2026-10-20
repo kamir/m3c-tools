@@ -18,6 +18,31 @@ func TestCLIHelp(t *testing.T) {
 	result.AssertOutputContainsAll(t, "transcript", "upload", "record", "devices")
 }
 
+// Informational commands remain usable with an unusable saved configuration.
+func TestCLIInformationalCommandsDoNotLoadConfig(t *testing.T) {
+	for _, command := range []string{"help", "--help", "-h", "version", "--version", "-v"} {
+		t.Run(command, func(t *testing.T) {
+			home := t.TempDir()
+			result := RunCLIWithEnv(t, []string{
+				"HOME=" + home, "USERPROFILE=" + home, "M3C_TOKEN_STORE=file",
+				"ER1_API_KEY=placeholder", "ER1_API_URL=https://127.0.0.1:8081/upload_2",
+				"ER1_CONTEXT_ID=", "ER1_DEVICE_TOKEN=", "M3C_DOTENV=0",
+			}, command)
+			result.AssertSuccess(t)
+			result.AssertNotContains(t, "[er1]")
+			result.AssertNotContains(t, "[auth]")
+			result.AssertNotContains(t, "[config]")
+			entries, err := os.ReadDir(home)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(entries) != 0 {
+				t.Fatalf("informational command changed home: %v", entries)
+			}
+		})
+	}
+}
+
 // TestCLIUnknownCommand verifies that unknown commands return a non-zero exit code.
 func TestCLIUnknownCommand(t *testing.T) {
 	result := RunCLI(t, "nonexistent-command-xyz")

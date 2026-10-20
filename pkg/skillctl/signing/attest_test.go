@@ -100,7 +100,6 @@ func TestCanonicalizeAttestationMessage_RejectsBadDigest(t *testing.T) {
 func TestCanonicalizeAttestationMessage_RejectsBadLevel(t *testing.T) {
 	cases := []string{"", "blue", "GREEN", "Green", " green", "green ", "yel", "0"}
 	for _, level := range cases {
-		level := level
 		t.Run("level="+level, func(t *testing.T) {
 			if _, err := CanonicalizeAttestationMessage(testVectorDigest, level, testVectorAttestedAt, testVectorReviewerID); err == nil {
 				t.Fatalf("accepted bad level %q", level)

@@ -10,7 +10,9 @@ those three questions and nothing else. Everything below was read from
 into master) on 2026-09-16. Every command output and exit code quoted in this
 page was measured against a binary built from exactly that state
 (`go build ./cmd/secretctl`), offline; sentences that only restate the code
-say so.
+say so. These historical outputs are retained below. The current incomplete-result
+rules in the exit-code section supersede that version's successful exit on an
+unreadable source and are covered by synthetic regression tests, not a new live-service run.
 
 Audience: a developer or operator who has to run an inventory before a
 rotation, or prove that a rotation finished. The build entry is in the
@@ -60,6 +62,10 @@ and exits `2` (measured); the working form is `secretctl verify --old demo`.
 | who holds the secret, before touching anything | `inventory <name>` | every listed place carries the current value |
 | whether the new value is live everywhere | `verify <name>` | every probed place is accepted |
 | whether the rotation actually finished | `verify --old <name>` | every place carrying the old value is refused |
+
+`verify` cannot probe `cloud-run` holders by value. It reports them as
+`NICHT PRUEFBAR (cloud-run)` and exits `1`, including with `--old` and when
+other holders passed. Zero successfully probed holders is never success.
 
 ## The registry file
 
@@ -162,20 +168,22 @@ measured against the built binary:
 ## Exit codes
 
 Read from the `return` statements in `main.go`, `inventory.go` and
-`verify.go`; every row was confirmed by at least one measured run:
+`verify.go`. The historical measured runs below predate the current
+incomplete-result checks; these checks are covered in `cmd/secretctl/incomplete_test.go`:
 
 | Code | Meaning |
 |---|---|
-| `0` | help; or every place is current (`inventory`); or every probed place answered as expected (`verify`) |
-| `1` | a finding or an operational failure: registry missing or invalid, unknown secret name, `verify` without a configured probe, stale or valueless or unreachable places, a probe answer other than expected |
+| `0` | help; or a readable source and no stale, missing, unreadable or unreachable holders (`inventory`); or every configured holder was probed and answered as expected, with at least one successful probe (`verify`) |
+| `1` | a finding or an operational failure: registry missing or invalid, unknown secret name, `verify` without a configured probe, an unreadable source, stale or valueless or unreadable or unreachable places, an unprobeable holder or zero successfully probed holders, a probe answer other than expected |
 | `2` | usage: no verb, unknown verb, one of the unbuilt writing verbs, wrong argument count, unparseable flag |
 
-Measured runs behind that table, 12 in total: `-h` exits `0`; five runs exit
+Historical measured runs from `bd00a6f`, 12 in total: `-h` exits `0`; five runs exit
 `2` (no verb, unknown verb, `new`, `inventory` without a name, a flag placed
 after the positional name); five runs exit `1` (missing registry file,
 unknown secret name, a registry refused for its plaintext probe URL, `verify`
 on an entry without a probe, a failed loopback probe); the offline inventory
-run below exits `0`.
+run below returned `0` in that historical version. Current code instead returns
+`1` for its unreadable source.
 
 ## Practice, measured offline
 
@@ -206,12 +214,14 @@ laptop-env  file  lokal     f9448d60fde5   ?
 1 Orte gefuehrt.
 ```
 
-Exit code: `0`. Two things to read off this run: an unreadable source leaves
-STAND at `?` and does not by itself fail the run, and the holder's value
-surfaces only as a 12-hex fingerprint. With a readable source the STAND
-column says `aktuell` or `veraltet`, and any `veraltet`, `fehlt` or
-`unerreichbar` row turns the exit code to `1` (`inventory.go`; code reading,
-the online path was not run here).
+Historical exit code: `0`. This was an incomplete inventory, not evidence that
+the holder was current: the unreadable source left STAND at `?`, while the
+holder's value appeared only as a 12-hex fingerprint. Current code marks this
+case `UNVOLLSTAENDIG` and exits `1`. An unreadable holder also makes inventory
+incomplete. With a readable source, STAND says `aktuell` or `veraltet`;
+`veraltet`, `fehlt`, `unlesbar` and `unerreichbar` all produce exit `1`.
+The current behavior is exercised with synthetic source/holder fixtures in
+`cmd/secretctl/incomplete_test.go`; no new live-service measurement is claimed here.
 
 ### Part B: probe a rotation
 

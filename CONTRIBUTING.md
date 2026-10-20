@@ -7,7 +7,7 @@ the checks CI enforces, and the conventions that keep the two tools releasable a
 
 ## Prerequisites
 
-- **Go 1.25+**.
+- **Go 1.26.10+**.
 - For the macOS menu-bar GUI only: `portaudio` + `ffmpeg` (cgo). The CLIs and `skillctl` need
   neither.
 
@@ -32,6 +32,12 @@ make check-docs    # documentation ↔ implementation consistency
 - **Document CLI flags.** Every CLI flag must be described in its manual
   (`docs/v2/referenz/manual-m3c-tools.md` / `docs/v2/referenz/manual-skillctl.md`), and only real flags may be
   documented. Undocumented or phantom flags are treated as a defect.
+
+The macOS Keychain round-trip is an explicit integration test. Enable it with
+`M3C_TEST_KEYCHAIN=1` only on a test account whose Keychain may be changed. It uses
+a unique synthetic account and removes its entry. Temporary `HOME`/`USERPROFILE`
+and `M3C_TOKEN_STORE=file` do not isolate that native backend. Without the opt-in,
+the round-trip is skipped; the other credential-store tests still run.
 
 ## Commit messages: Conventional Commits
 

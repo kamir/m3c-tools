@@ -56,7 +56,7 @@ m3c-tools version
 m3c-tools help
 ```
 
-> **Prefer to build from source?** You need Go 1.25+. On macOS the menu-bar GUI also needs
+> **Prefer to build from source?** You need Go 1.26.10+. On macOS the menu-bar GUI also needs
 > `brew install pkg-config portaudio ffmpeg` and `python3 -m pip install openai-whisper`.
 > Then `make install`. See [Build from source](../../../README.md#build-from-source).
 

@@ -80,7 +80,7 @@ func main() {
 	b.WriteString("\nE6 is recorded as `N/A, deferred (gated P3-P2)`: the OIDC/JWKS binding ")
 	b.WriteString("is not built, so there is no path to measure, no number is fabricated.\n")
 
-	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
+	// #nosec G306 G703 -- The operator intentionally chooses the CLI output directory in argv, including outside the repository. RESULTS.md contains public measured results, not secrets.
 	if err := os.WriteFile(mdPath, []byte(b.String()), 0o644); err != nil {
 		fmt.Fprintf(os.Stderr, "results-md: write %s: %v\n", mdPath, err)
 		os.Exit(1)

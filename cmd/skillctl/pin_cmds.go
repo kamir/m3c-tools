@@ -23,7 +23,9 @@ package main
 //	3  needs privilege. A manual sudo step is required (install, non-root)
 
 import (
+	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -295,35 +297,51 @@ func runPinInstall(args []string, stdout, stderr io.Writer) int {
 // up any existing file, write the merged content, then RE-READ the file from
 // disk and verify what actually landed (not the in-memory buffer).
 func pinRootWrite(target string, content []byte, targetExists bool, existing []byte, stdout, stderr io.Writer) int {
-	if fi, err := os.Lstat(target); err == nil && fi.Mode()&os.ModeSymlink != 0 {
-		fmt.Fprintf(stderr, "skillctl pin install: %s is a symlink: refusing to write through it.\n", target)
-		return pinExitError
-	}
 	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		fmt.Fprintf(stderr, "skillctl pin install: mkdir %s: %v\n", filepath.Dir(target), err)
 		return pinExitError
 	}
-	if targetExists {
-		backup := target + ".bak-" + time.Now().UTC().Format("20060102-150405")
-		if fi, err := os.Lstat(backup); err == nil && fi.Mode()&os.ModeSymlink != 0 {
-			fmt.Fprintf(stderr, "skillctl pin install: backup path %s is a symlink: refusing.\n", backup)
+	// --path is an operator-selected destination. Anchor every subsequent
+	// operation to this directory so replacing a parent path cannot redirect it.
+	dir, err := os.OpenRoot(filepath.Dir(target))
+	if err != nil {
+		fmt.Fprintf(stderr, "skillctl pin install: open directory: %v\n", err)
+		return pinExitError
+	}
+	defer func() {
+		if err := dir.Close(); err != nil {
+			fmt.Fprintf(stderr, "skillctl pin install: close directory: %v\n", err)
+		}
+	}()
+	name := filepath.Base(target)
+	mode := os.FileMode(0o644)
+	if fi, err := dir.Lstat(name); err == nil {
+		if !fi.Mode().IsRegular() {
+			fmt.Fprintf(stderr, "skillctl pin install: %s is a symlink or non-regular file: refusing to replace it.\n", target)
 			return pinExitError
 		}
-		// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
-		if err := os.WriteFile(backup, existing, 0o644); err != nil {
+		mode = fi.Mode().Perm()
+	} else if !os.IsNotExist(err) {
+		fmt.Fprintf(stderr, "skillctl pin install: inspect %s: %v\n", target, err)
+		return pinExitError
+	}
+	if targetExists {
+		backup := name + ".bak-" + time.Now().UTC().Format("20060102-150405") + "-" + rand.Text()
+		if err := pinWriteExclusive(dir, backup, existing, mode); err != nil {
 			fmt.Fprintf(stderr, "skillctl pin install: backup %s: %v\n", backup, err)
 			return pinExitError
 		}
-		fmt.Fprintf(stdout, "backed up existing managed settings → %s\n", backup)
+		fmt.Fprintf(stdout, "backed up existing managed settings → %s\n", filepath.Join(filepath.Dir(target), backup))
 	}
-	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
-	if err := os.WriteFile(target, content, 0o644); err != nil {
+	// Never truncate the destination inode: it could have become a symlink or
+	// hardlink since inspection. Rename only replaces its directory entry.
+	if err := pinReplaceFile(dir, name, content, mode); err != nil {
 		fmt.Fprintf(stderr, "skillctl pin install: write %s: %v\n", target, err)
 		return pinExitError
 	}
 	// Honest re-verify: read back what actually landed on disk and verify THAT.
-	back, rerr := os.ReadFile(target)
+	back, rerr := dir.ReadFile(name)
 	if rerr != nil {
 		fmt.Fprintf(stderr, "skillctl pin install: wrote %s but cannot read it back: %v\n", target, rerr)
 		return pinExitError
@@ -337,9 +355,40 @@ func pinRootWrite(target string, content []byte, targetExists bool, existing []b
 	return pinExitOK
 }
 
+// pinWriteExclusive never follows an existing symlink or overwrites a previous
+// backup. All names are generated locally, relative to the opened directory.
+func pinWriteExclusive(dir *os.Root, name string, content []byte, mode os.FileMode) error {
+	f, err := dir.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
+	if err != nil {
+		return err
+	}
+	n, writeErr := f.Write(content)
+	if writeErr == nil && n != len(content) {
+		writeErr = io.ErrShortWrite
+	}
+	if writeErr == nil {
+		writeErr = f.Sync()
+	}
+	if err := errors.Join(writeErr, f.Close()); err != nil {
+		return errors.Join(err, dir.Remove(name))
+	}
+	return nil
+}
+
+func pinReplaceFile(dir *os.Root, name string, content []byte, mode os.FileMode) error {
+	temp := ".managed-settings-" + rand.Text()
+	if err := pinWriteExclusive(dir, temp, content, mode); err != nil {
+		return err
+	}
+	if err := dir.Rename(temp, name); err != nil {
+		return errors.Join(err, dir.Remove(temp))
+	}
+	return nil
+}
+
 // stagePinFile writes content to ~/.claude/skillctl/managed-settings.staged.json
 // (0600). It refuses to write through a symlink at that path.
-func stagePinFile(content []byte) (string, error) {
+func stagePinFile(content []byte) (staged string, err error) {
 	home, err := userHome()
 	if err != nil {
 		return "", err
@@ -348,15 +397,23 @@ func stagePinFile(content []byte) (string, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}
-	staged := filepath.Join(dir, "managed-settings.staged.json")
-	if fi, err := os.Lstat(staged); err == nil && fi.Mode()&os.ModeSymlink != 0 {
-		return "", fmt.Errorf("%s is a symlink: refusing to write through it", staged)
-	}
-	if err := os.WriteFile(staged, content, 0o600); err != nil {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
 		return "", err
 	}
-	// Tighten in case the file pre-existed with looser perms (WriteFile doesn't chmod).
-	_ = os.Chmod(staged, 0o600)
+	defer func() { err = errors.Join(err, root.Close()) }()
+	const name = "managed-settings.staged.json"
+	staged = filepath.Join(dir, name)
+	if fi, err := root.Lstat(name); err == nil {
+		if !fi.Mode().IsRegular() {
+			return "", fmt.Errorf("%s is a symlink or non-regular file: refusing to replace it", staged)
+		}
+	} else if !os.IsNotExist(err) {
+		return "", err
+	}
+	if err := pinReplaceFile(root, name, content, 0o600); err != nil {
+		return "", err
+	}
 	return staged, nil
 }
 

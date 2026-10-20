@@ -10,7 +10,7 @@ title: Erste Schritte
 ## Voraussetzungen
 
 - **macOS**: Die Menüleisten-App verwendet natives Cocoa über cgo.
-- **Go 1.25+** für den Build aus Quellcode.
+- **Go 1.26.10+** für den Build aus Quellcode.
 - **Homebrew-Abhängigkeiten**, gemeinsam installieren:
   ```bash
   brew install pkg-config portaudio ffmpeg

@@ -582,7 +582,7 @@ func cdpEvaluate(wsURL, expression string) (string, error) {
 
 	// Send Runtime.evaluate command.
 	reqJSON := fmt.Sprintf(`{"id":1,"method":"Runtime.evaluate","params":{"expression":%q,"returnByValue":true}}`, expression)
-	if _, err := conn.Write([]byte(cdpFrame(reqJSON))); err != nil {
+	if _, err := conn.Write(cdpFrame(reqJSON)); err != nil {
 		return "", fmt.Errorf("send CDP command: %w", err)
 	}
 

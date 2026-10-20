@@ -333,7 +333,7 @@ func (pm *ProfileManager) CreateProfile(name, description string, vars map[strin
 		}
 	}
 
-	if err := os.WriteFile(path, []byte(b.String()), 0600); err != nil {
+	if err := WritePrivateFile(path, []byte(b.String())); err != nil {
 		return fmt.Errorf("write profile %q: %w", name, err)
 	}
 	return nil

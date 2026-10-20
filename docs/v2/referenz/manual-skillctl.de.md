@@ -2019,6 +2019,14 @@ mit Schreibrecht im managed-settings-Verzeichnis kann es dennoch entfernen.
 
 **`pin generate`** gibt das JSON aus. **`pin install`** bereitet die Datei vor
 und gibt die sudo-Anleitung aus; als root schreibt `--confirm` die Datei.
+
+Die Installation ersetzt das Ziel über eine temporäre Datei im geöffneten
+Zielverzeichnis und erhält vorhandene POSIX-Zugriffsrechte. Bestehender Inhalt
+wird unter einem Zeitstempel mit Zufallssuffix gesichert; Backups werden exklusiv
+erzeugt. Symlinks und nicht reguläre Ziele werden abgewiesen. Das übergeordnete
+Verzeichnis muss unter Administratorkontrolle bleiben; gleichzeitige Änderungen
+der Richtlinie werden damit nicht koordiniert.
+
 Beide akzeptieren:
 
 | Flag | Zweck |
@@ -2468,6 +2476,14 @@ skillctl export-verification-kit --bundle <file.skb> --out <dir> [flags]
 
 Erstellt ein portables Offline-Prüfkit, das Dritte ohne Netzwerk und ohne
 Vertrauen in Sie prüfen können.
+
+Der Bundle-Dateiname muss auf `.skb` enden und darf nur ASCII-Buchstaben, Ziffern,
+`@`, `+`, `_`, `-` und Punkte enthalten. Führende Punkte und Windows-Gerätenamen
+werden abgewiesen. Damit bleibt der Name im erzeugten Shell-Befehl sicher und
+auf den unterstützten Plattformen portabel. Kit-Dateien werden exklusiv erzeugt:
+Vorhandene Dateien oder Symlinks werden nicht überschrieben. Nach einem fehlgeschlagenen
+Export ein frisches Ausgabeverzeichnis verwenden. Das optionale ZIP enthält nur
+die erzeugten Kit-Einträge; ein vorhandenes ZIP-Ziel wird abgewiesen.
 
 **Leicht übersehene Voraussetzung:** Grundlage ist der `BundleMeta`-Umschlag
 (`<name>.skbmeta.json`) mit Autoren-, Registry- und Governance-Signaturen. Er

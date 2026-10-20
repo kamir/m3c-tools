@@ -44,6 +44,21 @@ type fileEntry struct {
 // an empty bundle_digest, then re-emit with the digest filled in for humans.
 // Verifiers always recompute and ignore the embedded value.
 func Pack(skillDir, outFile string, opts PackOptions) (digest string, err error) {
+	var archive bytes.Buffer
+	digest, err = PackToWriter(skillDir, &archive, opts)
+	if err != nil {
+		return "", err
+	}
+	// #nosec G306 -- Public skill bundle output; contains distributable skill content.
+	if err := os.WriteFile(outFile, archive.Bytes(), 0644); err != nil {
+		return "", fmt.Errorf("writing %s: %w", outFile, err)
+	}
+	return digest, nil
+}
+
+// PackToWriter builds the same deterministic bundle as Pack and writes it to
+// output after validation. The caller owns the writer and its confinement.
+func PackToWriter(skillDir string, output io.Writer, opts PackOptions) (digest string, err error) {
 	skillDir = filepath.Clean(skillDir)
 
 	// If the skill dir is itself a symlink (e.g. ~/.claude/skills/<name> →
@@ -153,9 +168,12 @@ func Pack(skillDir, outFile string, opts PackOptions) (digest string, err error)
 		return "", fmt.Errorf("building final archive: %w", err)
 	}
 
-	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
-	if err := os.WriteFile(outFile, finalArchive, 0644); err != nil {
-		return "", fmt.Errorf("writing %s: %w", outFile, err)
+	written, err := output.Write(finalArchive)
+	if err != nil {
+		return "", fmt.Errorf("writing bundle: %w", err)
+	}
+	if written != len(finalArchive) {
+		return "", io.ErrShortWrite
 	}
 	return digest, nil
 }

@@ -7,25 +7,31 @@ import (
 )
 
 func TestPreferencesPath_RespectsHOME(t *testing.T) {
-	t.Setenv("HOME", "/tmp/m3c-test-home")
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	got := PreferencesPath()
-	want := "/tmp/m3c-test-home/.m3c-tools/preferences.env"
+	want := filepath.Join(home, ".m3c-tools", "preferences.env")
 	if got != want {
 		t.Errorf("PreferencesPath() = %q, want %q", got, want)
 	}
 }
 
 func TestLegacyPreferencesPath_RespectsHOME(t *testing.T) {
-	t.Setenv("HOME", "/tmp/m3c-test-home")
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	got := LegacyPreferencesPath()
-	want := "/tmp/m3c-test-home/.m3c-tools.env"
+	want := filepath.Join(home, ".m3c-tools.env")
 	if got != want {
 		t.Errorf("LegacyPreferencesPath() = %q, want %q", got, want)
 	}
 }
 
 func TestPreferencesExist_FreshInstall(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	if PreferencesExist() {
 		t.Error("expected false on fresh install (no files), got true")
 	}
@@ -34,6 +40,7 @@ func TestPreferencesExist_FreshInstall(t *testing.T) {
 func TestPreferencesExist_LegacyOnly(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	if err := os.WriteFile(filepath.Join(home, ".m3c-tools.env"), []byte("X=1\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -45,6 +52,7 @@ func TestPreferencesExist_LegacyOnly(t *testing.T) {
 func TestPreferencesExist_CanonicalOnly(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	dir := filepath.Join(home, ".m3c-tools")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)
@@ -60,6 +68,7 @@ func TestPreferencesExist_CanonicalOnly(t *testing.T) {
 func TestMigrateLegacyPreferences_FreshInstall(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	got, err := MigrateLegacyPreferences()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -72,6 +81,7 @@ func TestMigrateLegacyPreferences_FreshInstall(t *testing.T) {
 func TestMigrateLegacyPreferences_MigratesContent(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	legacy := filepath.Join(home, ".m3c-tools.env")
 	const content = "M3C_WHISPER_MODEL=large-v3\nER1_RETRY_INTERVAL=120\n"
 	if err := os.WriteFile(legacy, []byte(content), 0o600); err != nil {
@@ -108,6 +118,7 @@ func TestMigrateLegacyPreferences_MigratesContent(t *testing.T) {
 func TestMigrateLegacyPreferences_DoesNotOverwriteCanonical(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	dir := filepath.Join(home, ".m3c-tools")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatal(err)

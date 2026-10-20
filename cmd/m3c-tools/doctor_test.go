@@ -18,6 +18,7 @@ func TestDoctorProfile_NoProfile(t *testing.T) {
 	// Point HOME at an empty temp dir so no profile is found.
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
 
 	s := doctorProfile()
 	if s.Title != "Profile" {
@@ -35,6 +36,7 @@ func TestDoctorProfile_NoProfile(t *testing.T) {
 func TestDoctorProfile_WithActiveProfile(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
 
 	// Create profile directory structure.
 	profilesDir := filepath.Join(tmp, ".m3c-tools", "profiles")
@@ -131,6 +133,7 @@ func TestDoctorAuth_APIKeyOnly(t *testing.T) {
 func TestDoctorConfigConsistency_WorldReadableProfile(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("ER1_API_URL", "https://test.example.com/upload_2")
 	t.Setenv("ER1_CONTEXT_ID", "user123___mft")
 
@@ -165,6 +168,7 @@ func TestDoctorConfigConsistency_WorldReadableProfile(t *testing.T) {
 func TestDoctorConfigConsistency_AllSet(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("ER1_API_URL", "https://test.example.com/upload_2")
 	t.Setenv("ER1_CONTEXT_ID", "user123___mft")
 	t.Setenv("ER1_VERIFY_SSL", "true")
@@ -187,6 +191,7 @@ func TestDoctorConfigConsistency_AllSet(t *testing.T) {
 func TestDoctorConfigConsistency_NoURL(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
 	t.Setenv("ER1_API_URL", "")
 	os.Unsetenv("ER1_API_URL")
 	t.Setenv("ER1_CONTEXT_ID", "")
@@ -235,6 +240,7 @@ func TestDoctorConnectivity_LocalhostSkipsTLS(t *testing.T) {
 func TestDoctorPlaud_NoToken(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
 	// Ensure PLAUD_TOKEN_FILE points to nonexistent file.
 	t.Setenv("PLAUD_TOKEN_FILE", filepath.Join(tmp, "nonexistent-token.json"))
 

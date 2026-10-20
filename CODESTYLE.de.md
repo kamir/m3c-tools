@@ -12,80 +12,91 @@ Ergänzende Werkzeuge: `/code-quality` führt die Baseline aus und behebt Befund
 
 ---
 
-## Die pragmatic+-Grundlage
+## Die pragmatische Grundlage
 
-"Pragmatic+" bedeutet: **Zuerst berichten, nur bei eindeutigen Regeln blockieren.**
-Ein Befund wird durch Codeänderung oder eine schriftliche, begrenzte Ausnahme geschlossen,
-niemals durch stilles Aufweichen einer Regel.
+Implementierungen bleiben einfach, Sicherheitsentscheidungen werden ausdrücklich
+getroffen. Erst Fehler beheben, dann abstrahieren. Eine Regel wird nach Prüfung
+ihrer tatsächlichen Befunde blockierend. Ausnahmen brauchen einen konkreten Grund
+am jeweiligen Aufruf.
 
-| Bereich | Regel | Werkzeuge |
-|---|---|---|
-| Format | Deterministische Erweiterung von gofmt, Importgruppen Standardbibliothek / extern / `github.com/kamir/m3c-tools` | `gofumpt`, `gci` |
-| Korrektheit | `go vet` + `staticcheck` + `unused` + `errcheck` | `golangci-lint` |
-| Fehler | Mit `%w` umschließen, Sentinel-Namen `ErrXxx`, kein stilles `_ =` außerhalb von Tests | `errorlint`, `errcheck` |
-| Dokumentationskommentare | Exportierte Bezeichner dokumentieren; Kommentare enden mit Punkt | `revive`, `godot` |
-| Sauberkeit | Keine unnötigen Konvertierungen, offenen Response-Bodies oder Aliase auf Schleifenvariablen | `gocritic`, `unconvert`, `bodyclose`, `copyloopvar`, `nilerr`, `misspell` |
-| Sicherheit (SAST) | Kryptografie, Injection, fest eingebaute Credentials | `gosec` |
-| Abhängigkeiten | Erreichbare CVEs, Secret-Scan, `go mod tidy` verändert nichts | `govulncheck`, `gitleaks`, CI-Job |
-| CLI-Oberfläche | Jedes echte Flag dokumentiert, jedes dokumentierte Flag vorhanden, jedes aufgerufene Verb in `--help` genannt | `cmd/docaudit`, siehe unten |
-| Aktuelle Indizes | Jedes `cmd/`-Binary und `pkg/`-Paket aufgeführt, jeder Eintrag vorhanden, beide Anzahlen korrekt | `scripts/check-index.sh`, CI-`docs-gate` und Abschnitt 7 von `check-docs.sh` |
-| Exit-Codes | Jede dokumentierte Zahl registriert oder einem Verantwortlichen zugeordnet; Handbuch und Verbregister stimmen je Verb überein; `pull`-Gate wird als Code gelesen | `cmd/exitaudit`, siehe unten |
+| Bereich | Regel | Durchsetzung |
+|------|------|-------------|
+| Format | Deterministische Go-Standardformatierung | `scripts/check-gofmt.sh` lokal und in CI |
+| Korrektheit | Vet, statische Analyse, ungenutzter Code und geprüfte Fehler | `govet`, `staticcheck`, `unused`, `errcheck` in golangci-lint |
+| Ressourcen | HTTP-Antwortkörper schließen; überflüssige Schleifenkopien und Konvertierungen entfernen | `bodyclose`, `copyloopvar`, `unconvert` in golangci-lint |
+| Fehler | Relevante Ursachen mit `%w` erhalten und mit `errors.Is`/`errors.As` zuordnen; Fehlschläge nicht still zu Erfolg machen | Review, errcheck im dokumentierten Umfang und Regressionstests |
+| Kommentare | Verträge, Invarianten und Gründe erklären; öffentliche APIs sinnvoll dokumentieren | Review; keine behauptete allgemeine Kommentarprüfung |
+| Sicherheitsanalyse | Neue Befunde gegenüber der eingecheckten Baseline erkennen | Eigenständiges gosec und Diff-Gate |
+| Abhängigkeiten | Erreichbare Schwachstellen, Geheimnisse und Modulkonsistenz prüfen | govulncheck, gitleaks und Tidy-Gate in CI |
+| Coverage | Gemessene Untergrenzen der erfassten Vertrauenspakete schützen | `.testcoverage.yml`, einschließlich Gesamtuntergrenze 57 |
+| CLI-Oberfläche | Echte Flags, Dokumentation und Hilfe konsistent halten | docaudit |
+| Verzeichnisse und Exits | Programm-/Paketindizes und dokumentierte Exit-Codes konsistent halten | check-index, verbaudit und exitaudit |
+| Release-Review | Befehlsfehler, fehlender Scanner oder unvollständiger Scan sperren das Review | code-review.sh und Negativ-Vertragstests |
 
-### Ehrlichkeitsregel für Kommentare
+### Die Ehrlichkeitsregel für Kommentare
 
-Ein Kommentar beschreibt, was **existiert**. Grenzen sind erwünscht und sollen auffallen:
-`HONEST SCOPE:`, `NOT-YET-WIRED:`, "erkennbar, nicht unmöglich".
-Wunschdokumentation, die neben nicht entsprechendem Code einen geplanten Entwurf in der
-Gegenwartsform beschreibt, ist ein Fehler und kein Platzhalter.
+Ein Kommentar beschreibt den vorhandenen Zustand. Grenzen und beabsichtigte
+Fallbacks benennen. Geplanten Schutz nicht als implementiert darstellen.
+Eine übersprungene Prüfung ist kein Erfolg, ein unlesbarer Halter kein geprüfter
+Halter. Nachweise müssen ihren Geltungsbereich nennen.
 
----
+## Einfach implementieren, Grenzen explizit machen
+
+- Konkrete Typen und Standardbibliothek bevorzugen. Eine Abhängigkeit nur für einen
+  belegten Bedarf ergänzen; Grund und Wartungskosten im PR erläutern.
+- Kleine Schnittstellen bei den Verbrauchern definieren, wenn Austauschbarkeit
+  gebraucht wird. Nicht für jeden Struct Interface, Factory oder Framework einführen.
+- Funktionen zusammenhängend und Kontrollfluss direkt halten. Frühe Rückgaben machen
+  den Normalpfad sichtbar. Versteckte Nebenwirkungen und vorsorgliche Verallgemeinerung vermeiden.
+- Nicht vertrauenswürdige Pfade, Größen, Ursprünge und Formate an der Grenze prüfen.
+  Autorisierung, Integrität, Widerruf und unvollständige Ergebnisse ausdrücklich behandeln.
+- `context.Context` bei abbrechbarem I/O zuerst übergeben und bis zur Anfrage oder zum
+  Unterprozess durchreichen. Reine Berechnungen benötigen keinen künstlichen Context.
+- Lebensdauer von Goroutinen klären: Abbruch, Ende und wartender Besitzer.
+  Ohne belegten Nutzen durch Nebenläufigkeit synchronen Code bevorzugen.
+- Schreib-, Flush-, Sync-, Close- und Rename-Fehler beim Veröffentlichen dauerhafter
+  oder geheimer Daten prüfen. Ignorierte Fehler beim Schließen einer Lesequelle lokal
+  begründen. Ein defer-Schreibvorgang ersetzt keinen geprüften Veröffentlichungsschritt.
+- Bewährte Kryptoprimitive und `crypto/rand` für Sicherheitswerte verwenden.
+  Geheimnisbytes gehören weder in Fehler noch Prozessargumente oder Logs.
+- Tests nutzen temporäre Benutzerverzeichnisse, Ordner und Stores. Für Nutzerpfade
+  sowohl `HOME` als auch `USERPROFILE` setzen. Echte Dienste und Zugangsdaten erfordern
+  ausdrückliches Opt-in; normale Tests verändern keine Entwicklerkonfiguration.
+- Vertrauensentscheidungen und Persistenz mit gezielten Fehlerpfad-/Regressionstests
+  absichern. Betroffene nebenläufige Pfade mit Race Detector prüfen. Aussagekräftige
+  Assertions nicht durch pauschale Coverage-Ziele oder Tests des Implementierungstexts ersetzen.
+
+Grundlagen sind die [Go-Reviewhinweise](https://go.dev/wiki/CodeReviewComments)
+und die [Go-Sicherheitshinweise](https://go.dev/doc/security/).
 
 ## Was heute maschinell erzwungen wird
 
-In `.golangci.yml` aktiviert und im CI-Job `lint` blockierend:
+Der bestehende Job Lint & Vet führt die konfigurierte golangci-lint-Version nativ
+für macOS und für die Linux-/Windows-Buildauswahl aus. Portable Auswahlen verwenden
+`CGO_ENABLED=0`; dies sind statische Prüfungen, keine Ausführung auf den Zielplattformen.
+Native Tests laufen getrennt. `make lint` verwendet das lokale Werkzeug; CI pinnt die Version.
 
-- `go vet ./...`
-- `staticcheck`, `unused`, `errcheck`, mit gepflegter Ausnahmeliste: Jeder Eintrag
-  benennt den unbeaufsichtigten Aufruf, dessen Fehlerbehandlung er ausnimmt.
+Errcheck nimmt derzeit Testdateien, formatierte Ausgaben und defer-Aufrufe aus.
+Diese Grenzen gelten tatsächlich: Nicht jede `_ =`-Zuweisung oder jedes Cleanup-
+Ergebnis wird erzwungen. Review muss dauerhafte Zustandsoperationen trotzdem prüfen.
+Eine begründete plattformspezifische Ausnahme nennt Regel und Grund direkt an der Zeile.
 
-Als eigenständige CI-Jobs blockierend: `govulncheck`, `gitleaks`, die Prüfung auf ein
-wirkungsloses `go mod tidy`, Tests mit Race Detector und **`docaudit`** im Job
-`docs-gate` von `ci.yml`, `release.yml` und `skillctl-release.yml`.
+Separate CI-Jobs prüfen govulncheck, gitleaks, Tidy, Race-Tests,
+Dokumentationskonsistenz und die erfasste Coverage. `make ci` führt die im Makefile
+gewählten lokalen Prüfungen und Offline-E2E-Liste aus; es ist nicht die vollständige
+CI-Paket-/Race-Suite. Das Release-Review wertet Exit-Status aus und startet Pakettests
+einmal. Ein fehlender oder erfolgloser Vulnerability-Scanner sperrt dieses Review.
 
-## Vorbereitet und bewusst noch nicht blockierend
+## Reviewregeln ohne pauschale Lint-Sperre
 
-Gemessen in diesem Repository mit golangci-lint v2.11.3 am 2026-09-03.
-Die Zahlen machen die Lücke konkret statt zu einer vagen Absicht:
-
-| Regel | Aktueller Einführungsaufwand |
-|---|---|
-| `gofumpt` + `gci` | **186 Dateien** würden sich ändern, vor allem `0700` → `0o700` und Importgruppen |
-| `revive` | 50 Befunde |
-| `gocritic` | 31 Befunde |
-| `nilerr` | 22 Befunde |
-| `errorlint` | 9 Befunde |
-| `misspell` | 7 Befunde |
-| `unconvert` / `godot` | Je 3 |
-| `copyloopvar` | 2 Befunde |
-| `bodyclose` | 1 Befund |
-| `gosec` | Als golangci-lint-Prüfer nicht anwendbar: gosec läuft eigenständig in CI, siehe unten |
-| Coverage-Untergrenze | Noch nicht gemessen; **nie** höher setzen, als die Tests bereits erreichen |
-
-Die Zeile zu `gosec` lautete vom 2026-09-03 bis 2026-09-15 "noch nicht gemessen,
-Werkzeug nicht in CI installiert". Beide Aussagen wurden fast sofort falsch.
-`.github/workflows/gosec.yml` entstand am selben Tag, `gosec-diff-gate.yml` am Folgetag.
-Drei auf master erforderliche Kontexte tragen gosec im Namen: `gosec`,
-`gosec SAST (SARIF -> Code Scanning)` und `gosec no-new-findings (in-CI diff gate)`.
-Gemessen wird ebenfalls: Die eingecheckte Baseline `docs/security/gosec-inci-baseline.txt`
-enthält seit 2026-09-10 insgesamt 454 Signaturen; ein Lauf am 2026-09-15 meldete
-525 Befunde. Eine zusätzliche Aktivierung IN golangci-lint würde ein bereits
-blockierendes Werkzeug doppeln. Deshalb steht dort nicht anwendbar statt eines Aufwands.
-
-Die übrigen Regeln sind noch nicht aktiviert, weil eine Formatänderung in 186 Dateien
-und etwa 128 Lint-Befunde als eigene prüfbare Änderung landen müssen. Als Beifang einer
-anderen PR würden sie deren Inhalt verdecken. Je einen Linter einführen, zuerst die
-kleinsten Änderungen: `bodyclose`, `copyloopvar`, `unconvert`, `godot`, `misspell`.
-Jeder erhält einen eigenen Commit.
+`gofumpt`, `gci`, `revive`, `gocritic`, `nilerr`, `errorlint`, `godot` und
+`misspell` sind hier keine allgemeinen Sperren. gofmt erzwingt Formatierung.
+Einige Befunde betreffen beabsichtigte Fallbacks oder sprachabhängige Prosa.
+Mechanisches Ersetzen von `%v` durch `%w` verändert die sichtbare Fehler-API.
+Vor Übernahme einer Regel deren tatsächliche Befunde prüfen und nie durch breitere
+Ausnahmen verstecken. Gosec bleibt eigenständig, statt doppelt in golangci-lint zu laufen.
+Coverage-Untergrenzen nicht über nachgewiesene Ergebnisse anheben und eine Baseline
+nicht als Beweis fehlender Schwachstellen darstellen.
 
 ---
 
