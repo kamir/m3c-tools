@@ -134,3 +134,12 @@ fachlichen Inhalt vorliegen. Jede Sprachfassung verlinkt die Gegenfassung.
 CLI-Befehle, Flags, Beispiele und maschinenlesbare Vertraege bleiben unveraendert.
 Bei fachlichen Aenderungen beide Fassungen pruefen und die geprueften Paare in
 `docs/languages.json` aktualisieren. Eine Zusammenfassung ersetzt keine Uebersetzung.
+
+## Implementation discipline
+
+Prefer the simplest concrete implementation that meets the contract. Be explicit
+at trust boundaries, error paths, resource ownership and persistent writes. Use
+small consumer-side interfaces only where substitution is needed. Follow the
+DE/EN rules in CODESTYLE.md; review exceptions rather than adding blanket skips.
+Tests must use temporary HOME and USERPROFILE values and local fake services;
+never run configuration tests against a developer home or live credentials.

@@ -7,7 +7,7 @@ the checks CI enforces, and the conventions that keep the two tools releasable a
 
 ## Prerequisites
 
-- **Go 1.25+**.
+- **Go 1.26.10+**.
 - For the macOS menu-bar GUI only: `portaudio` + `ffmpeg` (cgo). The CLIs and `skillctl` need
   neither.
 

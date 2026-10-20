@@ -65,8 +65,8 @@
     {
       "de": "docs/v2/entwickler/architecture.de.md",
       "en": "docs/v2/entwickler/architecture.md",
-      "de_sha256": "1df890fda60167481453db0639963f7c8d548c08b7411ab242ede6f23ff126ab",
-      "en_sha256": "e05ccdc5b5099ed8bf606f74ab0a9bb1d3b2bebc3bcf429f460c8f785d4fe76c"
+      "de_sha256": "b424879b2f0c54a84b7c4230a7e1001348ecc0ebf1d201e327c37eb3b2ee4ac6",
+      "en_sha256": "ca3e3435358224171bf0c6bc8c5f1d7cfc6f0783077416224d3967c757317281"
     },
     {
       "de": "docs/v2/entwickler/getting-started.de.md",
@@ -77,8 +77,8 @@
     {
       "de": "docs/v2/entwickler/secretctl.de.md",
       "en": "docs/v2/entwickler/secretctl.md",
-      "de_sha256": "1613810ee4b3f5b5493a89be26bea3eaff1a7d25e5ab5875fbebbacb9607aec2",
-      "en_sha256": "aa24bb7413fc40ee1d82ccfec4bb1edf4c92ef0b19b4e52c3698729028a65879"
+      "de_sha256": "661855624727fa1a2c19ff84cb7df7258ae150c7d6649e210a1992efb101d67e",
+      "en_sha256": "9dc30a4efe77c55aa44c12a6f2eb0e9e922521f02a39669410606b61297b8f03"
     },
     {
       "de": "docs/v2/entwickler/skillctl-sim.de.md",
@@ -101,14 +101,14 @@
     {
       "de": "docs/v2/nutzer/einstieg.de.md",
       "en": "docs/v2/nutzer/einstieg.en.md",
-      "de_sha256": "a474bd13556027d10590fd7e52b91a01f501e3b1d2cc82d57a55bad887a18410",
-      "en_sha256": "b5af7a7fb3985c2b900a89103ee7d643a59510716c4e3b117abd77dab9a15984"
+      "de_sha256": "1ce83b0caf6ddf968b54e4012a18e2d9c45de7b961aa15185e29ce0943b8a917",
+      "en_sha256": "c65516b659b664e2aa7c904f110075dda3ef147c8b8eaf9fc1ac20e6faa575ae"
     },
     {
       "de": "docs/v2/nutzer/getting-started.de.md",
       "en": "docs/v2/nutzer/getting-started.md",
-      "de_sha256": "61841accfe13ccd6a671f74124a782b440720d3fb513de0f6c93e7f302a44d90",
-      "en_sha256": "05f9558c65dd32f3605aa727c7f240f0cb7c8979b0164bc8aba854df622f8a22"
+      "de_sha256": "a8145dd2e79adcc5fe208b91240158255c4820a3bd8f8807c7fc572d7f1e80e8",
+      "en_sha256": "08e404591b275e18b5bc6e382e1213a45922f5fddf4f217b047c146d0b753b95"
     },
     {
       "de": "docs/v2/nutzer/menubar-app.de.md",
@@ -119,14 +119,14 @@
     {
       "de": "docs/v2/nutzer/prerequisites.de.md",
       "en": "docs/v2/nutzer/prerequisites.md",
-      "de_sha256": "062bb4ea5946305fb50cd3254a4203054b7937cf962f8b46779038501f3fff40",
-      "en_sha256": "94d0076e4c8470de7d832499e4c9028ee676fc1c2bae6f7544dda1d1f1e786dd"
+      "de_sha256": "3948893846fdc700e8eb325f51506309a7586a179bc70d98e051b89c97b0931e",
+      "en_sha256": "9964aa7815f277f07bb4ee3388f14cc1a78044310700e35f717bededafd2ba28"
     },
     {
       "de": "docs/v2/nutzer/quickstart-m3c-tools.de.md",
       "en": "docs/v2/nutzer/quickstart-m3c-tools.md",
-      "de_sha256": "21baf520035679fd1c026b3a6a32e3cd71e8425596173b26a5efbc901948df57",
-      "en_sha256": "d5304677285e51b671d40f93e34363176453dfd88f66abf33b761ab8bea98ac7"
+      "de_sha256": "99ade3d6ca6bbb647ed7fbd4b2b5c1f259a60706d14b397ff1bf556943d08607",
+      "en_sha256": "2540965551248d6b0979cfb0bbd49f98f479f065d9671cd5d5b1dce39b434301"
     },
     {
       "de": "docs/v2/nutzer/quickstart-skillctl-demo.de.md",
@@ -137,8 +137,8 @@
     {
       "de": "docs/v2/nutzer/quickstart-skillctl.de.md",
       "en": "docs/v2/nutzer/quickstart-skillctl.md",
-      "de_sha256": "23294d0f39c20439d7a6439e76955bfcbb1fbe26fde4e974407048fa9c6000bc",
-      "en_sha256": "328b39700e7dd1f08afb0f68a7d694217a0b246e93bd3b214b59117028719b4f"
+      "de_sha256": "78011a64b45ee49182a1184621143b77910ff14faf44cbf373b18c0e5573ad04",
+      "en_sha256": "51f94b4f74abc98b0a66df7def527226c9d777f270880d9bf9e1635f6c30bb5f"
     },
     {
       "de": "docs/v2/nutzer/tutorial-katas-und-test-ride.de.md",
@@ -173,8 +173,8 @@
     {
       "de": "docs/v2/referenz/manual-m3c-tools.de.md",
       "en": "docs/v2/referenz/manual-m3c-tools.md",
-      "de_sha256": "631da2e3c9506d061a9ccccca4909ed056f1716817ec35d8789afd3dca413436",
-      "en_sha256": "8f6e8b57998099447495f6626094562ad03cfc6142b3bd0d22a2b447c6716a66"
+      "de_sha256": "45d4a0f275bf98c15b3922250611484b958675287d50d262b0e284c53a9c354b",
+      "en_sha256": "d29232b8e740bf213e86feb4b6a5aa17758792f3d0a5b251c07d143d9bfaae0a"
     },
     {
       "de": "docs/v2/referenz/manual-skillctl.de.md",
@@ -197,8 +197,8 @@
     {
       "de": "README.de.md",
       "en": "README.md",
-      "de_sha256": "fa09906bfe9151422df5f7011af88356104ae26a0c6f7d1d62ffd06a3bac5b8b",
-      "en_sha256": "a2b9d057d8d080df0fcd4ee30f82377d2e969c95de48996ec94d805546e3642e"
+      "de_sha256": "c5ea5ca3116e836af31a6150be0ccb80386638c2fd45ecf8ac815fae1dd5e5cb",
+      "en_sha256": "d373c0c212ccc9ad800b5156e1eb97cf0574aa166c6e27238e1134fc752a5c8d"
     },
     {
       "de": "SECURITY.de.md",
@@ -221,8 +221,8 @@
     {
       "de": "CONTRIBUTING.de.md",
       "en": "CONTRIBUTING.md",
-      "de_sha256": "17728f94cfbd3ebab31fabbe997c29b4a0531f533aa96861ba95967751fbdaaa",
-      "en_sha256": "f903a36a640029292caabce3bdccdcbe603c5697b34c4b1853b6c8a02ac3dcae"
+      "de_sha256": "e777cf77a471690d42a3ddfd102ad0c0aee068650c05923f36bc9f883b0bb28b",
+      "en_sha256": "af4dca9545fb733a0a84085ede399ffcf2b9eb32d2356fbfcc0fd62e60703f56"
     },
     {
       "de": "CONTENT-TOPOLOGY.de.md",
@@ -233,8 +233,8 @@
     {
       "de": "CODESTYLE.de.md",
       "en": "CODESTYLE.md",
-      "de_sha256": "a50d8fee0444d7bd2b93996d4edbf14e96ac299a34f78ed3281292a778312936",
-      "en_sha256": "f6d3a2393ce3ebc1111d37900272aa2bb26e5e12f7014a3010b4922a84e6a36e"
+      "de_sha256": "86820dc9d3b39af7a8af7abd3911418fc29eccffce5b352a2b3f3c845633bdda",
+      "en_sha256": "c866ee98e58c74115bfe8249d609f7cab393dca5106252488146c7ea57039520"
     },
     {
       "de": "demo/kup-training/README.de.md",

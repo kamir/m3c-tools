@@ -361,7 +361,7 @@ Melde Sicherheitslücken vertraulich über das dort genannte Verfahren.
 
 ## Aus dem Quellcode bauen
 
-Benötigt **Go 1.25+**. Die macOS-Menüleisten-GUI braucht zusätzlich `portaudio` und `ffmpeg` (cgo).
+Benötigt **Go 1.26.10+**. Die macOS-Menüleisten-GUI braucht zusätzlich `portaudio` und `ffmpeg` (cgo).
 
 ```bash
 git clone https://github.com/kamir/m3c-tools.git && cd m3c-tools
@@ -410,7 +410,7 @@ make vet           # go vet ./...
 **Vor einem Pull Request `make qa-all` ausführen.** Gegenüber `make ci` gibt es drei Unterschiede:
 Der Lauf sammelt alle Fehler statt beim ersten abzubrechen. Nicht ausführbare Prüfungen gelten
 als übersprungen, mit Grund und Anzahl im Ergebnis. Außerdem wird die Go-Toolchain auf die in
-`go.mod` benannte Version festgelegt: `toolchain go1.26.6` ist eine Untergrenze statt eines Pins.
+`go.mod` benannte Version festgelegt: die Go-Versionsangabe in `go.mod` ist eine Untergrenze statt eines Pins.
 Ein neueres lokales Go misst etwas anderes als CI; der Digest-Test in `pkg/skillbundle` kann dann
 auch im unveränderten Baum scheitern. `scripts/qa-all.sh --selbsttest` weist nach, dass der Runner
 Fehler melden kann.
@@ -556,7 +556,8 @@ pkg/pocket/          Pocket capture-device sync
 pkg/timetracking/    Project time tracking + Gantt chart + PLM client
 ```
 
-Die Kernlogik in transcript, er1 und impression benötigt nur die Go-Standardbibliothek.
+Erfassung und Dokumentverarbeitung liegen in den Go-Paketen transcript, er1 und impression.
+Zugangsdaten und private Dateien verwenden eine explizite Betriebssystemintegration.
 
 ---
 

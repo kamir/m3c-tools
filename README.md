@@ -357,7 +357,7 @@ Report vulnerabilities privately using its disclosure instructions.
 
 ## Build from source
 
-Requires **Go 1.25+**. The macOS menu-bar GUI additionally needs `portaudio` + `ffmpeg` (cgo).
+Requires **Go 1.26.10+**. The macOS menu-bar GUI additionally needs `portaudio` + `ffmpeg` (cgo).
 
 ```bash
 git clone https://github.com/kamir/m3c-tools.git && cd m3c-tools
@@ -403,7 +403,7 @@ make vet           # go vet ./...
 three ways that matter. It does not stop at the first failure, so one run tells the whole story. A
 check that could **not** run does not count as passed: it is reported as skipped with the reason, and
 the verdict names how many, because a gate that reports green on nothing is worse than no gate. And
-it fixes the Go toolchain to the one `go.mod` names, because `toolchain go1.26.6` is a floor and not
+it fixes the Go toolchain to the one `go.mod` names, because the Go version declared in `go.mod` is a floor and not
 a pin: with a newer local Go you measure something else than CI does, and `pkg/skillbundle`'s digest
 test then fails on an untouched tree. `scripts/qa-all.sh --selbsttest` proves the runner can go red.
 
@@ -575,7 +575,8 @@ pkg/pocket/          Pocket capture-device sync
 pkg/timetracking/    Project time tracking + Gantt chart + PLM client
 ```
 
-Core logic (transcript, er1, impression) depends only on the Go standard library.
+Capture and document processing live in the Go packages transcript, er1 and impression.
+Platform-specific credential and private-file handling uses explicit OS integration.
 
 ---
 

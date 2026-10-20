@@ -57,7 +57,7 @@ m3c-tools version
 m3c-tools help
 ```
 
-> **Lieber aus Quellcode bauen?** Go 1.25+ ist erforderlich. Auf macOS benötigt die
+> **Lieber aus Quellcode bauen?** Go 1.26.10+ ist erforderlich. Auf macOS benötigt die
 > Menüleistenoberfläche außerdem `brew install pkg-config portaudio ffmpeg` und
 > `python3 -m pip install openai-whisper`. Danach `make install` ausführen.
 > Siehe [Build aus Quellcode](../../../README.md#build-from-source).

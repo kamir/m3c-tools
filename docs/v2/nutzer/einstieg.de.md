@@ -76,7 +76,7 @@ alles Weitere baut auf diesem Befund auf.
 
 ## Teil B: Quell-Build auf macOS (Menueleisten-App)
 
-Voraussetzungen: git und Go 1.25 oder neuer (`go.mod` verlangt 1.25.0), dazu
+Voraussetzungen: git und Go 1.26.10 oder neuer (`go.mod` verlangt 1.26.10), dazu
 die Homebrew-Pakete fuer cgo und Audio. Die Einzelheiten je Plattform stehen in
 [Prerequisites](prerequisites.de.md).
 

@@ -102,7 +102,7 @@ irm https://raw.githubusercontent.com/kamir/m3c-tools/master/scripts/skillctl-te
 curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/master/scripts/skillctl-test.sh | bash
 ```
 
-Voraussetzungen: **git** und **Go 1.25+** in `PATH`, sonst nichts. Fehlt eines davon oder
+Voraussetzungen: **git** und **Go 1.26.10+** in `PATH`, sonst nichts. Fehlt eines davon oder
 ist Windows frisch eingerichtet, helfen die [Voraussetzungen](prerequisites.de.md): je eine
 `winget`-Zeile, PATH neu laden für das bereits offene Fenster und eine Variante ohne
 Administratorrechte. Die Skripte verändern keine Trust Roots, schreiben nicht außerhalb

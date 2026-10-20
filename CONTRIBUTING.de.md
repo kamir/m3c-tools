@@ -7,7 +7,7 @@ Einrichtung, CI-Prüfungen und Konventionen, die beide Werkzeuge veröffentlichb
 
 ## Voraussetzungen
 
-- **Go 1.25+**.
+- **Go 1.26.10+**.
 - Nur für die macOS-Menüleisten-GUI: `portaudio` und `ffmpeg` (cgo).
   Die CLIs einschließlich `skillctl` benötigen beides nicht.
 

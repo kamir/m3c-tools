@@ -7,7 +7,7 @@ title: Voraussetzungen
 
 [Deutsch](prerequisites.de.md) · [English](prerequisites.md)
 
-Zwei Werkzeuge auf jeder Plattform: **git** und **Go 1.25 oder neuer**. Alles andere
+Zwei Werkzeuge auf jeder Plattform: **git** und **Go 1.26.10 oder neuer**. Alles andere
 ist optional und unten entsprechend gekennzeichnet. Wenn `git --version` und
 `go version` antworten, weiter zum [Quickstart: skillctl](quickstart-skillctl.de.md).
 
