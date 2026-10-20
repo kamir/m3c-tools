@@ -8,6 +8,7 @@ Transport: stdio (standard for Claude Code)
 Registration: ~/.claude/mcp.json
 """
 import asyncio
+import ipaddress
 import json
 import logging
 import os
@@ -544,16 +545,62 @@ def _open_graph_db() -> sqlite3.Connection | None:
         return None
 
 
+def _api_origin(url: str) -> tuple[str, str, int]:
+    """Validate API transport and return its scheme, host and effective port."""
+    if any(ord(char) <= 32 or ord(char) == 127 for char in url):
+        raise ValueError("API URL must not contain whitespace or control characters")
+    parsed = urllib.parse.urlsplit(url)
+    host = parsed.hostname
+    if not host or parsed.username is not None or parsed.password is not None or parsed.fragment:
+        raise ValueError("API URL requires a host and must not contain credentials or fragments")
+    loopback = host.lower() == "localhost"
+    try:
+        loopback = loopback or ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        pass
+    if parsed.scheme != "https" and not (parsed.scheme == "http" and loopback):
+        raise ValueError("API URL requires HTTPS (HTTP is allowed only for loopback development)")
+    port = parsed.port
+    if port is None:
+        port = 443 if parsed.scheme == "https" else 80
+    return parsed.scheme, host.lower(), port
+
+
+class _SameOriginRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Reject redirects that could disclose credentials or request bodies."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        try:
+            same_origin = _api_origin(req.full_url) == _api_origin(newurl)
+        except ValueError as exc:
+            raise urllib.error.URLError("Unsafe API redirect blocked") from exc
+        if not same_origin:
+            raise urllib.error.URLError("Cross-origin API redirect blocked")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _open_api_request(req: urllib.request.Request, timeout: int):
+    """Apply the same transport and redirect policy to every API request."""
+    _api_origin(req.full_url)
+    return urllib.request.build_opener(_SameOriginRedirectHandler()).open(req, timeout=timeout)
+
+
+def _api_credentials(url: str, user_id: str) -> dict[str, str]:
+    """Bind local credentials to the configured API origin only."""
+    origin = _api_origin(url)
+    if API_KEY and origin == _api_origin(API_URL):
+        return {"X-API-KEY": API_KEY, "X-User-ID": user_id}
+    return {}
+
+
 async def _api_get(path: str) -> dict | str:
     """GET from aims-core API. Returns parsed JSON or error string."""
     if not API_KEY:
         return "No API key configured. Set M3C_API_KEY or authenticate via skillctl."
     try:
         url = f"{API_URL}{path}"
-        req = urllib.request.Request(url)
-        req.add_header("X-API-KEY", API_KEY)
-        req.add_header("X-User-ID", os.environ.get("USER", "unknown"))
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        req = urllib.request.Request(url, headers=_api_credentials(url, os.environ.get("USER", "unknown")))
+        with _open_api_request(req, timeout=10) as resp:
             return json.loads(resp.read())
     except urllib.error.HTTPError as e:
         return f"API error: HTTP {e.code}: {e.read().decode()[:200]}"
@@ -568,11 +615,12 @@ async def _api_post(path: str, body: dict) -> dict | str:
     try:
         url = f"{API_URL}{path}"
         data = json.dumps(body).encode()
-        req = urllib.request.Request(url, data=data, method="POST")
+        req = urllib.request.Request(
+            url, data=data, method="POST",
+            headers=_api_credentials(url, os.environ.get("USER", "unknown")),
+        )
         req.add_header("Content-Type", "application/json")
-        req.add_header("X-API-KEY", API_KEY)
-        req.add_header("X-User-ID", os.environ.get("USER", "unknown"))
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with _open_api_request(req, timeout=15) as resp:
             return json.loads(resp.read())
     except urllib.error.HTTPError as e:
         return f"API error: HTTP {e.code}: {e.read().decode()[:200]}"
@@ -1374,12 +1422,10 @@ async def skill_data_source_query(
     encoded_id = urllib.parse.quote(data_source_id, safe=":/.{}")
     url = f"{base}/api/skills/data-sources/{encoded_id}"
     headers = {"Accept": "application/json"}
-    if API_KEY:
-        headers["X-API-KEY"] = API_KEY
-        headers["X-User-ID"] = os.environ.get("M3C_USER_ID", "")
     try:
+        headers.update(_api_credentials(url, os.environ.get("M3C_USER_ID", "")))
         req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with _open_api_request(req, timeout=timeout) as r:
             doc = json.loads(r.read().decode())
     except urllib.error.HTTPError as e:
         if e.code == 404:
