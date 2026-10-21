@@ -280,3 +280,87 @@ func TestValidate_RejectsTamperedSummary(t *testing.T) {
 		t.Fatal("validate accepted a tampered summary; want error")
 	}
 }
+
+// A consistent summary cannot authorize a weaker policy or a smaller gate set.
+// Recompute the attacker's summary after every mutation to exercise that boundary.
+func TestValidate_RejectsPolicyTampering(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(*Bundle)
+	}{
+		{"missing required", func(b *Bundle) { b.Gates = b.Gates[1:] }},
+		{"missing advisory", func(b *Bundle) { b.Gates = b.Gates[:len(b.Gates)-1] }},
+		{"empty gates", func(b *Bundle) { b.Gates = nil }},
+		{"required downgraded", func(b *Bundle) {
+			b.Gates[0].Required = false
+			b.Gates[0].Status = "fail"
+		}},
+		{"advisory upgraded", func(b *Bundle) { b.Gates[len(b.Gates)-1].Required = true }},
+		{"name", func(b *Bundle) { b.Gates[0].Name = "substitute check" }},
+		{"kind", func(b *Bundle) { b.Gates[0].Kind = "sast" }},
+		{"evidence type", func(b *Bundle) { b.Gates[0].EvidenceType = "external" }},
+		{"verifiability", func(b *Bundle) { b.Gates[0].Verifiability = "reference" }},
+		{"missing policy", func(b *Bundle) { b.Policy = nil }},
+		{"legacy policy", func(b *Bundle) { b.Policy.ID = "trust-binder/policy@legacy" }},
+		{"duplicate gate", func(b *Bundle) { b.Gates = append(b.Gates, b.Gates[0]) }},
+		{"unknown gate", func(b *Bundle) { b.Gates[0].ID = "unregistered-check" }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			o := baseOpts()
+			o.gates = allRequiredPass()
+			b, err := buildBundle(o)
+			if err != nil {
+				t.Fatal(err)
+			}
+			tc.mutate(b)
+			b.Summary = computeSummary(b.Gates)
+			if err := validate(b); err == nil {
+				t.Fatal("accepted altered policy with a matching recomputed summary")
+			}
+		})
+	}
+}
+
+func TestValidate_RejectsAmbiguousArtifactNames(t *testing.T) {
+	for _, tc := range []struct {
+		name, artifactName, digest string
+	}{
+		{"same digest", "skillctl-linux-amd64", strings.Repeat("a", 64)},
+		{"conflicting digest", "skillctl-linux-amd64", strings.Repeat("b", 64)},
+		{"whitespace alias", " skillctl-linux-amd64 ", strings.Repeat("a", 64)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			o := baseOpts()
+			o.gates = allRequiredPass()
+			o.artifacts = append(o.artifacts, Artifact{Name: tc.artifactName, Digest: Digest{SHA256: tc.digest}})
+			b, err := buildBundle(o)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := validate(b); err == nil || !strings.Contains(err.Error(), "duplicate artifact") {
+				t.Fatalf("error = %v, want duplicate artifact refusal", err)
+			}
+		})
+	}
+}
+
+func TestValidate_AcceptsCallerEvidenceWithFixedPolicy(t *testing.T) {
+	o := baseOpts()
+	o.gates = allRequiredPass()
+	o.gates[0].Evidence = "https://example.invalid/runs/one"
+	o.gates[0].Note = "synthetic evidence reference"
+	b, err := buildBundle(o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := validate(b); err != nil {
+		t.Fatalf("valid caller evidence was refused: %v", err)
+	}
+}
+
+func TestValidate_NilBundle(t *testing.T) {
+	if err := validate(nil); err == nil {
+		t.Fatal("nil bundle was accepted")
+	}
+}

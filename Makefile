@@ -474,6 +474,7 @@ code-review: check-review-contracts
 .PHONY: check-review-contracts
 check-review-contracts:
 	@bash scripts/code-review.test.sh
+	@python3 scripts/collect-release-checks.test.py
 
 # Check documentation consistency with implementation
 .PHONY: check-docs

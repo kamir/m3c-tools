@@ -456,7 +456,7 @@ PR-Branches heißen `<prefix>/<name>` mit genau einem Schrägstrich und einem Na
 `[A-Za-z0-9._-]`. Erlaubte Präfixe:
 
 `feat` · `feature` · `fix` · `chore` · `docs` · `test` · `refactor` ·
-`spec-<n>` · `s<n>-m<n>` · `r-<n>` · `archive` · `rescue`
+`spec-<n>` · `s<n>-m<n>` · `r-<n>` · `archive` · `rescue` · `codex`
 
 ```bash
 feat/spec-0188-bundle-pack        # passes
@@ -531,8 +531,12 @@ unterscheidbar bleiben.
 ### Releases
 
 Releases werden durch Tags ausgelöst: `vX.Y.Z` und `skillctl/vX.Y.Z` bauen, signieren und
-veröffentlichen über den [Produktworkflow](.github/workflows/release.yml) beziehungsweise
+erzeugen einen Release-Entwurf über den [Produktworkflow](.github/workflows/release.yml) beziehungsweise
 [skillctl-Workflow](.github/workflows/skillctl-release.yml).
+Die Veröffentlichung benötigt eine gesonderte berechtigte Entscheidung. Ein Tag oder grüne CI allein belegt keine Kundenabnahme.
+
+Der skillctl-Evidence-Collector bindet CI-Ergebnisse an den exakten Master-Push-Commit, Workflow, neuesten Run und Ausführungsversuch, Job sowie die GitHub-App. Fehlende oder fehlgeschlagene Sammlung blockiert das Signieren der Evidence und erhält negative Diagnosen. Der Assembler verlangt die vollständige feste Policy und lehnt veränderte Gate-Metadaten sowie doppelte Artefaktnamen ab. Diese Prüfungen belegen ihren technischen Umfang; unabhängiges Review und Kundenabnahme bleiben gesonderte Anforderungen. Der gosec-Release-Gate verlangt die authentifizierte No-new-findings-Entscheidung des Master-Pushs und einen erfolgreichen SARIF-Upload. Das GHAS-Ergebnis bleibt ein Pflichtcheck für den PR-Merge; die SARIF-Annahme beweist keine Schwachstellenfreiheit, und die bestehende Befund-Baseline muss weiter geprüft werden.
+
 Die Downloadprüfung beschreibt [SECURITY.de.md](SECURITY.de.md).
 
 ---

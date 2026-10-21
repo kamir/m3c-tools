@@ -105,6 +105,9 @@ jobs:
       - name: Release-review failure contracts
         run: bash scripts/code-review.test.sh
 
+      - name: Release-check execution provenance contracts
+        run: python3 scripts/collect-release-checks.test.py
+
   format-gate:
     name: Format (gofmt)
     # AUDIT-0001 Befund 1.11: gemessen am 2026-09-07 waren 108 von 786 Dateien

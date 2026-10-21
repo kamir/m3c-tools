@@ -496,6 +496,12 @@ func computeSummary(gates []Gate) Summary {
 // constraints (stdlib-only structural validation) and confirms the stored
 // summary matches an independent recompute.
 func validate(b *Bundle) error {
+	if b == nil {
+		return errors.New("bundle is nil")
+	}
+	if b.Policy == nil || b.Policy.ID != policyID {
+		return fmt.Errorf("policy.id must be %q", policyID)
+	}
 	if !reSemver.MatchString(b.SchemaVersion) {
 		return fmt.Errorf("schema_version %q is not semver", b.SchemaVersion)
 	}
@@ -514,10 +520,16 @@ func validate(b *Bundle) error {
 	if len(b.Subject.ArtifactDigests) < 1 {
 		return errors.New("subject.artifact_digests must have at least one entry")
 	}
+	artifactNames := make(map[string]bool, len(b.Subject.ArtifactDigests))
 	for _, a := range b.Subject.ArtifactDigests {
-		if strings.TrimSpace(a.Name) == "" {
+		name := strings.TrimSpace(a.Name)
+		if name == "" {
 			return errors.New("artifact_digests: empty name")
 		}
+		if artifactNames[name] {
+			return fmt.Errorf("duplicate artifact name %q", name)
+		}
+		artifactNames[name] = true
 		if !reSHA256.MatchString(a.Digest.SHA256) {
 			return fmt.Errorf("artifact %q: digest.sha256 %q must be 64-hex", a.Name, a.Digest.SHA256)
 		}
@@ -531,18 +543,28 @@ func validate(b *Bundle) error {
 	known := registryByID()
 	seen := map[string]bool{}
 	for _, g := range b.Gates {
-		if _, ok := known[g.ID]; !ok {
+		m, ok := known[g.ID]
+		if !ok {
 			return fmt.Errorf("gate id %q not in enum", g.ID)
 		}
 		if seen[g.ID] {
 			return fmt.Errorf("duplicate gate id %q", g.ID)
 		}
 		seen[g.ID] = true
+		if g.Name != m.name || g.Kind != m.kind || g.Required != m.required ||
+			g.EvidenceType != m.evidenceType || g.Verifiability != m.verifiability {
+			return fmt.Errorf("gate %q metadata does not match policy %q", g.ID, policyID)
+		}
 		if !validStat[g.Status] {
 			return fmt.Errorf("gate %q: status %q must be pass|fail|skip", g.ID, g.Status)
 		}
 		if !validKind[g.Kind] {
 			return fmt.Errorf("gate %q: kind %q invalid", g.ID, g.Kind)
+		}
+	}
+	for _, m := range registry {
+		if !seen[m.id] {
+			return fmt.Errorf("missing policy gate %q", m.id)
 		}
 	}
 	for _, r := range b.References {
