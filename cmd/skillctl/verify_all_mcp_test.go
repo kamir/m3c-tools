@@ -17,6 +17,9 @@ func TestSweepContractMCPSubprocess(t *testing.T) {
 	if python == "" {
 		t.Skip("run through the MCP pytest suite for its interpreter")
 	}
+	// Build before changing HOME: Go's read-only module cache must not be
+	// created inside the fixture home that testing.TempDir later removes.
+	binary := skillctlBin(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
@@ -107,7 +110,7 @@ asyncio.run(probe())`
 	cmd := exec.Command(python, "-c", probe, moduleDir, srv.URL+"/api/skills", f.digestStr)
 	cmd.Env = append(os.Environ(), "HOME="+home, "USERPROFILE="+home, "M3C_TOKEN_STORE=file", "M3C_TEST_KEYCHAIN=0", "M3C_ER1_KEYCHAIN=off",
 		"M3C_REGISTRY_TOKEN=", "M3C_REGISTRY_RO_TOKEN=", "M3C_REGISTRY_TOKEN_ORIGIN=", "ER1_API_URL="+srv.URL, "ER1_API_KEY=synthetic-local-only",
-		"SKILLCTL_BIN="+skillctlBin(t))
+		"SKILLCTL_BIN="+binary)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("real sweep CLI/MCP contract failed: %v\n%s", err, output)
