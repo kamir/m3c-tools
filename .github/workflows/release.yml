@@ -67,7 +67,7 @@ jobs:
 
   # -----------------------------------------------------------------------
   # SBOM. H5: a CycloneDX SBOM of the product build inputs, BLOCKING. Every
-  # release is enterprise-grade, so "no SBOM → no release": no continue-on-error,
+  # draft requires an SBOM: no continue-on-error,
   # and the `release` job depends on this job (see needs: below), so a failed SBOM
   # step blocks the whole product release. Every product binary builds from the
   # same go.mod, so one source-level SBOM (path: .) represents the supply chain of
@@ -458,7 +458,7 @@ jobs:
   #    NO signing identity (contents: write only, to create the release + upload
   #    assets). A broken provenance or cosign flow yields no release at all.
   release:
-    name: Create Release (post-gate)
+    name: Create Draft Release (post-gate)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: [checksums, cosign, provenance, verify, sbom]
@@ -511,9 +511,10 @@ jobs:
       # from `skillctl-demo-*`) so it cannot be mistaken for the signed CLI, and its
       # integrity is now covered by checksums.txt (cosign-signed) + the SLSA
       # provenance below.
-      - name: Create GitHub Release
+      - name: Create GitHub Draft Release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
         with:
+          draft: true
           generate_release_notes: true
           files: |
             artifacts/m3c-tools-darwin-arm64.tar.gz

@@ -550,8 +550,12 @@ context that will never report" and "not armed at all" stop looking alike.
 ### Releasing
 
 Releases are **tag-driven**: pushing a `vX.Y.Z` or `skillctl/vX.Y.Z` tag builds, signs and
-publishes via the [product release workflow](.github/workflows/release.yml) and
+creates a draft release via the [product release workflow](.github/workflows/release.yml) and
 [skillctl release workflow](.github/workflows/skillctl-release.yml).
+Publication requires a separate authorized decision. A tag or green CI alone does not establish customer acceptance.
+
+The skillctl evidence collector binds CI results to the exact master-push commit, workflow, latest run and attempt, job and GitHub App. Missing or failed collection blocks evidence signing and retains negative diagnostics. The assembler requires the complete fixed policy and rejects altered gate metadata or duplicate artifact names. These checks establish the stated technical scope; independent review and customer acceptance remain separate requirements. The gosec release gate requires the authenticated master-push no-new-findings decision and a successful SARIF upload. The GHAS result remains a required PR merge check; SARIF ingestion does not prove absence of vulnerabilities, and the existing finding baseline still requires review.
+
 For download verification, see [SECURITY.md](SECURITY.md).
 
 ---

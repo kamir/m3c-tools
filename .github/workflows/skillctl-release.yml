@@ -245,8 +245,8 @@ jobs:
       # SPEC-0253 follow-up: emit a CycloneDX SBOM of the Go build inputs. All 5
       # arches build from the same go.mod with no CGO and an identical import set
       # (only GOOS/GOARCH differ), so one source-level SBOM represents the supply
-      # chain of every published binary. H5: BLOCKING: no continue-on-error. Every
-      # release is enterprise-grade, so "no SBOM → no release": a failed SBOM step
+      # chain of every draft binary. H5: BLOCKING: no continue-on-error. A
+      # draft requires an SBOM: a failed SBOM step
       # fails the build job and the whole release. anchore/sbom-action uploads it as
       # the workflow artifact `skillctl.sbom.cdx.json` for the release job to consume.
       - name: Generate SBOM (CycloneDX)
@@ -512,16 +512,12 @@ jobs:
   #    Runs LAST (after the draft AND the post-draft smoke gate) so platform-smoke
   #    can be recorded honestly. Holds NO signing identity (contents:read only):
   #    ASSEMBLY IS ISOLATED FROM SIGNING, only the downstream evidence-sign job
-  #    signs. checks:read lets it read the release commit's CI check-run
-  #    conclusions: the CI-plane gates (unit-tests/race/e2e/lint/gosec/
-  #    govulncheck/gitleaks) ran in ci.yml + gosec.yml on this commit BEFORE the
-  #    tag, so they are GATHERED (an unmatched/unreachable check → skip, i.e.
-  #    "not confirmed", never a silent pass), not asserted. The release-plane
-  #    gates come from this run's needs.<job>.result.
-  #
-  #    enterprise_ready is RECOMPUTED inside the tool from the gate results under
-  #    the fixed policy G (12 required + threat-model-delta advisory); a strict
-  #    consumer recomputes it again. This job never trusts a stored bool.
+  #    signs. CI-plane gates require authenticated master-push runs for the
+  #    exact source commit. Collection failures retain negative diagnostics and
+  #    fail this job; upload success alone is not a gosec security decision.
+  #    Release-plane gates come from this run's needs.<job>.result.
+  #    The assembler verifies the complete fixed policy and its metadata before
+  #    recomputing readiness. Customer acceptance remains a separate obligation.
   evidence:
     name: Assemble release-evidence bundle (Trust Binder)
     needs: [docs-gate, acceptance-gate, build, provenance, cosign, verify, release, smoke]
@@ -533,7 +529,8 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
-      checks: read   # read the release commit's CI check-run conclusions
+      checks: read   # authenticate the expected check producers
+      actions: read  # inspect source workflows, runs, attempts and jobs
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -561,37 +558,15 @@ jobs:
         run: |
           set -euo pipefail
 
-          # --- CI-plane gates: read THIS commit's check-run conclusions -------
-          # ci.yml + gosec.yml run on the branch/PR before the tag; their checks
-          # attach to this commit SHA. An absent/in-progress/unmatched check
-          # resolves to "skip" (not confirmed), never a silent pass.
-          declare -A CONCL
-          RAW="$(gh api --paginate \
-                   -H 'Accept: application/vnd.github+json' \
-                   "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs" \
-                   --jq '.check_runs[] | [.name, (.conclusion // "")] | @tsv' 2>/dev/null || true)"
-          while IFS=$'\t' read -r cname cconcl; do
-            [ -n "$cname" ] && CONCL["$cname"]="$cconcl"
-          done <<< "$RAW"
-          resolve() {
-            local v="${CONCL[$1]:-}"
-            if [ -z "$v" ]; then v=skip; fi
-            printf '%s' "$v"
-          }
+          # Read only the latest successful master-push executions for this
+          # commit, with workflow, attempt, job and producer identity checks.
+          python3 scripts/collect-release-checks.py \
+            --repo "${GITHUB_REPOSITORY}" --commit "${GITHUB_SHA}" \
+            --output dist/ci-gates.json --audit-output dist/ci-gates-audit.json
 
-          # --- checksums reference tamper-evidence: sha256 of SHA256SUMS -------
           CHECKSUMS_SHA="$(sha256sum dist/SHA256SUMS | awk '{print $1}')"
 
-          # --- gate-set G (CI-plane gathered by check-name; release-plane from
-          #     needs.<job>.result; threat-model-delta advisory) ---------------
           GATES=(
-            -gate "unit-tests=$(resolve 'Unit Tests')"
-            -gate "e2e=$(resolve 'Unit Tests'),note=runs as a step inside the Unit Tests job"
-            -gate "race=$(resolve 'skillctl Security Tests (-race)')"
-            -gate "lint=$(resolve 'Lint & Vet')"
-            -gate "gosec-sast=$(resolve 'gosec SAST (SARIF -> Code Scanning)')"
-            -gate "govulncheck-cve=$(resolve 'govulncheck (reachable CVEs)')"
-            -gate "gitleaks-secret=$(resolve 'gitleaks (secret scan)')"
             -gate "docaudit=${DOCAUDIT_RESULT}"
             -gate "two-party-acceptance=${ACCEPTANCE_RESULT},note=SPEC-0406 T01..T15 on macOS AND Windows, blocking before the build (REQ-9.1/9.2). Covers the machine half only: whether two people on two machines compared a fingerprint out-of-band is Phase 0 and stays human"
             -gate "sbom=${SBOM_RESULT},note=CycloneDX SBOM is a blocking step of the build job"
@@ -607,6 +582,7 @@ jobs:
             -repo "${GITHUB_REPOSITORY}" \
             -run-url "${RUN_URL}" \
             -channel skillctl \
+            -gates-file dist/ci-gates.json \
             -artifacts dist/SHA256SUMS \
             -checksums-sha256 "${CHECKSUMS_SHA}" \
             -provenance-name "${PROV_NAME}" \
@@ -619,6 +595,17 @@ jobs:
           echo "::group::release-evidence.json"
           cat dist/release-evidence.json
           echo "::endgroup::"
+
+      - name: Retain CI collection provenance and negative decisions
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-ci-check-provenance
+          retention-days: 30
+          if-no-files-found: warn
+          path: |
+            dist/ci-gates.json
+            dist/ci-gates-audit.json
 
       - name: Upload release-evidence (unsigned bundle + statement)
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
