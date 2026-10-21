@@ -1,0 +1,15 @@
+# Exact locations of malformed PEM and redaction-only synthetic fixtures.
+# Real historical demo signing keys are intentionally not suppressed.
+2f7a16c700ee8a78605055b1674736afc16d1a31:pkg/skillctl/trustfreeze/redact/redactor_test.go:private-key:19
+2f7a16c700ee8a78605055b1674736afc16d1a31:pkg/skillctl/trustfreeze/redact/redactor_test.go:private-key:38
+d4ac81085664ff1b17d7ae2356f58d9ff6a20170:pkg/skillctl/signing/keygen_test.go:private-key:114
+pkg/skillctl/signing/keygen_test.go:private-key:159
+pkg/skillctl/trustfreeze/redact/redactor_test.go:private-key:19
+pkg/skillctl/trustfreeze/redact/redactor_test.go:private-key:38
+
+# Owner confirmed these four historical findings as demo-only on 2026-10-20.
+# Exact commit/file/rule/line fingerprints; no exception for new occurrences.
+ab11e26f1879acdd167b107896c10e01c2f02658:demo/kup-training/artifacts/keys/reviewer.priv:private-key:1
+ab11e26f1879acdd167b107896c10e01c2f02658:demo/kup-training/artifacts/keys/attacker.priv:private-key:1
+ab11e26f1879acdd167b107896c10e01c2f02658:demo/kup-training/artifacts/keys/mirko.priv:private-key:1
+284a077f91573c5d1fa502164e1683a4dfef20c4:.claude/skills/deploy-er1/skill.md:curl-auth-header:53

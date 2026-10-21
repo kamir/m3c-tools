@@ -93,7 +93,10 @@ func (s *Server) Start() error {
 	if err != nil {
 		return err
 	}
-	httpSrv := &http.Server{Handler: s.GuardedHandler()}
+	httpSrv := &http.Server{
+		Handler:           s.GuardedHandler(),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
 	return httpSrv.Serve(ln)
 }
 
@@ -470,13 +473,13 @@ func openBrowserURL(url string) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
-		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
+		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL.
 		cmd = exec.Command("open", url)
 	case "linux":
-		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
+		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL.
 		cmd = exec.Command("xdg-open", url)
 	case "windows":
-		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
+		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL.
 		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
 	default:
 		return

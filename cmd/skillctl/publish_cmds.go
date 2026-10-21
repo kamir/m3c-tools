@@ -1082,7 +1082,7 @@ func ensureBundle(a publishAdmitArgs, stderr io.Writer) (string, string, error) 
 			return "", "", fmt.Errorf("staging dir: %w", err)
 		}
 		defer os.RemoveAll(staged)
-		// #nosec G306 G703 -- Klassenentscheidung: nicht geheimes lokales Artefakt (0600/0700 bleibt Geheimnissen vorbehalten, Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306"); der Name ist oben gegen safeBundleName geprueft, ein Pfadsegment.
+		// #nosec G306 G703 -- Klassenentscheidung: nicht geheimes lokales Artefakt (0600/0700 bleibt Geheimnissen vorbehalten); der Name ist oben gegen safeBundleName geprueft, ein Pfadsegment.
 		if err := os.WriteFile(filepath.Join(staged, a.name+".md"), body, 0644); err != nil {
 			return "", "", fmt.Errorf("staging %s: %w", a.name, err)
 		}

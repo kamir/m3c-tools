@@ -1,5 +1,7 @@
 # Guide: developer setup, build, test and the gates
 
+Sprachen / Languages: [Deutsch](getting-started.de.md) | [English](getting-started.md)
+
 How to get from a fresh clone to a passing local CI run, and which gates will
 judge your change before a human does. Commands below were read from the
 `Makefile` and `scripts/check-docs.sh` on 2026-09-16; run them from the
@@ -66,7 +68,7 @@ the main CLI even though the flagged tools are capture-runtime concerns; only
 `build-skillctl` is free of it. `make build-all` additionally builds
 `poc-recorder`, which imports PortAudio via cgo, so it needs
 `brew install portaudio` on top. Platform details:
-[Prerequisites](../../old/prerequisites.md).
+[Prerequisites](../nutzer/prerequisites.md).
 
 ## Part B: test
 
@@ -92,7 +94,7 @@ A single offline test:
 `e2e/` tests are network tests, and not every one guards itself with
 `SkipIfNoYTCalls` (`TestTranscriptFetch` in `e2e/transcript_test.go` calls
 YouTube unguarded). And note the trap recorded in
-`.claude/rules/claims.md`: a `-run` pattern matching nothing exits 0;
+[CODESTYLE.md](../../../CODESTYLE.md): a `-run` pattern matching nothing exits 0;
 `scripts/require-tests-ran.sh` exists for exactly that.
 
 ## Part C: the gates, and which files they bind
@@ -105,7 +107,7 @@ check-docpages test-unit build`.
 calls `golangci-lint run` directly (Makefile), so on a machine without it,
 `make ci` stops at step two. The stage 2 script
 (`scripts/skillctl-enterprise-test.sh`, described in
-[Prerequisites](../../old/prerequisites.md)) installs it at the version CI pins;
+[Prerequisites](../nutzer/prerequisites.md)) installs it at the version CI pins;
 installing by hand works too, the enforced config is `.golangci.yml`.
 
 The documentation gates live in `./scripts/check-docs.sh` and block a release:
@@ -119,11 +121,8 @@ The documentation gates live in `./scripts/check-docs.sh` and block a release:
 | index freshness | `scripts/check-index.sh` | [program-index](../../program-index.md), [component-index](../../component-index.md), both directions plus the counts |
 | docpage drift | `scripts/check-docpages.sh` | every page registered in its `REGISTER` block, byte-compared against its markdown source |
 
-Two prose rules are binding for every byte you write into this tree, including
-commit messages: [prose-style.md](../../../.claude/rules/prose-style.md)
-(never U+2014, machine-enforced) and
-[claims.md](../../../.claude/rules/claims.md) (the word "measured" is reserved
-for what was measured).
+Prose rules are documented in [CODESTYLE.md](../../../CODESTYLE.md): no
+em dashes, and comments describe implemented behavior.
 
 Formatting and commit conventions beyond `gofmt` (gofumpt, `gci` import
 groups, the `-race` test policy) are in
@@ -132,13 +131,15 @@ config, and [CODESTYLE.md](../../../CODESTYLE.md) carries the reasoning.
 
 ## Part D: filing bugs and features
 
-A bug or feature request lives on two planes, kept in step by
-`scripts/bugtracker.sh`; the workflow, the refusals and the redaction rules
-are in [bug-tracking](bug-tracking.md).
+File reproducible bugs and feature requests in
+[GitHub Issues](https://github.com/kamir/m3c-tools/issues). Include the version,
+platform, expected behavior and a minimal reproduction. Use the private
+[security reporting process](../../../SECURITY.md) for vulnerabilities.
 
 ## Part E: releasing
 
-Releases are tag-driven; there is no VERSION file, and the product line
-(`vX.Y.Z`) and the skillctl line (`skillctl/vX.Y.Z`) are cut independently.
-The operational runbook is [releasing](../betrieb/releasing.md); the human
-sign-off and acceptance gates are described there too.
+Releases are tag-driven; the product line (`vX.Y.Z`) and the skillctl line
+(`skillctl/vX.Y.Z`) are cut independently. Their build, signing and publication
+steps are defined in the [product release workflow](../../../.github/workflows/release.yml)
+and [skillctl release workflow](../../../.github/workflows/skillctl-release.yml).
+Download verification is documented in [SECURITY.md](../../../SECURITY.md).

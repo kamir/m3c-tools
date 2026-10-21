@@ -33,12 +33,9 @@ func SecureFileDACL(path string) error {
 		return fmt.Errorf("secfile: empty path")
 	}
 
-	// Owner = the current process user (a real, closeable token).
-	tok, err := windows.OpenCurrentProcessToken()
-	if err != nil {
-		return fmt.Errorf("secfile: open process token: %w", err)
-	}
-	defer tok.Close()
+	// Query the current process user with the OS-owned pseudo token. It does
+	// not need closing, unlike a token returned by OpenProcessToken.
+	tok := windows.GetCurrentProcessToken()
 	tu, err := tok.GetTokenUser()
 	if err != nil {
 		return fmt.Errorf("secfile: query token user: %w", err)

@@ -2,6 +2,8 @@
 
 # m3c-tools
 
+Sprachen / Languages: [Deutsch](README.de.md) | [English](README.md)
+
 ### Give your agents a memory, and proof of what they're allowed to do.
 
 **Multi-Modal-Memory Tools** is a personal, sovereign toolkit for turning everything you
@@ -17,8 +19,8 @@ shared service secrets underneath. One repository, zero mandatory cloud middlema
 [![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://slsa.dev)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-[Quickstart: m3c-tools](docs/old/quickstart-m3c-tools.md) ·
-[Quickstart: skillctl](docs/old/quickstart-skillctl.md) ·
+[Quickstart: m3c-tools](docs/v2/nutzer/quickstart-m3c-tools.md) ·
+[Quickstart: skillctl](docs/v2/nutzer/quickstart-skillctl.md) ·
 [Full manuals](#-documentation) ·
 [Website](https://kamir.github.io/m3c-tools)
 
@@ -73,7 +75,7 @@ m3c-tools transcript dQw4w9WgXcQ        # fetch a YouTube transcript, right now
 m3c-tools doctor                        # verify connectivity & config
 ```
 
-→ **Full walkthrough:** [Quickstart: m3c-tools](docs/old/quickstart-m3c-tools.md)
+→ **Full walkthrough:** [Quickstart: m3c-tools](docs/v2/nutzer/quickstart-m3c-tools.md)
 
 ### `skillctl`: sign and verify your first skill
 
@@ -88,7 +90,7 @@ skillctl sign --key ~/.config/m3c/skill-keys/mykey.priv my-skill.skb
 skillctl verify-sig --pubkey ~/.config/m3c/skill-keys/mykey.pub my-skill.skb   # offline, no server
 ```
 
-→ **Full walkthrough:** [Quickstart: skillctl](docs/old/quickstart-skillctl.md)
+→ **Full walkthrough:** [Quickstart: skillctl](docs/v2/nutzer/quickstart-skillctl.md)
 
 ---
 
@@ -119,7 +121,7 @@ their **true recording time**, not the moment you synced them (`plaud fix-times`
 earlier imports), so captures from multiple devices land on the timeline where they
 actually happened. On **macOS**, `plaud dev` uses the official auto-refreshing OAuth token
 (no daily re-login) and, by default, leaves un-transcribed audio to **server-side**
-transcription: see [Setup & Operations](docs/v2/betrieb/setup-target-devices.md).
+transcription: see the [Plaud command reference](docs/v2/referenz/manual-m3c-tools.md#plaud-plaud-recorder-integration).
 
 **Command surface:** `transcript`, `upload`, `whisper`, `thumbnail`, `record`, `screenshot`,
 `import-audio` (capture); `plaud` (`list` · `check` · `sync` · `fix-times` · `auth`; macOS `dev list/sync/status`) and
@@ -177,7 +179,7 @@ Four properties are worth knowing before you use it:
   Windows, WSL and macOS probe families do **not**, and there a capture with a Linux profile
   is honestly `incomplete` and says which probes did not run. What has actually been executed
   on a real host is recorded in
-  [`tests/evidence/trust-freeze/`](tests/evidence/trust-freeze/), never in prose beside it.
+  [`tests/evidence/trust-freeze/`](tests/evidence/trust-freeze), never in prose beside it.
 
 **Command surface**: *authoring:* `keygen`, `pack`, `sign`, `verify-sig`; *trust & install:*
 `trust`, `install`, `verify`, `verify-hook`; *governance:* `attest`, `revoke`, `agentid`,
@@ -221,17 +223,13 @@ See the [secretctl reference](docs/v2/entwickler/secretctl.md).
 
 | Page | For |
 |------|-----|
-| [**Wegweiser: die Doku nach Rollen**](docs/v2/index.md) | The role-based entry point; canonical docs live under `docs/v2/` |
-| [**Quickstart: m3c-tools**](docs/old/quickstart-m3c-tools.md) | Capture your first memory in 5 minutes |
-| [**Quickstart: skillctl**](docs/old/quickstart-skillctl.md) | Sign, install and verify a skill in 5 minutes |
-| [**Quickstart: skillctl-demo**](docs/old/quickstart-skillctl-demo.md) | Run the skill-trust scenarios offline on your own machine, 3 run live with real exit codes (S1/S2A/S5); the remaining panels render their story but run nothing (S3 is a built-but-not-run PARTIAL, S2BC/S4 are ROADMAP), plus hands-on Kata training (shipped): five Katas, each beat a real skillctl exit code (K5 demonstrates the offline revocation deny live) |
+| [**Wegweiser: die Doku nach Rollen**](docs/v2/index.en.md) | The role-based entry point; canonical docs live under `docs/v2/` |
+| [**Quickstart: m3c-tools**](docs/v2/nutzer/quickstart-m3c-tools.md) | Capture your first memory in 5 minutes |
+| [**Quickstart: skillctl**](docs/v2/nutzer/quickstart-skillctl.md) | Sign, install and verify a skill in 5 minutes |
+| [**Quickstart: skillctl-demo**](docs/v2/nutzer/quickstart-skillctl-demo.md) | Run the skill-trust scenarios offline on your own machine, 3 run live with real exit codes (S1/S2A/S5); the remaining panels render their story but run nothing (S3 is a built-but-not-run PARTIAL, S2BC/S4 are ROADMAP), plus hands-on Kata training (shipped): five Katas, each beat a real skillctl exit code (K5 demonstrates the offline revocation deny live) |
 | [**Manual: m3c-tools**](docs/v2/referenz/manual-m3c-tools.md) | Every command, flag and config variable |
 | [**Manual: skillctl**](docs/v2/referenz/manual-skillctl.md) | The full trust lifecycle, command by command |
-| [Menu Bar App](docs/old/menubar-app.md) | Channels, Observation Window, menu items (macOS) |
-| [Setup & Operations: Intel Mac & Windows](docs/v2/betrieb/setup-target-devices.md) | Zero-to-operating runbook for fresh Intel Mac / Windows target devices |
-| [**QA acceptance: skillctl on Windows**](docs/v2/betrieb/QA-abnahme-skillctl-windows.de.md) | The sheet to print, tick and sign: install, offline lifecycle, `trust-freeze`, the report in three formats, and the counter-checks that pass by refusing (DE) |
-| [**QA acceptance: skillctl on Linux**](docs/v2/betrieb/QA-abnahme-skillctl-linux.de.md) | The same for a host where the Linux probes exist, with two stages more: the installer refusing without cosign, and the diff between an unprivileged and an elevated capture (DE) |
-| [Acceptance & handover: the skill lifecycle](docs/v2/betrieb/acceptance-skillctl-lifecycle.md) | The two-person exchange behind that sheet, plus a Windows quick validate |
+| [Menu Bar App](docs/v2/nutzer/menubar-app.md) | Channels, Observation Window, menu items (macOS) |
 | [Platform differences](docs/v2/referenz/PLATFORM-DIFFERENCES.md) | What works where, including what `trust-freeze` does not claim per platform |
 | [Website](https://kamir.github.io/m3c-tools) | The rendered docs site |
 
@@ -263,7 +261,7 @@ curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/6f517440e7edf64c74f
 Override the target dir or release with `INSTALL_DIR=…` / `RELEASE_BASE=…` (default `~/.local/bin`).
 These verify the **signed** `skillctl/v*` release, cosign provenance (GitHub OIDC) + the SHA-256
 digest, with an **ed25519 fallback** for hosts without cosign, see the
-[skillctl quickstart](docs/old/quickstart-skillctl.md#1-install).
+[skillctl quickstart](docs/v2/nutzer/quickstart-skillctl.md#1-install).
 
 **Bootstrap integrity.** The one-liner URLs are pinned to the **immutable commit
 `6f51744`**, not the mutable `master` branch, where a single rewrite could swap the
@@ -315,7 +313,7 @@ curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-l
 
 **Windows (manual / GUI):** download `m3c-tools-windows-amd64.zip` (or the `M3C-Tools-Setup.exe`
 installer) from the [latest release](https://github.com/kamir/m3c-tools/releases/latest) and add
-it to your `PATH`. See [Quickstart: m3c-tools](docs/old/quickstart-m3c-tools.md) for the full
+it to your `PATH`. See [Quickstart: m3c-tools](docs/v2/nutzer/quickstart-m3c-tools.md) for the full
 PowerShell setup.
 
 ### Platform support
@@ -352,14 +350,14 @@ others. **Evidence you can verify yourself, with no mandatory hosted authority i
 - **Pinned bootstrap.** The install one-liners pin an **immutable commit** + each script's
   SHA-256 (not the mutable `master`). Verify-then-run is documented under [Install](#install).
 
-The full release, signing and provenance flow is in **[docs/v2/betrieb/releasing.md](docs/v2/betrieb/releasing.md)**;
-**report a vulnerability** privately via **[SECURITY.md](SECURITY.md)**.
+Signing and provenance verification are described in [SECURITY.md](SECURITY.md).
+Report vulnerabilities privately using its disclosure instructions.
 
 ---
 
 ## Build from source
 
-Requires **Go 1.25+**. The macOS menu-bar GUI additionally needs `portaudio` + `ffmpeg` (cgo).
+Requires **Go 1.26.10+**. The macOS menu-bar GUI additionally needs `portaudio` + `ffmpeg` (cgo).
 
 ```bash
 git clone https://github.com/kamir/m3c-tools.git && cd m3c-tools
@@ -405,7 +403,7 @@ make vet           # go vet ./...
 three ways that matter. It does not stop at the first failure, so one run tells the whole story. A
 check that could **not** run does not count as passed: it is reported as skipped with the reason, and
 the verdict names how many, because a gate that reports green on nothing is worse than no gate. And
-it fixes the Go toolchain to the one `go.mod` names, because `toolchain go1.26.6` is a floor and not
+it fixes the Go toolchain to the one `go.mod` names, because the Go version declared in `go.mod` is a floor and not
 a pin: with a newer local Go you measure something else than CI does, and `pkg/skillbundle`'s digest
 test then fails on an untouched tree. `scripts/qa-all.sh --selbsttest` proves the runner can go red.
 
@@ -552,8 +550,9 @@ context that will never report" and "not armed at all" stop looking alike.
 ### Releasing
 
 Releases are **tag-driven**: pushing a `vX.Y.Z` or `skillctl/vX.Y.Z` tag builds, signs and
-publishes via GitHub Actions. The full runbook (bump derivation, the two release lines, cosign +
-SLSA signing, post-release steps and gotchas) is in **[docs/v2/betrieb/releasing.md](docs/v2/betrieb/releasing.md)**.
+publishes via the [product release workflow](.github/workflows/release.yml) and
+[skillctl release workflow](.github/workflows/skillctl-release.yml).
+For download verification, see [SECURITY.md](SECURITY.md).
 
 ---
 
@@ -576,7 +575,8 @@ pkg/pocket/          Pocket capture-device sync
 pkg/timetracking/    Project time tracking + Gantt chart + PLM client
 ```
 
-Core logic (transcript, er1, impression) depends only on the Go standard library.
+Capture and document processing live in the Go packages transcript, er1 and impression.
+Platform-specific credential and private-file handling uses explicit OS integration.
 
 ---
 

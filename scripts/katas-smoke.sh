@@ -273,7 +273,7 @@ name_check_grep "Makefile has build-skillctl-demo (2.1)" '^build-skillctl-demo:'
 for s in skillctl-test.sh skillctl-test.ps1 skillctl-enterprise-test.sh skillctl-enterprise-test.ps1; do
   name_check_file "scripts/$s (Landkarte, Stufen 1+2)" "$REPO_ROOT/scripts/$s"
 done
-for d in docs/old/quickstart-skillctl.md docs/old/quickstart-skillctl-demo.md \
+for d in docs/v2/nutzer/quickstart-skillctl.md docs/v2/nutzer/quickstart-skillctl-demo.md \
          docs/v2/referenz/manual-skillctl.md \
          docs/v2/nutzer/tutorial-szenario-01-eigene-skills-mehrere-maschinen.de.md \
          docs/v2/nutzer/tutorial-szenario-02-erster-signierter-skill.de.md; do

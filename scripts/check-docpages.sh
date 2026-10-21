@@ -35,20 +35,26 @@ cd "$ROOT"
 
 # markdown-quelle -> erzeugte seite
 REGISTER='
-docs/v2/betrieb/ops-human-agent-team.de.md|docs/v2/pages/ops-human-agent-team.html
 docs/v2/index.md|docs/v2/pages/wegweiser.html
+docs/v2/index.en.md|docs/v2/pages/wegweiser.en.html
 docs/v2/nutzer/einstieg.de.md|docs/v2/pages/nutzer-einstieg.html
+docs/v2/nutzer/einstieg.en.md|docs/v2/pages/nutzer-einstieg.en.html
 docs/v2/entwickler/architecture.md|docs/v2/pages/entwickler-architecture.html
+docs/v2/entwickler/architecture.de.md|docs/v2/pages/entwickler-architecture.de.html
 docs/v2/entwickler/getting-started.md|docs/v2/pages/entwickler-getting-started.html
+docs/v2/entwickler/getting-started.de.md|docs/v2/pages/entwickler-getting-started.de.html
 docs/v2/betrieb/ueberblick.de.md|docs/v2/pages/betrieb-ueberblick.html
+docs/v2/betrieb/ueberblick.en.md|docs/v2/pages/betrieb-ueberblick.en.html
 docs/v2/betrieb/runbook-m3c-tools-capture.de.md|docs/v2/pages/betrieb-runbook-m3c-tools-capture.html
+docs/v2/betrieb/runbook-m3c-tools-capture.en.md|docs/v2/pages/betrieb-runbook-m3c-tools-capture.en.html
 docs/v2/sicherheit/ueberblick.de.md|docs/v2/pages/sicherheit-ueberblick.html
+docs/v2/sicherheit/ueberblick.en.md|docs/v2/pages/sicherheit-ueberblick.en.html
 docs/v2/entwickler/skillctl-sim.md|docs/v2/pages/entwickler-skillctl-sim.html
+docs/v2/entwickler/skillctl-sim.de.md|docs/v2/pages/entwickler-skillctl-sim.de.html
 docs/v2/sicherheit/audit-spur.de.md|docs/v2/pages/sicherheit-audit-spur.html
+docs/v2/sicherheit/audit-spur.en.md|docs/v2/pages/sicherheit-audit-spur.en.html
 docs/v2/entwickler/secretctl.md|docs/v2/pages/entwickler-secretctl.html
-docs/v2/betrieb/QA-abnahme-skillctl-windows.de.md|docs/v2/pages/betrieb-qa-abnahme-skillctl-windows.html
-docs/v2/betrieb/QA-abnahme-skillctl-linux.de.md|docs/v2/pages/betrieb-qa-abnahme-skillctl-linux.html
-docs/v2/betrieb/acceptance-skillctl-lifecycle.md|docs/v2/pages/betrieb-acceptance-skillctl-lifecycle.html
+docs/v2/entwickler/secretctl.de.md|docs/v2/pages/entwickler-secretctl.de.html
 '
 
 command -v python3 >/dev/null || { echo "check-docpages: python3 fehlt" >&2; exit 2; }

@@ -1,5 +1,7 @@
 # Ops-Runbook: Monitoring und Alarmierung
 
+Sprachen / Languages: [Deutsch](ops-monitoring.de.md) | [English](ops-monitoring.en.md)
+
 Was an einem skillctl-Betrieb heute beobachtbar ist, woran eine Überwachung
 andocken kann, und was mit den vorhandenen Mitteln **nicht** geht.
 
@@ -360,8 +362,8 @@ nicht. `skillctl token list --host <host>` zeigt, was hinterlegt ist, und gibt
 weder einen Token noch ein Datum aus:
 
 ```
-$ skillctl token list --host git.kieback-peter.de
-credentials for git.kieback-peter.de
+$ skillctl token list --host git.example.com
+credentials for git.example.com
   protected store: macOS Keychain
 
   gitlab    read   not provisioned              env: M3C_GITLAB_RO_TOKEN

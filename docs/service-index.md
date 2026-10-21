@@ -5,12 +5,14 @@ title: Service Index
 
 # Service Index
 
+Sprachen / Languages: [Deutsch](service-index.de.md) | [English](service-index.md)
+
 **What stays running.** Long-lived processes in the `m3c-tools` ecosystem, each
 paired with its **runtime wrapper**: the `deploy/*` stack, Dockerfile, compose
-file, or MCP registration that turns a [program](program-index) into a running
+file, or MCP registration that turns a [program](program-index.md) into a running
 service.
 
-See also: [Program Index](program-index) · [Component Index](component-index).
+See also: [Program Index](program-index.md) · [Component Index](component-index.md).
 
 ## 1. skillctl Trust-Plane (container)
 
@@ -59,7 +61,7 @@ the Observation Window pipeline, and ER1 upload.
 | Program | `m3c-tools --menubar` (production); `poc-menubar` (reference POC) |
 | Launch | `make menubar` / `make menubar-app` |
 | UI stack | `menuet` (menu bar) + native Cocoa via cgo |
-| Details | [Menu Bar App](old/menubar-app) |
+| Details | [Menu Bar App](v2/nutzer/menubar-app.md) |
 
 ## External dependency: ER1 / aims-core
 

@@ -1,5 +1,7 @@
 # Content topology: `m3c-tools` (public plane)
 
+Sprachen / Languages: [Deutsch](CONTENT-TOPOLOGY.de.md) | [English](CONTENT-TOPOLOGY.md)
+
 `m3c-tools` is the **PUBLIC / open-source plane**: it is meant to be given away. Its
 private sibling, the **maintenance plane**, holds the *reasoning* behind the code.
 This split implements **SPEC-0358** ("ship the code, keep the reasoning"). The
@@ -27,7 +29,19 @@ and governance artefacts:
 - **FR / Bug / CR**: feature requests, bug reports, change requests.
 - **Onboarding-Guide material**: publisher runbooks and customer onboarding manuals.
 
-These never ship in this repo.
+These never ship in this repo. Public implementation overviews and current operator
+instructions remain here when they explain the shipped product. Internal plans,
+acceptance records, audit backlogs and obsolete documentation do not.
+
+Before removing or rewriting an obsolete document, save its original bytes in the
+private maintenance repository under **`Archiv`**. Preserve its original relative
+path, source commit and SHA-256 digest in the archive manifest. Record a replacement
+path when a current user guide moves. Archive first, then remove the public copy;
+do not discard history or replace useful instructions with broken links.
+
+Keep runtime assets, test fixtures, machine-readable schemas, dependency manifests
+and active CI inputs. A filename containing an ID does not make source code or a
+test fixture a narrative specification.
 
 ## The cross-reference rule (ID-ONLY)
 
@@ -49,6 +63,8 @@ documented allowlist) and fails on:
 
 | Reason                     | Pattern                       | Scope |
 |----------------------------|-------------------------------|-------|
+| narrative specification or plan | document name or top-level title | narrative documents |
+| obsolete documentation | `docs/old/` | all tracked contents |
 | private-repo path reference| a path into the private repo  | all files |
 | internal endpoint          | `127.0.0.1:8081`              | narrative surface* |
 | ER1 context-id             | `<digits>___<slug>`           | narrative surface* |
@@ -62,3 +78,17 @@ agent instructions, root files) against an accidental paste. A **path into the p
 repo is always a leak, in any file**, and is checked everywhere.
 
 Bare `SPEC-1234` / `ADR-1234` identifiers match no pattern and are always allowed.
+
+## Documentation languages / Dokumentationssprachen
+
+Published documentation must be available in German and English with the same
+substantive content. Link each language version to its counterpart. Keep CLI
+commands, flags, examples and machine-readable contracts unchanged. Review both
+versions whenever behaviour or instructions change; do not label a summary as a
+translation. Record reviewed pairs in `docs/languages.json`.
+
+Veroeffentlichte Dokumentation muss auf Deutsch und Englisch mit demselben
+fachlichen Inhalt vorliegen. Jede Sprachfassung verlinkt die Gegenfassung.
+CLI-Befehle, Flags, Beispiele und maschinenlesbare Vertraege bleiben unveraendert.
+Bei fachlichen Aenderungen beide Fassungen pruefen und die geprueften Paare in
+`docs/languages.json` aktualisieren. Eine Zusammenfassung ersetzt keine Uebersetzung.

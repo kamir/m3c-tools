@@ -34,15 +34,6 @@ import (
 	"github.com/kamir/m3c-tools/pkg/whisper"
 )
 
-// plural is a tiny helper that mirrors setup.plural; kept inline so we don't
-// export it from pkg/setup.
-func plural(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
-}
-
 func cmdRetry(args []string) {
 	interval := 30
 	maxRetries := 10
@@ -82,7 +73,7 @@ func cmdRetry(args []string) {
 	fmt.Println("  Press Ctrl+C to stop.")
 
 	runner := er1.NewRetryRunner(q, func(entry er1.QueueEntry) error {
-		_, uploadErr := er1.Upload(cfg, er1.PayloadFromQueueEntry(entry))
+		_, uploadErr := er1.RetryUpload(cfg, entry)
 		return uploadErr
 	}, maxRetries)
 
@@ -404,9 +395,9 @@ func cmdUpload(args []string) {
 		time.Duration(cfg.RetryInterval)*time.Second,
 		cfg.MaxRetries,
 	)
-	bgRetry.OnLog = func(msg string) {
+	bgRetry.SetOnLog(func(msg string) {
 		fmt.Println(msg)
-	}
+	})
 	defer bgRetry.Stop(5 * time.Second)
 	fmt.Println("Background retry goroutine started.")
 
@@ -470,11 +461,9 @@ func cmdUpload(args []string) {
 		ImageFilename:      fmt.Sprintf("%s_thumbnail.jpg", videoID),
 		Tags:               tags,
 	}
-	resp, err := er1.Upload(cfg, payload)
+	resp, entry, err := er1.UploadDurable(cfg, payload, queuePath, videoID)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Upload error: %v\n", err)
-		// ER1 failure detection: queue failed upload for retry
-		entry := er1.EnqueueFailure(queuePath, videoID, payload, tags, err)
 		if entry != nil {
 			fmt.Fprintf(os.Stderr, "Queued for retry: %s → %s\n", entry.ID, queuePath)
 		} else {

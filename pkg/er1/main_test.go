@@ -1,6 +1,7 @@
 package er1
 
 import (
+	"fmt"
 	"os"
 	"testing"
 )
@@ -16,7 +17,22 @@ import (
 // against a real credential and fail on any other machine. Tests that want the
 // fallback set keychainLookup themselves (and reset keychainOnce).
 func TestMain(m *testing.M) {
-	os.Setenv("M3C_TOKEN_STORE", "file")
+	home, err := os.MkdirTemp("", "m3c-er1-tests-*")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	for name, value := range map[string]string{"HOME": home, "USERPROFILE": home, "M3C_TOKEN_STORE": "file"} {
+		if err := os.Setenv(name, value); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
 	keychainLookup = func() string { return "" }
-	os.Exit(m.Run())
+	code := m.Run()
+	if err := os.RemoveAll(home); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		code = 1
+	}
+	os.Exit(code)
 }

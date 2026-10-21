@@ -1,0 +1,300 @@
+{
+  "version": 1,
+  "scope": "Published user, API, operations, security and contributor documentation under docs/ plus the listed root and supplementary guides. Source comments, runtime prompts, agent instructions, changelog, fixtures and historical evidence data retain their original language.",
+  "pairs": [
+    {
+      "de": "docs/component-index.de.md",
+      "en": "docs/component-index.md",
+      "de_sha256": "5028a4259957328c79c09b7c646059973786ee7546b5c8c1f860f4fbe5ce31bd",
+      "en_sha256": "98537a98b72f079174ebd0fbba164160361afb6392690ecc4590b0e7847604f9"
+    },
+    {
+      "de": "docs/index.md",
+      "en": "docs/index.en.md",
+      "de_sha256": "f7751079eef8a6345d1938af8a5ca8c859413851bf6a63deaa1a4c28667c7f6c",
+      "en_sha256": "a9e5f77fcac6019511d7889ff586a5233e588aa1ff49e610a378b5d6f2bb0c9d"
+    },
+    {
+      "de": "docs/program-index.de.md",
+      "en": "docs/program-index.md",
+      "de_sha256": "9e3f39d4d6c850dcaed86820a1db9317243f0af632a7bb0a77cf46587cd64b03",
+      "en_sha256": "cf98181a8f9f44834d973fc6a92e947e03e0f93a19d24b2b22f49843be37a5e6"
+    },
+    {
+      "de": "docs/service-index.de.md",
+      "en": "docs/service-index.md",
+      "de_sha256": "0c88a55c4561e0c9f5ff0b48757089cf7e73fa9b551b3cbe45b776104ffd1f36",
+      "en_sha256": "e67c66ec70adef5b7e4b11f435443f2b6fbb114b16619cd8b9567c2e2ba9000a"
+    },
+    {
+      "de": "docs/v2/betrieb/ops-incident-response.de.md",
+      "en": "docs/v2/betrieb/ops-incident-response.en.md",
+      "de_sha256": "8c1a0de538e29c77b1f287c8a91c73fef246aec0773f51a26f94efdc6851e00c",
+      "en_sha256": "5e725cb110ff0dc5d64e088ba88d4dbe08fb38d3a1ca6f0b15686b6f1fc93dbb"
+    },
+    {
+      "de": "docs/v2/betrieb/ops-monitoring.de.md",
+      "en": "docs/v2/betrieb/ops-monitoring.en.md",
+      "de_sha256": "89d0ca5da34a8908c758e2410e16ddb6dd04c6c0b0d0018c43bc9897f82799c1",
+      "en_sha256": "726e69dfdcd74fadf103ea88f89bb26aa2f301e76b78390d84c0859e072c05ca"
+    },
+    {
+      "de": "docs/v2/betrieb/ops-registry-backup-restore.de.md",
+      "en": "docs/v2/betrieb/ops-registry-backup-restore.en.md",
+      "de_sha256": "a3e7dcac55189b9c4e2657e972b5a708afd02bb05f9f0a3c698b11b8e5c20e08",
+      "en_sha256": "81dfd5f50e05fa9c7e8cdae74396b8793ade0c1aad76de0bc26041e7994bfebd"
+    },
+    {
+      "de": "docs/v2/betrieb/ops-registry-tokens.de.md",
+      "en": "docs/v2/betrieb/ops-registry-tokens.en.md",
+      "de_sha256": "ca99950e07edbfb73e86f47fceb16a8f898294616134047562c54ca20c1dd5ce",
+      "en_sha256": "1ed780733b41676090b7984700975086c15455190a277f4b5c972792d8ab46e5"
+    },
+    {
+      "de": "docs/v2/betrieb/runbook-m3c-tools-capture.de.md",
+      "en": "docs/v2/betrieb/runbook-m3c-tools-capture.en.md",
+      "de_sha256": "8279a3b4b66670481ffd209940a084e3749a16bee2c63373c17356f61d52e13b",
+      "en_sha256": "49975ceb2126af6df2e93e79734bc9dca97c06401c47ded08b7f1acf2f620a55"
+    },
+    {
+      "de": "docs/v2/betrieb/ueberblick.de.md",
+      "en": "docs/v2/betrieb/ueberblick.en.md",
+      "de_sha256": "af6ee8ca82d11e63c7445f72cee003df4b49850836e96337177d322d34578f0b",
+      "en_sha256": "9adce110f43c6a2839936854e8e00efd94460a03ba3b2499dbddb260e800aac5"
+    },
+    {
+      "de": "docs/v2/entwickler/architecture.de.md",
+      "en": "docs/v2/entwickler/architecture.md",
+      "de_sha256": "b424879b2f0c54a84b7c4230a7e1001348ecc0ebf1d201e327c37eb3b2ee4ac6",
+      "en_sha256": "ca3e3435358224171bf0c6bc8c5f1d7cfc6f0783077416224d3967c757317281"
+    },
+    {
+      "de": "docs/v2/entwickler/getting-started.de.md",
+      "en": "docs/v2/entwickler/getting-started.md",
+      "de_sha256": "fd3930f652c8af5f082088ca73599c377d8a908f1822140f9690e721b7445bc6",
+      "en_sha256": "9dec8252796a31f0e3aef6bbf47a5128ac3151057198be9bda49c32ab4def37b"
+    },
+    {
+      "de": "docs/v2/entwickler/secretctl.de.md",
+      "en": "docs/v2/entwickler/secretctl.md",
+      "de_sha256": "661855624727fa1a2c19ff84cb7df7258ae150c7d6649e210a1992efb101d67e",
+      "en_sha256": "9dc30a4efe77c55aa44c12a6f2eb0e9e922521f02a39669410606b61297b8f03"
+    },
+    {
+      "de": "docs/v2/entwickler/skillctl-sim.de.md",
+      "en": "docs/v2/entwickler/skillctl-sim.md",
+      "de_sha256": "64c3156d959b73e50c31ae368eee0c9b7e9d471561b05479bee4824a6852f96e",
+      "en_sha256": "8c4dd23463a69c1033feb943feba4e4e5f0d95633b7c96b14f0dbe99a58efaa0"
+    },
+    {
+      "de": "docs/v2/index.md",
+      "en": "docs/v2/index.en.md",
+      "de_sha256": "7f85d6e2aae1e2c5e17f770324620fa45bdab4caa818bed581332ee4d5c382bc",
+      "en_sha256": "fd93d04a770760e2b7966aaefd80ece222f44db7c004bebe8421d2b5682a944b"
+    },
+    {
+      "de": "docs/v2/nutzer/audio-import-tracking.de.md",
+      "en": "docs/v2/nutzer/audio-import-tracking.md",
+      "de_sha256": "9ccd53cb1bd6f171f61f02324e9646075b33570f5fd12d04d0804e1d04811102",
+      "en_sha256": "e947580782f6e65747c2b3c7bd8db2f9a2c013f43b1b9a767d3c7dd136cbd61d"
+    },
+    {
+      "de": "docs/v2/nutzer/einstieg.de.md",
+      "en": "docs/v2/nutzer/einstieg.en.md",
+      "de_sha256": "1ce83b0caf6ddf968b54e4012a18e2d9c45de7b961aa15185e29ce0943b8a917",
+      "en_sha256": "c65516b659b664e2aa7c904f110075dda3ef147c8b8eaf9fc1ac20e6faa575ae"
+    },
+    {
+      "de": "docs/v2/nutzer/getting-started.de.md",
+      "en": "docs/v2/nutzer/getting-started.md",
+      "de_sha256": "a8145dd2e79adcc5fe208b91240158255c4820a3bd8f8807c7fc572d7f1e80e8",
+      "en_sha256": "08e404591b275e18b5bc6e382e1213a45922f5fddf4f217b047c146d0b753b95"
+    },
+    {
+      "de": "docs/v2/nutzer/menubar-app.de.md",
+      "en": "docs/v2/nutzer/menubar-app.md",
+      "de_sha256": "4e214a91d414d71230cf82983d68c21e7186a823d67f489935bc41386a154500",
+      "en_sha256": "d606a8283d3b97a0892db9d15ea2753be3108011311dbf42d877e3773d84a261"
+    },
+    {
+      "de": "docs/v2/nutzer/prerequisites.de.md",
+      "en": "docs/v2/nutzer/prerequisites.md",
+      "de_sha256": "3948893846fdc700e8eb325f51506309a7586a179bc70d98e051b89c97b0931e",
+      "en_sha256": "9964aa7815f277f07bb4ee3388f14cc1a78044310700e35f717bededafd2ba28"
+    },
+    {
+      "de": "docs/v2/nutzer/quickstart-m3c-tools.de.md",
+      "en": "docs/v2/nutzer/quickstart-m3c-tools.md",
+      "de_sha256": "99ade3d6ca6bbb647ed7fbd4b2b5c1f259a60706d14b397ff1bf556943d08607",
+      "en_sha256": "2540965551248d6b0979cfb0bbd49f98f479f065d9671cd5d5b1dce39b434301"
+    },
+    {
+      "de": "docs/v2/nutzer/quickstart-skillctl-demo.de.md",
+      "en": "docs/v2/nutzer/quickstart-skillctl-demo.md",
+      "de_sha256": "ce5b98e33f14a2c0199c62e52693e4bc7a99f953315a09c4226d14ee9dc577f9",
+      "en_sha256": "a4c93926f4ee47485ec4f933245242b5bbb772582eb6e850fa78467738ba022b"
+    },
+    {
+      "de": "docs/v2/nutzer/quickstart-skillctl.de.md",
+      "en": "docs/v2/nutzer/quickstart-skillctl.md",
+      "de_sha256": "78011a64b45ee49182a1184621143b77910ff14faf44cbf373b18c0e5573ad04",
+      "en_sha256": "51f94b4f74abc98b0a66df7def527226c9d777f270880d9bf9e1635f6c30bb5f"
+    },
+    {
+      "de": "docs/v2/nutzer/tutorial-katas-und-test-ride.de.md",
+      "en": "docs/v2/nutzer/tutorial-katas-und-test-ride.en.md",
+      "de_sha256": "aca12debbb713d8435ddf0584672994d18491524cff2d57d8e3dc38636b51367",
+      "en_sha256": "e4f313bde17ad35bcd00c9e3f5a90d3b1562e3f3a535b8e6c862d682dcc18d21"
+    },
+    {
+      "de": "docs/v2/nutzer/tutorial-szenario-01-eigene-skills-mehrere-maschinen.de.md",
+      "en": "docs/v2/nutzer/tutorial-szenario-01-eigene-skills-mehrere-maschinen.en.md",
+      "de_sha256": "22f77dbbe5940e6bf93a269858343201d276427b4a3811e31598856599e2a1c3",
+      "en_sha256": "dfda685bd0774f1b7a1b47afe3ffc1eaefdad35ee45135a01148686316e2f742"
+    },
+    {
+      "de": "docs/v2/nutzer/tutorial-szenario-02-erster-signierter-skill.de.md",
+      "en": "docs/v2/nutzer/tutorial-szenario-02-erster-signierter-skill.en.md",
+      "de_sha256": "3c8a526bb769dfa28b34e0dd7edf28f9b2504df79da5c09e928c72708418a2cc",
+      "en_sha256": "61c9d17fa72cd6de23e4c09e46ba666b139481f8aab5c7699fdb139f3aa504dc"
+    },
+    {
+      "de": "docs/v2/referenz/CLI-VERBS.de.md",
+      "en": "docs/v2/referenz/CLI-VERBS.md",
+      "de_sha256": "f38c8dfe61952cb71ee0188e8f61453995920aac7cd4faca27c1f1adca121b94",
+      "en_sha256": "c0c3aa239f0f0976504a33ba98da8a2fcac8de534de8e25780bbd15adab71dda"
+    },
+    {
+      "de": "docs/v2/referenz/PLATFORM-DIFFERENCES.de.md",
+      "en": "docs/v2/referenz/PLATFORM-DIFFERENCES.md",
+      "de_sha256": "fce5df9f036e20c092b7f0bd5c9ca0897e6582845a3c6bb95e04aa845fb185f3",
+      "en_sha256": "72e7e59475ffc5303e5044fd0c56860133f0eb9eb088d9f01f3ed4b06280291c"
+    },
+    {
+      "de": "docs/v2/referenz/manual-m3c-tools.de.md",
+      "en": "docs/v2/referenz/manual-m3c-tools.md",
+      "de_sha256": "45d4a0f275bf98c15b3922250611484b958675287d50d262b0e284c53a9c354b",
+      "en_sha256": "d29232b8e740bf213e86feb4b6a5aa17758792f3d0a5b251c07d143d9bfaae0a"
+    },
+    {
+      "de": "docs/v2/referenz/manual-skillctl.de.md",
+      "en": "docs/v2/referenz/manual-skillctl.md",
+      "de_sha256": "fea033e19941955a9695c8339a724b97a5bd5355aaca69670f44bba3aa2e8b51",
+      "en_sha256": "2ad0e15002503d94d7eb3391c18418c9dbd8fe28aec221d2a73b14f07741ccb5"
+    },
+    {
+      "de": "docs/v2/sicherheit/audit-spur.de.md",
+      "en": "docs/v2/sicherheit/audit-spur.en.md",
+      "de_sha256": "384fab361f8907695fb115ba66810d700edf4fea11b32dd75ac596c36ac94523",
+      "en_sha256": "4c6a0bc48de664d3465fa140d76eb286b1dea71844cafaf246164ad01c8f6463"
+    },
+    {
+      "de": "docs/v2/sicherheit/ueberblick.de.md",
+      "en": "docs/v2/sicherheit/ueberblick.en.md",
+      "de_sha256": "e54dd86b867815d6156aeb3bc71d14ec95d90058cd5ac0b92707402e1f300733",
+      "en_sha256": "029766f97ceb93bbd8b64f917b45f37ceb7085e954b1c1ded4e329fd2f205ff7"
+    },
+    {
+      "de": "README.de.md",
+      "en": "README.md",
+      "de_sha256": "c5ea5ca3116e836af31a6150be0ccb80386638c2fd45ecf8ac815fae1dd5e5cb",
+      "en_sha256": "d373c0c212ccc9ad800b5156e1eb97cf0574aa166c6e27238e1134fc752a5c8d"
+    },
+    {
+      "de": "SECURITY.de.md",
+      "en": "SECURITY.md",
+      "de_sha256": "d1f8712fcc73f054f3862aee1f1715699e2d192efdbc1911012c95436ecc8276",
+      "en_sha256": "81531b6da7142b0f7351abf9cdcb9b2f8d800d318c5379d084c02354c24b6df0"
+    },
+    {
+      "de": "THREAT_MODEL.de.md",
+      "en": "THREAT_MODEL.md",
+      "de_sha256": "9919998c7a9b297ceedae00d798deaa8e7791f6b26a0465894da3f77297a3c5b",
+      "en_sha256": "05dcc842405ffaf1c189ed23d906f28e28938d821deb84426002532d5898231c"
+    },
+    {
+      "de": "COMPATIBILITY.de.md",
+      "en": "COMPATIBILITY.md",
+      "de_sha256": "526b4cd6361a5241f1f2ac6b3fed4d836a3ff5808aa266b7c050050fa6b444b6",
+      "en_sha256": "a243644d0b10193a92edf18e50d3a6741656eb6a35b573ecfd2ab0b140961a3a"
+    },
+    {
+      "de": "CONTRIBUTING.de.md",
+      "en": "CONTRIBUTING.md",
+      "de_sha256": "963f91fade3eb735ca90098edd8cd52d7dce0ebccbe78fb875697240e50db56e",
+      "en_sha256": "2c23f15d00597783dd69c07b4df3804979c751d8ca05bb4b05013dfb5de18314"
+    },
+    {
+      "de": "CONTENT-TOPOLOGY.de.md",
+      "en": "CONTENT-TOPOLOGY.md",
+      "de_sha256": "ad42f2254b826a6d68649e37ba2110dda0c6c96c9b12e170c21f313d760cdf68",
+      "en_sha256": "b325a6b513a166bcb5708b75906c2f6d358dbdb37e0307e175ad123ae2ac4d44"
+    },
+    {
+      "de": "CODESTYLE.de.md",
+      "en": "CODESTYLE.md",
+      "de_sha256": "4fb65fe425210e0df702ce468cd2e3a68f67e8de4f3594ed7132f49c1998481f",
+      "en_sha256": "0bf16e6fae6ce94da82d480b36c33c07cdb3d4d2ab98e24d14e5921d2263ffe9"
+    },
+    {
+      "de": "demo/kup-training/README.de.md",
+      "en": "demo/kup-training/README.md",
+      "de_sha256": "d4257f28bef45e34377624de5485a7b0202035422d0d7f357a878f212f229376",
+      "en_sha256": "966750b9bc03c18823221f38b162135e770555436419319c79d156a676fb9987"
+    },
+    {
+      "de": "demo/kup-training/TUTORIAL.de.md",
+      "en": "demo/kup-training/TUTORIAL.md",
+      "de_sha256": "4cacfc50055c4d36ee7e754ff237e9e92e2da10e60f2ff5cce11db39f002d899",
+      "en_sha256": "fed2def388b5080860fe5fcf92b917e68c4112bc7541ba063a7ac8e85b48fee9"
+    },
+    {
+      "de": "deploy/skillctl/README.de.md",
+      "en": "deploy/skillctl/README.md",
+      "de_sha256": "194cc214ad4962a7713d691f3709fd932a25a0fdcbed14fd37b2ade653e44525",
+      "en_sha256": "eb920cd45a1ea2a200792d6e0dfff24333d98f9a5ea229e8c4dcbc4a0bf29954"
+    },
+    {
+      "de": "deploy/testing/README.de.md",
+      "en": "deploy/testing/README.md",
+      "de_sha256": "6ddd49b1764e85a33966c0fd0d6f77e397d0047a86b1480b09081a018e0adc47",
+      "en_sha256": "03271253a81641d3ed2408ad0a6aad1629cf903152b23bf100e4f0f454feabef"
+    },
+    {
+      "de": "evaluation/README.de.md",
+      "en": "evaluation/README.md",
+      "de_sha256": "c2e1379ed7481bc3aaed993d7bc3d49ec4bab1afcba698caeb3c516910a6b6e6",
+      "en_sha256": "c30275f03f7c24e4305e11c87bd47f4a052bdb685efa96791b592b2ad0dddc06"
+    },
+    {
+      "de": "design/DESIGN-SYSTEM.de.md",
+      "en": "design/DESIGN-SYSTEM.md",
+      "de_sha256": "2aab64ef7773364bddf2ff4aa6d8835263a8a64a5935e1e9520a3b51964b6c29",
+      "en_sha256": "e7a8314ce71236703b3a211f0c84e4f1ebd90df7b41a855378b269bf0529f9f2"
+    },
+    {
+      "de": "rag-mcp-server/README.de.md",
+      "en": "rag-mcp-server/README.md",
+      "de_sha256": "89e26725c569a819e0c564ae9cb681e16455c269fdd3d86ad0b59cb88dc83487",
+      "en_sha256": "14d136ade700df546f5871033ae4caa0897309fdb944a2f99b08949dfde1d162"
+    },
+    {
+      "de": "tools/release-templates/README.de.md",
+      "en": "tools/release-templates/README.md",
+      "de_sha256": "c30e48a4fccc043fb52610673011b4db48386b1f6fb26771abed8d5dcfc8f7fb",
+      "en_sha256": "0a9ac2190c593daebb95aec049bb15b9db35166019c51bed63e8f26569c3038a"
+    },
+    {
+      "de": "tools/scheduling/README.de.md",
+      "en": "tools/scheduling/README.md",
+      "de_sha256": "a8858dd8ee555f46729b433db256f838d8ffc16689205a89e20e1836ee49c494",
+      "en_sha256": "d58dfd1dfc4ac3329636c4ac6eb6416c795720b9d0ebb82b31a15403a3b8c49c"
+    },
+    {
+      "de": "tests/evidence/trust-freeze/README.de.md",
+      "en": "tests/evidence/trust-freeze/README.md",
+      "de_sha256": "90a158f33df1c3fe18a11bfc4449e41530a477595eda86134e84d3f164ba6f65",
+      "en_sha256": "750eba417b5510884f89fde68f29d1736e0d45dd364e296201fee584d3d810b8"
+    }
+  ]
+}

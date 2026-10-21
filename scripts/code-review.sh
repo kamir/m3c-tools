@@ -34,27 +34,20 @@ fi
 
 # ─── 2. Vet ───
 echo "2. Vet"
-VET_OUTPUT=$(go vet ./... 2>&1) || true
-if [ -z "$VET_OUTPUT" ]; then
+if VET_OUTPUT=$(go vet ./... 2>&1); then
     pass "go vet clean"
 else
-    fail "go vet found issues:"
-    echo "$VET_OUTPUT" | head -10 | sed 's/^/      /'
+    fail "go vet failed"
+    printf '%s\n' "$VET_OUTPUT" | sed -n '1,20{s/^/      /;p;}'
 fi
 
 # ─── 3. Unit tests ───
 echo "3. Tests"
-if go test -count=1 ./pkg/... 2>/dev/null | grep -q "^ok"; then
+if TEST_OUT=$(go test -count=1 ./pkg/... 2>&1); then
     pass "pkg/ tests pass"
 else
-    # Some packages may have no tests: check if any failures
-    TEST_OUT=$(go test -count=1 ./pkg/... 2>&1) || true
-    if echo "$TEST_OUT" | grep -q "^FAIL"; then
-        fail "pkg/ tests have failures"
-        echo "$TEST_OUT" | grep "^FAIL" | sed 's/^/      /'
-    else
-        pass "pkg/ tests pass (some packages have no tests)"
-    fi
+    fail "pkg/ tests failed or could not run"
+    printf '%s\n' "$TEST_OUT" | sed -n '1,20{s/^/      /;p;}'
 fi
 
 # ─── 4. Sensitive data scan ───
@@ -63,10 +56,10 @@ SENSITIVE_PATTERNS='API_KEY\s*=\s*[A-Za-z0-9]|password\s*=\s*"[^"]|secret\s*=\s*
 # Only scan Go source files, skip tests
 SENSITIVE_HITS=$(grep -rlEi "$SENSITIVE_PATTERNS" --include='*.go' --exclude='*_test.go' --exclude='*testhelper*' . 2>/dev/null || true)
 if [ -z "$SENSITIVE_HITS" ]; then
-    pass "No hardcoded secrets in Go source"
+    pass "Heuristic found no candidate hardcoded secrets in Go source"
 else
     warn "Possible hardcoded secrets in:"
-    echo "$SENSITIVE_HITS" | sed 's/^/      /'
+    printf '%s\n' "$SENSITIVE_HITS" | sed 's/^/      /'
 fi
 
 # Check .env is not staged
@@ -86,7 +79,7 @@ else
 fi
 if [ "$TODO_COUNT" -gt 0 ]; then
     warn "$TODO_COUNT TODO/FIXME/HACK markers in Go source"
-    echo "$TODO_HITS" | head -10 | sed 's/^/      /'
+    printf '%s\n' "$TODO_HITS" | sed -n '1,10{s/^/      /;p;}'
     if [ "$TODO_COUNT" -gt 10 ]; then
         echo "      ... and $((TODO_COUNT - 10)) more"
     fi
@@ -97,12 +90,11 @@ fi
 # ─── 6. Dead code / unused imports ───
 echo "6. Dead code"
 # Check for unused imports (quick heuristic via build)
-UNUSED_IMPORTS=$(go build ./... 2>&1 | grep "imported and not used" || true)
-if [ -z "$UNUSED_IMPORTS" ]; then
-    pass "No unused imports"
+if BUILD_OUTPUT=$(go build ./... 2>&1); then
+    pass "All packages build"
 else
-    fail "Unused imports:"
-    echo "$UNUSED_IMPORTS" | head -5 | sed 's/^/      /'
+    fail "Package build failed"
+    printf '%s\n' "$BUILD_OUTPUT" | sed -n '1,20{s/^/      /;p;}'
 fi
 
 # ─── 7. Large files check ───
@@ -112,7 +104,7 @@ if [ -z "$LARGE_GO_FILES" ]; then
     pass "No Go files over 2000 lines"
 else
     warn "Large Go files (consider splitting):"
-    echo "$LARGE_GO_FILES" | sed 's/^/      /'
+    printf '%s\n' "$LARGE_GO_FILES" | sed 's/^/      /'
 fi
 
 # ─── 8. Error handling patterns ───
@@ -123,7 +115,7 @@ if [ -z "$IGNORED_ERRS" ]; then
     pass "No obviously ignored errors"
 else
     warn "Possibly overwritten errors (review manually):"
-    echo "$IGNORED_ERRS" | sed 's/^/      /'
+    printf '%s\n' "$IGNORED_ERRS" | sed 's/^/      /'
 fi
 
 # ─── 9. Version consistency ───
@@ -146,17 +138,15 @@ else
     fail "go mod verify failed"
 fi
 
-VULN_CHECK=""
 if command -v govulncheck >/dev/null 2>&1; then
-    VULN_CHECK=$(govulncheck ./... 2>&1 | grep "^Vulnerability" || true)
-    if [ -z "$VULN_CHECK" ]; then
-        pass "No known vulnerabilities (govulncheck)"
+    if VULN_CHECK=$(govulncheck ./... 2>&1); then
+        pass "govulncheck completed without reachable vulnerabilities"
     else
-        warn "Known vulnerabilities found:"
-        echo "$VULN_CHECK" | head -5 | sed 's/^/      /'
+        fail "govulncheck found reachable vulnerabilities or could not complete"
+        printf '%s\n' "$VULN_CHECK" | sed -n '1,20{s/^/      /;p;}'
     fi
 else
-    info "govulncheck not installed (skipping, install: go install golang.org/x/vuln/cmd/govulncheck@latest)"
+    fail "govulncheck is required for release review but is not installed"
 fi
 
 # ─── Summary ───

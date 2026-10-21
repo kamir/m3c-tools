@@ -108,11 +108,11 @@ NEW_TAG="v${NEW_VERSION}"
 
 # --- Refuse to re-tag ---
 if git rev-parse -q --verify "refs/tags/${NEW_TAG}" >/dev/null; then
-    echo "Error: tag ${NEW_TAG} already exists locally. See docs/v2/betrieb/releasing.md (Rollback)."
+    echo "Error: tag ${NEW_TAG} already exists locally. Choose a new version; published tags must remain unchanged."
     exit 1
 fi
 if git ls-remote --exit-code --tags origin "refs/tags/${NEW_TAG}" >/dev/null 2>&1; then
-    echo "Error: tag ${NEW_TAG} already exists on origin. See docs/v2/betrieb/releasing.md (Rollback)."
+    echo "Error: tag ${NEW_TAG} already exists on origin. Choose a new version; published tags must remain unchanged."
     exit 1
 fi
 
@@ -130,8 +130,8 @@ echo "Tagging:      origin/master @ ${HASH}"
 echo "              $(git log -1 --format='%s' "$HASH")"
 echo "              $(git log -1 --format='%an, %ad' --date=short "$HASH")"
 echo ""
-echo "Release approval (docs/v2/betrieb/releasing.md, 'Release approval'):"
-echo "  the tag push is the point of no return. The SPEC-0406 acceptance gate"
+echo "Release approval (.github/workflows/release.yml):"
+echo "  the tag push is the point of no return. The offline acceptance gate"
 echo "  covers the machine half; the two-person half is a human step and is not"
 echo "  observable from here. If you are releasing alone, record it as break-glass."
 echo ""
@@ -168,4 +168,4 @@ echo ""
 echo "Tag ${NEW_TAG} pushed. CI now builds, signs, attests and publishes."
 echo "  Watch:  gh run watch \"\$(gh run list --workflow=release.yml --limit 1 --json databaseId -q '.[0].databaseId')\""
 echo "  Assets: gh release view ${NEW_TAG} --json assets -q '.assets[].name'"
-echo "  Undo:   docs/v2/betrieb/releasing.md, section 'Rollback'"
+echo "  Recovery: withdraw the faulty release, then publish a new patch version; keep published tags unchanged."

@@ -2,6 +2,7 @@ package plaud
 
 import (
 	"bufio"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -306,18 +307,7 @@ func FindChrome() string {
 func findChrome() string {
 	switch runtime.GOOS {
 	case "windows":
-		candidates := []string{
-			filepath.Join(os.Getenv("ProgramFiles"), "Google", "Chrome", "Application", "chrome.exe"),
-			filepath.Join(os.Getenv("ProgramFiles(x86)"), "Google", "Chrome", "Application", "chrome.exe"),
-			filepath.Join(os.Getenv("LOCALAPPDATA"), "Google", "Chrome", "Application", "chrome.exe"),
-			// Edge as fallback: supports CDP with the same flags.
-			filepath.Join(os.Getenv("ProgramFiles"), "Microsoft", "Edge", "Application", "msedge.exe"),
-			filepath.Join(os.Getenv("ProgramFiles(x86)"), "Microsoft", "Edge", "Application", "msedge.exe"),
-		}
-		for _, p := range candidates {
-			if p == "" {
-				continue // env var was empty
-			}
+		for _, p := range windowsBrowserCandidates(os.Getenv) {
 			if _, err := os.Stat(p); err == nil {
 				return p
 			}
@@ -359,6 +349,30 @@ func findChrome() string {
 		}
 	}
 	return ""
+}
+
+// An absent or relative installation root must never turn browser discovery
+// into execution of a program from the current working directory.
+func windowsBrowserCandidates(getenv func(string) string) []string {
+	locations := []struct {
+		variable string
+		parts    []string
+	}{
+		{"ProgramFiles", []string{"Google", "Chrome", "Application", "chrome.exe"}},
+		{"ProgramFiles(x86)", []string{"Google", "Chrome", "Application", "chrome.exe"}},
+		{"LOCALAPPDATA", []string{"Google", "Chrome", "Application", "chrome.exe"}},
+		{"ProgramFiles", []string{"Microsoft", "Edge", "Application", "msedge.exe"}},
+		{"ProgramFiles(x86)", []string{"Microsoft", "Edge", "Application", "msedge.exe"}},
+	}
+	var candidates []string
+	for _, location := range locations {
+		base := getenv(location.variable)
+		if !filepath.IsAbs(base) {
+			continue
+		}
+		candidates = append(candidates, filepath.Join(append([]string{base}, location.parts...)...))
+	}
+	return candidates
 }
 
 // sanitizePlaudToken normalizes a raw bearer value read from browser
@@ -582,7 +596,7 @@ func cdpEvaluate(wsURL, expression string) (string, error) {
 
 	// Send Runtime.evaluate command.
 	reqJSON := fmt.Sprintf(`{"id":1,"method":"Runtime.evaluate","params":{"expression":%q,"returnByValue":true}}`, expression)
-	if _, err := conn.Write([]byte(cdpFrame(reqJSON))); err != nil {
+	if _, err := conn.Write(cdpFrame(reqJSON)); err != nil {
 		return "", fmt.Errorf("send CDP command: %w", err)
 	}
 
@@ -663,8 +677,12 @@ func cdpFrame(payload string) []byte {
 	l := len(data)
 	if l < 126 {
 		frame = append(frame, byte(l)|0x80) // masked
+	} else if l <= 65535 {
+		frame = append(frame, 126|0x80)
+		frame = binary.BigEndian.AppendUint16(frame, uint16(l))
 	} else {
-		frame = append(frame, 126|0x80, byte(l>>8), byte(l))
+		frame = append(frame, 127|0x80)
+		frame = binary.BigEndian.AppendUint64(frame, uint64(l))
 	}
 	mask := []byte{0x37, 0xfa, 0x21, 0x3d} // arbitrary mask
 	frame = append(frame, mask...)
@@ -711,13 +729,13 @@ func OpenPlaudLogin() error {
 func OpenBrowser(url string) error {
 	switch runtime.GOOS {
 	case "darwin":
-		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
+		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL.
 		return exec.Command("open", url).Start()
 	case "windows":
-		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
+		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL.
 		return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
 	case "linux":
-		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
+		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL.
 		return exec.Command("xdg-open", url).Start()
 	default:
 		return fmt.Errorf("unsupported platform: %s", runtime.GOOS)

@@ -15,9 +15,8 @@ type BackgroundRetry struct {
 	wg     sync.WaitGroup
 	done   chan struct{}
 
-	// OnLog is called for each log message from the background goroutine.
-	// If nil, messages are discarded.
-	OnLog func(msg string)
+	logMu sync.RWMutex
+	onLog func(msg string)
 }
 
 // StartBackgroundRetry launches a background goroutine that processes the
@@ -31,7 +30,7 @@ func StartBackgroundRetry(queuePath string, cfg *Config, interval time.Duration,
 	q := NewQueue(queuePath)
 
 	uploadFn := func(entry QueueEntry) error {
-		_, err := Upload(cfg, PayloadFromQueueEntry(entry))
+		_, err := RetryUpload(cfg, entry)
 		return err
 	}
 
@@ -45,15 +44,18 @@ func StartBackgroundRetry(queuePath string, cfg *Config, interval time.Duration,
 	bg.runner.Backoff = DefaultBackoff(interval, 5*time.Minute)
 
 	bg.runner.OnRetry = func(entry QueueEntry, err error, removed bool) {
-		if bg.OnLog == nil {
+		bg.logMu.RLock()
+		onLog := bg.onLog
+		bg.logMu.RUnlock()
+		if onLog == nil {
 			return
 		}
 		if err == nil {
-			bg.OnLog(fmt.Sprintf("[bg-retry] SUCCESS: %s", entry.ID))
+			onLog(fmt.Sprintf("[bg-retry] SUCCESS: %s", entry.ID))
 		} else if removed {
-			bg.OnLog(fmt.Sprintf("[bg-retry] DROPPED: %s, max retries exceeded", entry.ID))
+			onLog(fmt.Sprintf("[bg-retry] DROPPED: %s, max retries exceeded", entry.ID))
 		} else {
-			bg.OnLog(fmt.Sprintf("[bg-retry] FAILED: %s, attempt %d: %v", entry.ID, entry.RetryCount+1, err))
+			onLog(fmt.Sprintf("[bg-retry] FAILED: %s, attempt %d: %v", entry.ID, entry.RetryCount+1, err))
 		}
 	}
 
@@ -113,4 +115,11 @@ func (bg *BackgroundRetry) Running() bool {
 	default:
 		return true
 	}
+}
+
+// SetOnLog safely updates the background retry log callback while it is running.
+func (bg *BackgroundRetry) SetOnLog(onLog func(string)) {
+	bg.logMu.Lock()
+	defer bg.logMu.Unlock()
+	bg.onLog = onLog
 }

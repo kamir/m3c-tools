@@ -38,8 +38,8 @@ on:
       - "go.sum"
       - ".github/workflows/windows-gate.yml"
       - "scripts/test-gate-windows.sh"
+  # Stacked review branches need the same native checks before reaching master.
   pull_request:
-    branches: [main, master]
 
 # Concurrency: one run per ref, and a superseded pull-request run is cancelled.
 # The group carries a LITERAL prefix rather than ${{ github.workflow }}, because
@@ -146,6 +146,9 @@ jobs:
       - name: go vet (Windows)
         run: go vet ./...
 
+      - name: Configuration and secret checks (Windows)
+        run: go test -count=1 -timeout=300s ./pkg/config ./pkg/er1 ./cmd/secretctl
+
       - name: Run the WHOLE trust surface (opt-out, env-clean)
         # NOTE: no -run filter: this is intentional and enforced by drift-guard.
         # -json so the parity check can count executed tests; tee keeps a
@@ -220,6 +223,9 @@ jobs:
             exit 1
           fi
           echo "OK: windows-trust runs whole-package, no -run allow-list."
+
+      - name: Configuration and secret checks (Linux)
+        run: go test -count=1 -timeout=300s ./pkg/config ./pkg/er1 ./cmd/secretctl
 
       # (2) Parity: run the same set on Linux, compare executed-test counts.
       - name: Linux run of the same trust set (-json)

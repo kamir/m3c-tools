@@ -62,7 +62,8 @@ func cmdVerify(args []string, stdout, stderr io.Writer) int {
 	asked := 0
 	for _, h := range entry.Holders {
 		if h.Kind == "cloud-run" {
-			fmt.Fprintf(tw, "%s\tn/a\tn/a\tuebersprungen\n", h.ID)
+			fmt.Fprintf(tw, "%s\tn/a\tn/a\tNICHT PRUEFBAR (cloud-run)\n", h.ID)
+			bad++
 			continue
 		}
 		val, err := ReadHolder(h)
@@ -94,10 +95,10 @@ func cmdVerify(args []string, stdout, stderr io.Writer) int {
 	_ = tw.Flush()
 
 	fmt.Fprintf(stdout, "\n%d Orte befragt", asked)
-	if bad > 0 {
+	if bad > 0 || asked == 0 {
 		fmt.Fprintf(stdout, ", %d nicht wie erwartet.\n", bad)
 		if *old {
-			fmt.Fprintln(stdout, "Solange ein alter Wert noch angenommen wird, hat die Rotation nichts bewirkt.")
+			fmt.Fprintln(stdout, "Die Ablehnung alter Werte ist nicht fuer alle Ablagen nachgewiesen.")
 		}
 		return 1
 	}

@@ -12,10 +12,8 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -388,49 +386,3 @@ func (t *TrayApp) fireAction(action ActionType, data string) {
 }
 
 // (Profile menu and history submenu removed for Windows MVP: Plaud sync only)
-
-// openURL opens a URL in the default browser.
-// SEC-M11: Windows uses rundll32 url.dll,FileProtocolHandler (URL as a separate
-// argv element), NOT `cmd /c start`, which shell-interprets &, |, ^, %% chars in the URL.
-func (t *TrayApp) openURL(url string) {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
-	case "linux":
-		cmd = exec.Command("xdg-open", url)
-	default:
-		cmd = exec.Command("open", url)
-	}
-	if err := cmd.Start(); err != nil {
-		log.Printf("[tray] failed to open URL %s: %v", url, err)
-	}
-}
-
-// openFile opens a file with the system default application.
-func (t *TrayApp) openFile(path string) {
-	// Ensure the parent directory exists.
-	if dir := filepath.Dir(path); dir != "" {
-		_ = os.MkdirAll(dir, 0700)
-	}
-	// Ensure the file exists (create empty if needed for log files).
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		if strings.HasSuffix(path, ".log") {
-			_ = os.WriteFile(path, []byte{}, 0600)
-		}
-	}
-
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "windows":
-		// SEC-M11: avoid the cmd.exe metacharacter surface (see openURL).
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", path)
-	case "linux":
-		cmd = exec.Command("xdg-open", path)
-	default:
-		cmd = exec.Command("open", path)
-	}
-	if err := cmd.Start(); err != nil {
-		log.Printf("[tray] failed to open file %s: %v", path, err)
-	}
-}

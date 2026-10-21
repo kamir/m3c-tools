@@ -23,11 +23,13 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
@@ -128,15 +130,20 @@ func runExportKit(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
-	// Build the kit in a temp staging dir, scrub, then move into place, so a
-	// scrub failure never leaves a half-written kit.
-	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
+	// Validate the filename before embedding it in the verification shell script.
+	skbName := filepath.Base(*bundlePath)
+	if !safeKitBundleName(skbName) {
+		fmt.Fprintln(stderr, "export-verification-kit: bundle filename must be a portable .skb name using letters, digits, @, +, _, - and dots")
+		return exitGeneric
+	}
+
+	// Scrub generated content before writing any kit files.
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
 	if err := os.MkdirAll(*outDir, 0o755); err != nil {
 		fmt.Fprintf(stderr, "export-verification-kit: mkdir %s: %v\n", *outDir, err)
 		return exitGeneric
 	}
 
-	skbName := filepath.Base(*bundlePath)
 	metaName := filepath.Base(defaultMetaSidecar(skbName))
 	hasRevocations := *revocationsPath != ""
 
@@ -187,9 +194,16 @@ func runExportKit(args []string, stdout, stderr io.Writer) int {
 		}
 	}
 
-	// Write everything.
-	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
-	if err := os.WriteFile(filepath.Join(*outDir, skbName), skbBytes, 0o644); err != nil {
+	kitRoot, err := os.OpenRoot(*outDir)
+	if err != nil {
+		fmt.Fprintf(stderr, "export-verification-kit: open output directory: %v\n", err)
+		return exitGeneric
+	}
+	defer kitRoot.Close()
+
+	// Refuse existing files and symlinks; never overwrite another artifact.
+	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
+	if err := writeNewKitFile(kitRoot, skbName, skbBytes, 0o644); err != nil {
 		fmt.Fprintf(stderr, "export-verification-kit: write skb: %v\n", err)
 		return exitGeneric
 	}
@@ -198,7 +212,7 @@ func runExportKit(args []string, stdout, stderr io.Writer) int {
 		if name == "verify.sh" {
 			mode = 0o755
 		}
-		if err := os.WriteFile(filepath.Join(*outDir, name), data, mode); err != nil {
+		if err := writeNewKitFile(kitRoot, name, data, mode); err != nil {
 			fmt.Fprintf(stderr, "export-verification-kit: write %s: %v\n", name, err)
 			return exitGeneric
 		}
@@ -206,7 +220,8 @@ func runExportKit(args []string, stdout, stderr io.Writer) int {
 
 	if *makeZip {
 		zipPath := strings.TrimRight(*outDir, "/") + ".zip"
-		if err := zipDir(*outDir, zipPath); err != nil {
+		files[skbName] = skbBytes
+		if err := zipKitFiles(files, zipPath); err != nil {
 			fmt.Fprintf(stderr, "export-verification-kit: zip: %v\n", err)
 			return exitGeneric
 		}
@@ -291,6 +306,41 @@ func renderVerifyMD(res *verify.VerifyResult, skbName, authorID, authorFP string
 	return b.String()
 }
 
+// safeKitBundleName permits only portable characters safe in the generated shell
+// command. Windows device names are reserved even when followed by an extension.
+func safeKitBundleName(name string) bool {
+	if !strings.HasSuffix(name, ".skb") || strings.HasPrefix(name, ".") {
+		return false
+	}
+	for _, c := range name {
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', strings.ContainsRune("@+_-.", c):
+		default:
+			return false
+		}
+	}
+	stem, _, _ := strings.Cut(strings.ToUpper(name), ".")
+	if stem == "CON" || stem == "PRN" || stem == "AUX" || stem == "NUL" {
+		return false
+	}
+	if len(stem) == 4 && (strings.HasPrefix(stem, "COM") || strings.HasPrefix(stem, "LPT")) && stem[3] >= '0' && stem[3] <= '9' {
+		return false
+	}
+	return true
+}
+
+func writeNewKitFile(root *os.Root, name string, data []byte, mode os.FileMode) error {
+	f, err := root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode)
+	if err != nil {
+		return err
+	}
+	n, writeErr := f.Write(data)
+	if writeErr == nil && n != len(data) {
+		writeErr = io.ErrShortWrite
+	}
+	return errors.Join(writeErr, f.Close())
+}
+
 // renderVerifyScript writes a POSIX verify.sh that resolves paths relative to
 // itself so the kit is location-independent.
 func renderVerifyScript(skbName string, hasRevocations bool) string {
@@ -343,30 +393,30 @@ func scrubSecrets(name string, data []byte) error {
 	return nil
 }
 
-// zipDir writes every file in dir to zipPath, preserving verify.sh's exec bit.
-func zipDir(dir, zipPath string) error {
-	zf, err := os.Create(zipPath)
+// zipKitFiles packages only the verified bundle and scrubbed generated bytes.
+// The destination must be new, so existing archives and symlinks are preserved.
+func zipKitFiles(files map[string][]byte, zipPath string) (err error) {
+	root, err := os.OpenRoot(filepath.Dir(zipPath))
 	if err != nil {
 		return err
 	}
-	defer zf.Close()
+	defer func() { err = errors.Join(err, root.Close()) }()
+	zf, err := root.OpenFile(filepath.Base(zipPath), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, zf.Close()) }()
 	zw := zip.NewWriter(zf)
-	defer zw.Close()
+	defer func() { err = errors.Join(err, zw.Close()) }()
 
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return err
+	names := make([]string, 0, len(files))
+	for name := range files {
+		names = append(names, name)
 	}
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(dir, e.Name()))
-		if err != nil {
-			return err
-		}
-		hdr := &zip.FileHeader{Name: e.Name(), Method: zip.Deflate}
-		if e.Name() == "verify.sh" {
+	sort.Strings(names)
+	for _, name := range names {
+		hdr := &zip.FileHeader{Name: name, Method: zip.Deflate}
+		if name == "verify.sh" {
 			hdr.SetMode(0o755)
 		} else {
 			hdr.SetMode(0o644)
@@ -375,7 +425,7 @@ func zipDir(dir, zipPath string) error {
 		if err != nil {
 			return err
 		}
-		if _, err := w.Write(data); err != nil {
+		if _, err := w.Write(files[name]); err != nil {
 			return err
 		}
 	}

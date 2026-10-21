@@ -1,5 +1,7 @@
 # Scheduling the skillctl revocation sweep (SPEC-0251 §5 / SPEC-0247)
 
+[Deutsch](README.de.md) | [English](README.md)
+
 `skillctl verify --all --quarantine` re-verifies every installed skill against
 the SPEC-0188 §7 trust chain **online** (so it catches server-side revocations)
 and moves any trust-failing managed skill out of `~/.claude/skills/` into the

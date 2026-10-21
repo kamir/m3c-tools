@@ -89,7 +89,7 @@ func RecordTimed(duration time.Duration) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return EncodeWAV(samples), nil
+	return encodeWAV(samples)
 }
 
 // RecordUntilStop captures audio until the stop channel is closed or
@@ -145,7 +145,7 @@ func RecordTimedWithStop(stop <-chan struct{}, maxSeconds int) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return EncodeWAV(samples), nil
+	return encodeWAV(samples)
 }
 
 // RecordWithLevels captures audio until the stop channel is closed or

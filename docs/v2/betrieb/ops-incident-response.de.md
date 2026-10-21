@@ -1,5 +1,7 @@
 # Ops-Runbook: kompromittierter Schlüssel, kompromittiertes Registry
 
+Sprachen / Languages: [Deutsch](ops-incident-response.de.md) | [English](ops-incident-response.en.md)
+
 Was zu tun ist, wenn ein Autorenschlüssel, ein Registry-Schlüssel oder das
 Registry selbst in fremde Hände geraten ist.
 

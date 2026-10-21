@@ -315,3 +315,28 @@ func TestStoreToER1_FailsGracefully(t *testing.T) {
 		t.Errorf("queue file should exist at %s", queuePath)
 	}
 }
+
+func TestStoreToER1_DoesNotClaimQueuedWhenPersistenceFails(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("M3C_ER1_KEYCHAIN", "off")
+	t.Setenv("ER1_DEVICE_TOKEN", "")
+	t.Setenv("ER1_API_KEY", "test-key")
+	t.Setenv("ER1_API_URL", "https://127.0.0.1:19999/nonexistent")
+	dir := filepath.Join(tmpHome, ".m3c-tools")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "queue.json")
+	if err := os.WriteFile(path, []byte("corrupt queue"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	result := StoreToER1(&CaptureData{Channel: impression.Idea, Timestamp: time.Now(), TranscriptText: "private capture"})
+	if result.Success || result.Queued {
+		t.Fatalf("persistence failure claimed upload or retry success: %+v", result)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil || string(content) != "corrupt queue" {
+		t.Fatalf("unreadable queue overwritten: %q %v", content, err)
+	}
+}

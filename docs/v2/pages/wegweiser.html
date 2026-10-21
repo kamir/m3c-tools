@@ -2,14 +2,14 @@
      NICHT von Hand aendern: scripts/check-docpages.sh erzeugt diese Datei
      neu und vergleicht sie mit dem Baum. Eine Handaenderung faellt dort auf.
      Quelle der Form: tools/release-templates/docpage.template.html -->
-<title>Die Dokumentation nach Rollen / the documentation, by role</title>
+<title>Dokumentation nach Rollen</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@500;600&display=swap">
 <style>
 :root{
   --bg:#f5f7f8; --surface:#ffffff; --surface-2:#eef2f4;
   --ink:#182029; --ink-soft:#59656f; --line:#dde3e8; --line-soft:#e9edf0;
   --accent:#0d6e6b; --accent-soft:#e2f0ef;
-  --warn:#8d5a13; --warn-soft:#fbf1e0; 
+  --warn:#8d5a13; --warn-soft:#fbf1e0;
   --stop:#9c2f2f; --ok:#1e6a45;
   --term-bg:#131c24; --term-fg:#c9d6e0; --term-dim:#7c8f9e; --term-line:#25333f;
   --rail:248px;
@@ -198,7 +198,7 @@ table.check tr.done td:not(:first-child){opacity:.5; text-decoration:line-throug
   --term-bg:#ffffff; --term-fg:#000000; --term-dim:#4a555e; --term-line:#98a1a8;
 }
 
-/* Bauliches: gilt auf Papier und in der Druckansicht gleichermassen. */
+/* Bauliches: gilt auf Papier und in der Druckansicht / Print view gleichermassen. */
 @media print{
   .rail,.copy,.flavorbar{display:none !important}
   .shell{grid-template-columns:1fr}
@@ -271,21 +271,21 @@ table.check tr.done td:not(:first-child){opacity:.5; text-decoration:line-throug
 
 </style>
 
-<div class="shell">
+<div class="shell" lang="de">
   <aside class="rail">
     <div class="brand">
-      <p class="kicker">Ops-Runbook</p>
-      <h1>Die Dokumentation nach Rollen / the documentation, by role</h1>
+      <p class="kicker">Dokumentation / Documentation</p>
+      <h1>Dokumentation nach Rollen</h1>
       <p class="meta">docs/v2/index.md</p>
     </div>
     <div class="flavorbar" id="flavorbar" hidden>
-      <button type="button" id="flavorbtn" aria-pressed="false"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M4.5 6V2.6h7V6"/><rect x="2" y="6" width="12" height="5" rx="1.1"/><path d="M4.5 10h7v3.4h-7z"/></svg><span>Druckansicht</span></button>
-      <button type="button" id="printbtn">Drucken</button>
+      <button type="button" id="flavorbtn" aria-pressed="false"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M4.5 6V2.6h7V6"/><rect x="2" y="6" width="12" height="5" rx="1.1"/><path d="M4.5 10h7v3.4h-7z"/></svg><span>Druckansicht / Print view</span></button>
+      <button type="button" id="printbtn">Drucken / Print</button>
     </div>
-    <div class="mobiletop"><button id="navtoggle" type="button" aria-expanded="false">Inhalt anzeigen</button></div>
-    <nav id="nav" aria-label="Abschnitte"><ol id="navlist"></ol></nav>
+    <div class="mobiletop"><button id="navtoggle" type="button" aria-expanded="false">Inhalt anzeigen / Show contents</button></div>
+    <nav id="nav" aria-label="Abschnitte / Sections"><ol id="navlist"></ol></nav>
     <div class="progress" id="progress" hidden>
-      <span><b id="pdone">0</b> von <b id="ptotal">8</b> Voraussetzungen abgehakt</span>
+      <span><b id="pdone">0</b> von <b id="ptotal">8</b> Voraussetzungen abgehakt / prerequisites checked</span>
       <span class="bar"><i id="pbar"></i></span>
     </div>
   </aside>
@@ -296,62 +296,48 @@ table.check tr.done td:not(:first-child){opacity:.5; text-decoration:line-throug
   </main>
 </div>
 
-<script id="src" type="text/markdown"># Wegweiser: die Dokumentation nach Rollen / the documentation, by role
+<script id="src" type="text/markdown"># Wegweiser: Dokumentation nach Rollen
 
-Diese Seite beantwortet eine Frage: **wer bist du, und welche Seite brauchst du
-jetzt?** Die tor-gebundenen Dateien liegen an ihrem Rollenplatz unter `docs/v2/`
-und werden von hier verlinkt, nie kopiert.
+Sprachen / Languages: [Deutsch](index.md) | [English](index.en.md)
 
-This page answers one question: **who are you, and which page do you need right
-now?** The gate-bound files live at their role place under `docs/v2/` and are
-linked from here, never copied.
+Diese Seite hilft bei der Auswahl der passenden Anleitung. Sie richtet sich an
+Personen, die das Repository erstmals öffnen oder eine bestimmte Seite suchen.
+Referenzen liegen unter `referenz/`, Anleitungen unter `nutzer/`, Betriebsanleitungen
+unter `betrieb/`; Programm-, Dienst- und Komponentenindizes liegen unter `docs/`.
 
-Zielgruppe: jede Person, die dieses Repository zum ersten Mal oeffnet, und jede,
-die eine bestimmte Seite sucht und nicht weiss, wo sie liegt.
+## Verbindliche Inhalte und Sprachfassungen
 
-Rolle: alle · Sprache: DE/EN · Stand: 2026-09-16
+Deutsch und Englisch enthalten dieselben fachlichen Aussagen. Beide Fassungen
+werden gemeinsam geprüft. Die implementierungsbezogenen Prüfungen lesen weiterhin
+die bestehenden Originalpfade: docaudit, verbaudit, exitaudit, tutorial-smoke und
+check-index. `check-doc-languages.py` prüft die Sprachpaare, ihre nach dem Review
+gespeicherten Prüfsummen und identische Codebeispiele. Die Prüfsummen erkennen
+nachträgliche Änderungen; sie beweisen keine korrekte Übersetzung.
+`check-docpages` hält die erzeugten HTML-Seiten mit ihren Quellen synchron.
 
-## Die Grundregel in einem Satz
+## Nach Rolle einsteigen
 
-**Tor-gebundene Seiten werden verlinkt, nie kopiert:** die Manuals, das
-Verb-Register, die Indizes, die Tutorials und die Ops-Runbooks tragen maschinelle
-Pruefungen (docaudit, verbaudit, exitaudit, tutorial-smoke, check-index,
-check-docpages), und ein Duplikat waere ab der zweiten Aenderung eine zweite,
-abweichende Aussage.
-
-Entschieden am 2026-09-16, in zwei Runden: zuerst wurde `docs/v2/` additiv
-aufgebaut, dann zog der Bestand in der Umzugs-PR um. Seither ist `docs/v2/`
-kanonisch: Referenz unter `referenz/`, Tutorials unter `nutzer/`, Runbooks
-unter `betrieb/`; die Indizes bleiben unter `docs/`, der fruehere
-Prosa-Bestand liegt unkanonisch unter `docs/old/`.
-
-## Wer bist du, was suchst du, wohin gehst du
-
-| Wer bist du | Was suchst du | Wohin gehst du |
+| Rolle | Gesuchter Inhalt | Einstieg |
 |---|---|---|
-| **Nutzerin / Nutzer** | m3c-tools installieren, erste Aufnahme, Menueleisten-App, die drei Tutorials | [Anleitung: der Einstieg (DE)](nutzer/einstieg.de.md) |
-| **Entwicklerin / Entwickler** | Architektur, Pakete, Datenfluss | [Reference: architecture overview (EN)](entwickler/architecture.md) |
-| **Entwicklerin / Entwickler** | bauen, testen, die Tore, beitragen | [Guide: developer setup, build, test, gates (EN)](entwickler/getting-started.md) |
-| **Betrieb** | Registry betreiben, Token, Backup, Monitoring, Incident, Release | [Ops-Ueberblick: Betrieb und Runbooks (DE)](betrieb/ueberblick.de.md) |
-| **Sicherheit / CISO** | Vertrauensmodell, Threat Model, Nachweise, Decks | [Ueberblick: Sicherheits- und Vertrauensmodell (DE)](sicherheit/ueberblick.de.md) |
+| Nutzung | Installation, erste Aufnahme, Menüleisten-App und Tutorials | [Einstieg](nutzer/einstieg.de.md) |
+| Entwicklung | Architektur, Pakete und Datenfluss | [Architekturübersicht](entwickler/architecture.de.md) |
+| Entwicklung | Bauen, testen, Qualitätsprüfungen und Beiträge | [Entwicklungsumgebung](entwickler/getting-started.de.md) |
+| Betrieb | Registry, Token, Sicherung, Monitoring und Vorfälle | [Betriebsübersicht](betrieb/ueberblick.de.md) |
+| Sicherheit / CISO | Vertrauensmodell, Bedrohungen und Nachweise | [Sicherheitsübersicht](sicherheit/ueberblick.de.md) |
 
-## Direktzugriffe / direct routes
+## Direktzugriffe
 
-| Seite | Was sie ist | Sprache |
-|---|---|---|
-| [Manual: m3c-tools](referenz/manual-m3c-tools.md) | jedes Kommando, jedes Flag, jede Konfigurationsvariable; docaudit-getort | EN |
-| [Manual: skillctl](referenz/manual-skillctl.md) | der volle Trust-Lebenszyklus, Kommando fuer Kommando; docaudit- und exitaudit-getort | EN |
-| [CLI-VERBS](referenz/CLI-VERBS.md) | das Allokationsregister der skillctl-Verben; verbaudit-getort | EN |
-| [Program-Index](../program-index.md) · [Service-Index](../service-index.md) · [Component-Index](../component-index.md) | was man startet, was laeuft, woraus alles gebaut ist; Index-Tor auf Program und Component | EN |
-| [Tutorial Szenario 01](nutzer/tutorial-szenario-01-eigene-skills-mehrere-maschinen.de.md) · [Szenario 02](nutzer/tutorial-szenario-02-erster-signierter-skill.de.md) · [Katas und Test Ride](nutzer/tutorial-katas-und-test-ride.de.md) | die drei gefuehrten Tutorials; Szenario 01 und 02 sind tutorial-smoke-getort | DE |
-| [Ops-Runbook: Mensch-Agent-Team](betrieb/ops-human-agent-team.de.md) | das Einrichtungs-Runbook, auch als [Doku-Seite](pages/ops-human-agent-team.html) | DE |
-| [Runbook: skillctl-sim](entwickler/skillctl-sim.md) | die Trust-Plane-Simulation lesen | EN |
-| [Reference: secretctl](entwickler/secretctl.md) | wer ein Geheimnis haelt und ob es noch gilt; liest und vergleicht, druckt nie einen Wert; check-docpages-getort | EN |
-| [Acceptance und Handover: der skillctl-Lebenszyklus](betrieb/acceptance-skillctl-lifecycle.md) | der Leitfaden hinter dem Protokoll, mit dem Windows-Schnelltest und den zwei Bahnen fuer zwei Personen, auch als [Doku-Seite](pages/betrieb-acceptance-skillctl-lifecycle.html); check-docpages-getort | EN |
-| [QA-Abnahme: skillctl auf Linux](betrieb/QA-abnahme-skillctl-linux.de.md) | dasselbe fuer einen Host, auf dem die Linux-Proben wirklich existieren, mit zwei Stufen mehr, auch als [Doku-Seite](pages/betrieb-qa-abnahme-skillctl-linux.html); check-docpages-getort | DE |
-| [QA-Abnahme: skillctl auf Windows](betrieb/QA-abnahme-skillctl-windows.de.md) | das Protokoll zum Ausdrucken, Ankreuzen und Unterschreiben, auch als [Doku-Seite](pages/betrieb-qa-abnahme-skillctl-windows.html); check-docpages-getort | DE |
-| [Runbook: die Audit-Spur](sicherheit/audit-spur.de.md) | die drei Traeger audit, auditlog, translog konsolidiert | DE |
-| [docs/security/](../security/required-checks.txt) | Backlogs, Baselines und die Namensbindung der Pflicht-Checks | EN |
+| Seite | Inhalt |
+|---|---|
+| [m3c-tools-Handbuch](referenz/manual-m3c-tools.de.md) | Alle Befehle, Flags und Konfigurationsvariablen; Original durch docaudit geprüft |
+| [skillctl-Handbuch](referenz/manual-skillctl.de.md) | Vollständiger Vertrauenslebenszyklus; Original durch docaudit und exitaudit geprüft |
+| [CLI-Verben](referenz/CLI-VERBS.de.md) | Zuordnung der skillctl-Verben; Original durch verbaudit geprüft |
+| [Programme](../program-index.de.md) · [Dienste](../service-index.de.md) · [Komponenten](../component-index.de.md) | Ausführbare Programme, laufende Dienste und Bibliotheken; Programm- und Komponentenoriginal durch check-index geprüft |
+| [Szenario 01](nutzer/tutorial-szenario-01-eigene-skills-mehrere-maschinen.de.md) · [Szenario 02](nutzer/tutorial-szenario-02-erster-signierter-skill.de.md) · [Katas und Test Ride](nutzer/tutorial-katas-und-test-ride.de.md) | Geführte Tutorials; Szenarien 01 und 02 durch tutorial-smoke geprüft |
+| [skillctl-sim](entwickler/skillctl-sim.de.md) | Simulation der Vertrauensebene auswerten |
+| [secretctl](entwickler/secretctl.de.md) | Halter und Aktualität von Geheimnissen prüfen, ohne Werte auszugeben |
+| [Audit-Spur](sicherheit/audit-spur.de.md) | Die drei Protokollträger audit, auditlog und translog |
+| [Technische Sicherheitsnachweise](../security/required-checks.txt) | Scanner-Baselines, Release-Evidence-Schema und Pflichtprüfungen |
 </script>
 <!-- Integritaet ueber SRI: der Hash ist an den Bytes von cdnjs gerechnet
      (sha256 15fabce5b65898b32b03f5ed25e9f891a729ad4c0d6d877110a7744aa847a894).
@@ -379,7 +365,7 @@ Prosa-Bestand liegt unkanonisch unter `docs/old/`.
     function apply(){
       document.documentElement.setAttribute('data-flavor', on ? 'druck' : 'schirm');
       btn.setAttribute('aria-pressed', String(on));
-      btn.querySelector('span').textContent = on ? 'Druckansicht an' : 'Druckansicht';
+      btn.querySelector('span').textContent = on ? 'Druckansicht an / Print view on' : 'Druckansicht / Print view';
     }
     btn.addEventListener('click', function(){
       on = !on;
@@ -448,18 +434,18 @@ Prosa-Bestand liegt unkanonisch unter `docs/old/`.
     var b = document.createElement('button');
     b.type = 'button';
     b.className = 'copy';
-    var label = isRun ? 'Kommando' : 'kopieren';
+    var label = isRun ? 'Kommando / Command' : 'kopieren / Copy';
     b.innerHTML = ICON_COPY + '<span>' + label + '</span>';
-    b.setAttribute('aria-label', (isRun ? 'Kommando' : 'Block') + ' in die Zwischenablage kopieren');
+    b.setAttribute('aria-label', (isRun ? 'Kommando' : 'Block') + ' in die Zwischenablage kopieren / Copy to clipboard');
     b.addEventListener('click', function(){
       var text = isRun ? commandOf(pre.textContent) : pre.textContent.replace(/\s+$/,'');
       writeClipboard(text).then(function(){
         b.dataset.state = 'ok';
-        b.innerHTML = ICON_OK + '<span>kopiert</span>';
+        b.innerHTML = ICON_OK + '<span>kopiert / Copied</span>';
       }).catch(function(){
         // Klappt es nicht, wird der Text markiert: dann tut es Cmd+C.
         b.dataset.state = 'fail';
-        b.innerHTML = ICON_COPY + '<span>markiert, Cmd+C</span>';
+        b.innerHTML = ICON_COPY + '<span>markiert / Selected, Cmd+C</span>';
         var r = document.createRange();
         r.selectNodeContents(pre);
         var sel = window.getSelection();
@@ -479,6 +465,29 @@ Prosa-Bestand liegt unkanonisch unter `docs/old/`.
   marked.setOptions({ gfm: true, breaks: false });
   doc.innerHTML = marked.parse(raw);
 
+  // Markdown links are relative to their source, not this generated page.
+  var sourceUrl = new URL("../index.md", window.location.href);
+  var documentPages = {"../betrieb/runbook-m3c-tools-capture.de.md": "betrieb-runbook-m3c-tools-capture.html", "../betrieb/runbook-m3c-tools-capture.en.md": "betrieb-runbook-m3c-tools-capture.en.html", "../betrieb/ueberblick.de.md": "betrieb-ueberblick.html", "../betrieb/ueberblick.en.md": "betrieb-ueberblick.en.html", "../entwickler/architecture.de.md": "entwickler-architecture.de.html", "../entwickler/architecture.md": "entwickler-architecture.html", "../entwickler/getting-started.de.md": "entwickler-getting-started.de.html", "../entwickler/getting-started.md": "entwickler-getting-started.html", "../entwickler/secretctl.de.md": "entwickler-secretctl.de.html", "../entwickler/secretctl.md": "entwickler-secretctl.html", "../entwickler/skillctl-sim.de.md": "entwickler-skillctl-sim.de.html", "../entwickler/skillctl-sim.md": "entwickler-skillctl-sim.html", "../index.en.md": "wegweiser.en.html", "../index.md": "wegweiser.html", "../nutzer/einstieg.de.md": "nutzer-einstieg.html", "../nutzer/einstieg.en.md": "nutzer-einstieg.en.html", "../sicherheit/audit-spur.de.md": "sicherheit-audit-spur.html", "../sicherheit/audit-spur.en.md": "sicherheit-audit-spur.en.html", "../sicherheit/ueberblick.de.md": "sicherheit-ueberblick.html", "../sicherheit/ueberblick.en.md": "sicherheit-ueberblick.en.html"};
+  doc.querySelectorAll('a[href], img[src]').forEach(function (element) {
+    var attribute = element.tagName === 'IMG' ? 'src' : 'href';
+    var value = element.getAttribute(attribute);
+    if (!value || /^(?:#|[a-z][a-z0-9+.-]*:|\/\/)/i.test(value)) return;
+    var target = new URL(value, sourceUrl);
+    Object.keys(documentPages).some(function (source) {
+      var original = new URL(source, window.location.href);
+      if (original.pathname !== target.pathname) return false;
+      var rendered = new URL(documentPages[source], window.location.href);
+      rendered.hash = target.hash;
+      rendered.search = target.search;
+      target = rendered;
+      return true;
+    });
+    if (target.protocol !== 'file:' && /[.]md$/.test(target.pathname)) {
+      target.pathname = target.pathname.replace(/[.]md$/, '.html');
+    }
+    element.setAttribute(attribute, target.href);
+  });
+
   // Anker wie auf GitHub, damit die Verweise im Dokument selbst greifen.
   function slug(t) {
     return t.toLowerCase().replace(/[^\p{L}\p{N}\s-]/gu, '').trim().replace(/\s+/g, '-');
@@ -491,9 +500,9 @@ Prosa-Bestand liegt unkanonisch unter `docs/old/`.
     var box = document.createElement('div');
     box.className = 'term';
     var txt = pre.textContent;
-    var label = /^\s*\$/m.test(txt) ? 'gelaufen' : (/^(skillctl|git|curl|irm|export|tools\/)/m.test(txt) ? 'kommando' : 'ausgabe');
+    var label = /^\s*\$/m.test(txt) ? 'gelaufen / Executed' : (/^(skillctl|git|curl|irm|export|tools\/)/m.test(txt) ? 'kommando / Command' : 'ausgabe / Output');
     if (/^\s*\{/.test(txt)) label = 'json';
-    if (/^##\s/m.test(txt)) label = 'vorlage';
+    if (/^##\s/m.test(txt)) label = 'vorlage / Template';
     var strip = document.createElement('div');
     strip.className = 'strip';
     var tag = document.createElement('span');
@@ -502,7 +511,7 @@ Prosa-Bestand liegt unkanonisch unter `docs/old/`.
     pre.parentNode.insertBefore(box, pre);
     box.appendChild(strip);
     box.appendChild(pre);
-    addCopy(strip, pre, label === 'gelaufen');
+    addCopy(strip, pre, label === 'gelaufen / Executed');
   });
 
   // Tabellen duerfen seitlich scrollen, die Seite nie.
@@ -612,7 +621,7 @@ Prosa-Bestand liegt unkanonisch unter `docs/old/`.
   toggle.addEventListener('click', function () {
     var open = toggle.getAttribute('aria-expanded') === 'true';
     toggle.setAttribute('aria-expanded', String(!open));
-    toggle.textContent = open ? 'Inhalt anzeigen' : 'Inhalt verbergen';
+    toggle.textContent = open ? 'Inhalt anzeigen / Show contents' : 'Inhalt verbergen / Hide contents';
     apply();
   });
   window.addEventListener('resize', apply);
@@ -620,6 +629,7 @@ Prosa-Bestand liegt unkanonisch unter `docs/old/`.
 
   document.getElementById('foot').textContent =
     'Erzeugt aus docs/v2/index.md mit tools/docpage.sh. Diese Seite rendert die Datei; ' +
-    'massgeblich ist die Datei im Repository, nicht diese Fassung.';
+    'massgeblich ist die Datei im Repository, nicht diese Fassung. ' +
+    'Generated from docs/v2/index.md with tools/docpage.sh. The repository file is authoritative.';
 })();
 </script>

@@ -79,7 +79,10 @@ CAMEL="[a-z0-9_]($NAMES)([^a-z]|$)|($NAMES)[A-Z]"
 # the certificate runbook now comes from ${GCP_ACCOUNT:?...} and the publisher
 # runbook's recipient is a form field. An exemption postpones a decision; those
 # two are decided.
-EXEMPT_LINES='(PRODUCT_PUBLISHER|plaudDeferForTranscript|mirkos-braindump)'
+# A historical scanner fingerprint is an immutable pointer, not a persona.
+# Only the reviewed commit/path/rule/line in its machine-readable file is exempt;
+# another commit, filename, suffix or line remains subject to this gate.
+EXEMPT_LINES='(PRODUCT_PUBLISHER|plaudDeferForTranscript|mirkos-braindump)|^\.gitleaksignore:[0-9]+:ab11e26f1879acdd167b107896c10e01c2f02658:demo/kup-training/artifacts/keys/mirko\.priv:private-key:1$'
 
 # Two more classes that a name list alone would never catch, both found by
 # reading the tree rather than by trusting the first grep.

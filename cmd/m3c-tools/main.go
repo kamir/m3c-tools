@@ -90,41 +90,48 @@ func main() {
 		}
 	}
 
-	// Load config: layered per SPEC-0175.
-	//   1. Active profile (account-scoped: ER1_*, POCKET_API_KEY, etc)
-	//   2. Global preferences (~/.m3c-tools/preferences.env: Whisper, retry, …)
-	//      with back-compat fallback to the legacy ~/.m3c-tools.env file
-	//   3. Project-local .env (development overrides, opt-in via M3C_DOTENV=1)
-	//
-	// LoadDotenv does NOT overwrite vars that are already set, so the order
-	// here means: profile wins, then preferences fill gaps, then .env tops up.
-	// One-shot migration moves the legacy file into the canonical location.
-	if _, migErr := config.MigrateLegacyPreferences(); migErr != nil {
-		log.Printf("[config] preferences migration warning: %v", migErr)
-	}
-	pm := config.NewProfileManager()
-	if activeProfile, err := pm.ActiveProfile(); err == nil {
-		_ = pm.ApplyProfile(activeProfile)
-		log.Printf("[config] profile: %s", activeProfile.Name)
-	}
-	for _, p := range []string{config.PreferencesPath(), config.LegacyPreferencesPath()} {
-		if p != "" {
-			_ = er1.LoadDotenv(p)
+	// Informational commands must not migrate preferences or load credentials.
+	switch command := os.Args[1]; command {
+	case "help", "--help", "-h", "version", "--version", "-v":
+		// Dispatch below without loading configuration.
+	default:
+		// Load config: layered per SPEC-0175.
+		//   1. Active profile (account-scoped: ER1_*, POCKET_API_KEY, etc)
+		//   2. Global preferences (~/.m3c-tools/preferences.env: Whisper, retry, …)
+		//      with back-compat fallback to the legacy ~/.m3c-tools.env file
+		//   3. Project-local .env (development overrides, opt-in via M3C_DOTENV=1)
+		//
+		// LoadDotenv does NOT overwrite vars that are already set, so the order
+		// here means: profile wins, then preferences fill gaps, then .env tops up.
+		// One-shot migration moves the legacy file into the canonical location.
+		if _, migErr := config.MigrateLegacyPreferences(); migErr != nil {
+			log.Printf("[config] preferences migration warning: %v", migErr)
 		}
-	}
-	// AUDIT-0001 finding 2.7: the project-local .env belongs to whatever
-	// directory the CLI was started in, which is not necessarily one the user
-	// owns. It only counts with an explicit M3C_DOTENV=1 opt-in.
-	_ = er1.LoadDotenvUntrusted(".env")
+		pm := config.NewProfileManager()
+		if activeProfile, err := pm.ActiveProfile(); err == nil {
+			_ = pm.ApplyProfile(activeProfile)
+			log.Printf("[config] profile: %s", activeProfile.Name)
+		}
+		for _, p := range []string{config.PreferencesPath(), config.LegacyPreferencesPath()} {
+			if p != "" {
+				_ = er1.LoadDotenv(p)
+			}
+		}
+		// AUDIT-0001 finding 2.7: the project-local .env belongs to whatever
+		// directory the CLI was started in, which is not necessarily one the user
+		// owns. It only counts with an explicit M3C_DOTENV=1 opt-in.
+		_ = er1.LoadDotenvUntrusted(".env")
 
-	// Load saved device token if available (SPEC-0127).
-	// This enables uploads via Bearer auth without API key.
-	if cfg := er1.LoadConfig(); cfg.ContextID != "" {
-		if dt, err := auth.Load(auth.DeviceID(), strings.SplitN(cfg.ContextID, "___", 2)[0]); err == nil && dt != nil && !dt.IsExpired() {
-			os.Setenv("ER1_DEVICE_TOKEN", dt.Token)   //nolint:errcheck // in-process env propagation; the durable device-token store is the source of truth and the key is a constant
-			os.Setenv("ER1_CONTEXT_ID", dt.ContextID) //nolint:errcheck // in-process env propagation; the durable device-token store is the source of truth and the key is a constant
-			log.Printf("[auth] device token loaded for user=%s", truncateForLog(dt.UserID, 20))
+		// Load saved device token if available (SPEC-0127).
+		// This enables uploads via Bearer auth without API key.
+		if cfg := er1.LoadConfig(); cfg.ContextID != "" {
+			if dt, err := auth.Load(auth.DeviceID(), strings.SplitN(cfg.ContextID, "___", 2)[0]); err == nil && dt != nil && !dt.IsExpired() {
+				os.Setenv("ER1_DEVICE_TOKEN", dt.Token)   //nolint:errcheck // in-process env propagation; the durable device-token store is the source of truth and the key is a constant
+				os.Setenv("ER1_CONTEXT_ID", dt.ContextID) //nolint:errcheck // in-process env propagation; the durable device-token store is the source of truth and the key is a constant
+				log.Printf("[auth] device token loaded for user=%s", truncateForLog(dt.UserID, 20))
+			}
 		}
+
 	}
 
 	switch os.Args[1] {
@@ -678,6 +685,15 @@ func cmdSetupPocketKey(args []string) {
 		fmt.Printf("Click 'Pocket Sync' in the menubar to import your %d recording%s.\n",
 			verdict.RecordingCount, plural(verdict.RecordingCount))
 	}
+}
+
+// plural is a tiny helper that mirrors setup.plural; kept inline so we don't
+// export it from pkg/setup.
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 func cmdSetup(args []string) {
@@ -1313,7 +1329,7 @@ func runAudioImportPipeline(sourceDir, dbPath, onlySourcePath string, app *menub
 		if upErr != nil {
 			summary.Failed++
 			_ = filesDB.RecordUploadError(imp.Hash, "audio", upErr.Error())
-			_, _ = er1.HandleUploadFailure(er1.DefaultQueuePath(), er1.DefaultMemoryPath(), imp.MemoryID, payload, imp.Tags, upErr)
+			_, _ = er1.HandleUploadFailure(er1.DefaultQueuePath(), er1.DefaultMemoryPath(), imp.MemoryID, payload, imp.Tags, upErr, er1Cfg)
 			log.Printf("[import] upload FAIL source=%s error=%v", imp.Source, upErr)
 			if onProgress != nil {
 				onProgress(menubar.BulkProgressEvent{
@@ -2289,9 +2305,9 @@ func cmdMenubar(args []string) {
 		5*time.Minute,
 		bgRetryCfg.MaxRetries,
 	)
-	bgRetry.OnLog = func(msg string) {
+	bgRetry.SetOnLog(func(msg string) {
 		log.Printf("%s", msg)
-	}
+	})
 	log.Printf("[bg-retry] background retry scheduler started (interval=5m, max-retries=%d)", bgRetryCfg.MaxRetries)
 
 	// Shutdown hook: stop retry scheduler, deactivate projects, stop syncer.
@@ -3686,11 +3702,9 @@ func menubarUploadER1(videoID string) (*menubar.ER1UploadResult, error) {
 	// Upload
 	cfg := er1.LoadConfig()
 	applyRuntimeER1Context(cfg)
-	resp, err := er1.Upload(cfg, payload)
+	queuePath := er1.DefaultQueuePath()
+	resp, entry, err := er1.UploadDurable(cfg, payload, queuePath, videoID)
 	if err != nil {
-		// Queue for retry on failure
-		queuePath := er1.DefaultQueuePath()
-		entry := er1.EnqueueFailure(queuePath, videoID, payload, tags, err)
 		if entry == nil {
 			return &menubar.ER1UploadResult{
 				VideoID: videoID,
@@ -3781,7 +3795,7 @@ func menubarRecordImpression(app *menubar.App, videoID string) {
 	if data, err := fetcher.FetchThumbnail(videoID); err == nil && len(data) > 0 {
 		imgData = data
 		imgPath = filepath.Join(os.TempDir(), fmt.Sprintf("m3c-thumb-%s.jpg", videoID))
-		// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
+		// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
 		if writeErr := os.WriteFile(imgPath, data, 0o644); writeErr != nil {
 			log.Printf("[record] thumbnail write failed video=%s error=%v", videoID, writeErr)
 			imgPath = ""
@@ -4060,11 +4074,15 @@ func menubarUploadPayload(app *menubar.App, label string, payload *er1.UploadPay
 
 	cfg := er1.LoadConfig()
 	applyRuntimeER1Context(cfg)
-	resp, err := er1.Upload(cfg, payload)
+	queuePath := er1.DefaultQueuePath()
+	resp, entry, err := er1.UploadDurable(cfg, payload, queuePath, label)
 	if err != nil {
-		log.Printf("[%s] ER1 upload failed (queuing): %v", label, err)
-		queuePath := er1.DefaultQueuePath()
-		er1.EnqueueFailure(queuePath, label, payload, tags, err)
+		log.Printf("[%s] ER1 upload failed: %v", label, err)
+		if entry != nil {
+			app.Notify("Upload Pending", "Capture saved locally for retry")
+		} else {
+			app.Notify("Capture Failed", "Could not save capture to the retry queue")
+		}
 		app.SetStatus(menubar.StatusIdle)
 		return
 	}
@@ -4100,17 +4118,17 @@ func menubarUploadPayload(app *menubar.App, label string, payload *er1.UploadPay
 func openURL(url string) error {
 	switch runtime.GOOS {
 	case "windows":
-		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
+		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL.
 		return exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
 	case "linux":
-		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
+		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL.
 		return exec.Command("xdg-open", url).Start()
 	default: // darwin
-		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
+		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL.
 		if err := exec.Command("open", "-a", "Google Chrome", url).Start(); err == nil {
 			return nil
 		}
-		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL. Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G204 Oeffner".
+		// #nosec G204 -- Klassenentscheidung: Plattform-Oeffner mit einer Konstante, der eigenen Serveradresse oder dem konfigurierten baseURL des Bedieners; keine fremde URL.
 		return exec.Command("open", url).Start()
 	}
 }

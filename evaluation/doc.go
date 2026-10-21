@@ -1,4 +1,4 @@
-// Package evaluation is the SPEC-0280 trust-layer evaluation harness.
+// Package evaluation is the trust-layer evaluation harness.
 //
 // It contains no production code: the measurable surface lives entirely in the
 // _test.go drivers (one per E-metric, E1–E10) plus the deterministic population
@@ -7,6 +7,6 @@
 // every driver is a test.
 //
 // See evaluation/README.md for how to run the harness and reproduce the numbers
-// in evaluation/results/, and evaluation/EVALUATION-SECTION.md for the filled
-// SPEC-0280 §4 paper-ready Evaluation section.
+// in evaluation/results/. Each metric labels synthetic inputs and measurement
+// limits explicitly.
 package evaluation

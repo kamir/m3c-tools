@@ -3,8 +3,8 @@ name: CI
 on:
   push:
     branches: [main, master]
+  # Stacked review branches need the same native checks before reaching master.
   pull_request:
-    branches: [main, master]
 
 # Concurrency: one run per ref, and a superseded pull-request run is cancelled.
 # The group carries a LITERAL prefix rather than ${{ github.workflow }}, because
@@ -62,7 +62,8 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         if: steps.classify.outputs.code == 'true'
         with:
-          # The Go version comes from go.mod and from nowhere else. Before
+          # The Go version comes from go.mod (the preferred toolchain when present,
+          # otherwise its minimum Go version). No workflow carries another pin. Before
           # 2026-09-17 it was declared in three places: this key, 28 times over
           # nine workflow files; GO_VERSION in release.yml; and go.mod's own
           # `go` and `toolchain` lines. Three copies of one number, joined by
@@ -92,6 +93,17 @@ jobs:
       - name: golangci-lint
         if: steps.classify.outputs.code == 'true'
         run: golangci-lint run --timeout=5m
+
+      - name: golangci-lint (Linux and Windows build selections)
+        if: steps.classify.outputs.code == 'true'
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          GOOS=linux GOARCH=amd64 golangci-lint run --timeout=5m
+          GOOS=windows GOARCH=amd64 golangci-lint run --timeout=5m
+
+      - name: Release-review failure contracts
+        run: bash scripts/code-review.test.sh
 
   format-gate:
     name: Format (gofmt)
@@ -187,6 +199,9 @@ jobs:
       # Authorship is explicitly NOT in scope; the script says why.
       - name: No real person's name in the tracked tree
         run: ./scripts/check-no-real-names.sh
+
+      - name: Historical scanner fingerprint exception stays narrow
+        run: bash scripts/check-no-real-names.test.sh
 
       # A workflow file that does not PARSE never runs, so no guard living
       # inside .github/workflows can catch its own file being broken. This step

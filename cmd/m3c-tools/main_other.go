@@ -47,7 +47,7 @@ func main() {
 	// help/version need no config: handle them WITHOUT loading the profile or
 	// ER1 config, so they never emit the ER1 placeholder FATAL (which would
 	// pollute clean help output, e.g. on a fresh machine or CI runner).
-	switch os.Args[1] {
+	switch command := os.Args[1]; command {
 	case "help", "--help", "-h", "version", "--version", "-v":
 		// fall through to the dispatch switch below (no config load)
 	default:
@@ -77,8 +77,12 @@ func main() {
 		// This enables uploads via Bearer auth without API key.
 		if cfg := er1.LoadConfig(); cfg.ContextID != "" {
 			if dt, err := auth.Load(auth.DeviceID(), strings.SplitN(cfg.ContextID, "___", 2)[0]); err == nil && dt != nil && !dt.IsExpired() {
-				os.Setenv("ER1_DEVICE_TOKEN", dt.Token)
-				os.Setenv("ER1_CONTEXT_ID", dt.ContextID)
+				if err := os.Setenv("ER1_DEVICE_TOKEN", dt.Token); err != nil {
+					log.Fatalf("[auth] cannot apply device token: %v", err)
+				}
+				if err := os.Setenv("ER1_CONTEXT_ID", dt.ContextID); err != nil {
+					log.Fatalf("[auth] cannot apply device context: %v", err)
+				}
 				log.Printf("[auth] device token loaded for user=%s", truncateForLog(dt.UserID, 20))
 			}
 		}
@@ -712,7 +716,9 @@ func cmdPlaudSync(recordingID string, force bool) {
 				fmt.Printf("Retrying %d recordings with missing ER1 doc_id.\n", retryCount)
 			}
 			if filesDB != nil {
-				filesDB.Close()
+				if err := filesDB.Close(); err != nil {
+					log.Printf("[tracking] close files DB: %v", err)
+				}
 			}
 			stats.LocalNew = len(ids)
 
@@ -799,7 +805,9 @@ func runPlaudSyncPipeline(client *plaud.Client, cfg *plaud.Config, recordingIDs 
 	}
 	defer func() {
 		if filesDB != nil {
-			filesDB.Close()
+			if err := filesDB.Close(); err != nil {
+				log.Printf("[tracking] close files DB: %v", err)
+			}
 		}
 	}()
 
@@ -1014,7 +1022,9 @@ func cmdLogin() {
 	}
 	nonce := make([]byte, 16)
 	if _, err := rand.Read(nonce); err != nil {
-		ln.Close()
+		if closeErr := ln.Close(); closeErr != nil {
+			log.Printf("[auth] close callback listener: %v", closeErr)
+		}
 		fmt.Fprintf(os.Stderr, "Error: could not generate callback nonce: %v\n", err)
 		os.Exit(1)
 	}
@@ -1113,7 +1123,10 @@ h2{color:#7c3aed}p{color:#94a3b8}</style></head>
 					}
 				}
 			}
-			os.Setenv("ER1_CONTEXT_ID", ctxID)
+			if err := os.Setenv("ER1_CONTEXT_ID", ctxID); err != nil {
+				fmt.Fprintf(os.Stderr, "Error: cannot apply login context: %v\n", err)
+				os.Exit(1)
+			}
 
 			// Save device token if received from aims-core callback (SPEC-0127).
 			if result.DeviceToken != "" {
@@ -1129,7 +1142,10 @@ h2{color:#7c3aed}p{color:#94a3b8}</style></head>
 				if err := auth.Save(dt); err != nil {
 					log.Printf("[auth] save device token failed: %v", err)
 				} else {
-					os.Setenv("ER1_DEVICE_TOKEN", result.DeviceToken)
+					if err := os.Setenv("ER1_DEVICE_TOKEN", result.DeviceToken); err != nil {
+						fmt.Fprintf(os.Stderr, "Error: cannot apply device token: %v\n", err)
+						os.Exit(1)
+					}
 					fmt.Printf("Device token saved for user=%s device=%s\n", truncateForLog(result.UserID, 20), auth.DeviceID())
 				}
 			}
@@ -1231,7 +1247,7 @@ func trayExtractPlaudToken(app *tray.TrayApp) (string, error) {
 	// and ActionPlaudSync both calling this function simultaneously.
 	if !atomic.CompareAndSwapInt32(&plaudChromeActive, 0, 1) {
 		log.Println("[plaud-tray-auth] Chrome auth already in progress, skipping duplicate launch")
-		return "", fmt.Errorf("Plaud Chrome auth already in progress: please wait")
+		return "", fmt.Errorf("plaud Chrome auth already in progress: please wait")
 	}
 	defer atomic.StoreInt32(&plaudChromeActive, 0)
 
@@ -1257,7 +1273,7 @@ func trayExtractPlaudToken(app *tray.TrayApp) (string, error) {
 		app.UpdateTooltip("M3C Tools: " + msg)
 	})
 	if !cdpReady {
-		return "", fmt.Errorf("Chrome started but CDP port 9222 is not responding")
+		return "", fmt.Errorf("chrome started but CDP port 9222 is not responding")
 	}
 
 	// Step 4: Poll for token while user logs in (60s timeout, 3s interval).
@@ -1288,7 +1304,7 @@ func trayPlaudSync(app *tray.TrayApp) (*plaud.SyncStats, error) {
 
 		token, authErr := trayExtractPlaudToken(app)
 		if authErr != nil {
-			return nil, fmt.Errorf("Plaud auto-auth failed: %w: open web.plaud.ai in Chrome, log in, then try again", authErr)
+			return nil, fmt.Errorf("plaud auto-auth failed: %w: open web.plaud.ai in Chrome, log in, then try again", authErr)
 		}
 
 		// Save the extracted token for future use.
@@ -1332,7 +1348,9 @@ func trayPlaudSync(app *tray.TrayApp) (*plaud.SyncStats, error) {
 		}
 	}
 	if filesDB != nil {
-		filesDB.Close()
+		if err := filesDB.Close(); err != nil {
+			log.Printf("[tracking] close files DB: %v", err)
+		}
 	}
 	stats.LocalNew = len(ids)
 
@@ -1464,7 +1482,9 @@ func cmdTrayApp(args []string) {
 
 	// Set up log file.
 	if logDir := filepath.Dir(logPath); logDir != "" && logDir != "." {
-		os.MkdirAll(logDir, 0700)
+		if err := os.MkdirAll(logDir, 0700); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: cannot create log directory: %v\n", err)
+		}
 	}
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0600)
 	if err != nil {
@@ -1566,7 +1586,7 @@ func cmdTrayApp(args []string) {
 						log.Printf("[tray] Plaud auth failed: %v", authErr)
 						app.Notify("Plaud Auth Failed", "Open web.plaud.ai in Chrome, log in, then try again")
 						app.UpdatePlaudStatus(false, "auth failed")
-						app.UpdateTooltip(fmt.Sprintf("M3C Tools: Plaud auth failed"))
+						app.UpdateTooltip("M3C Tools: Plaud auth failed")
 						go func() {
 							time.Sleep(10 * time.Second)
 							app.ResetTooltip()
@@ -1604,7 +1624,11 @@ func cmdTrayApp(args []string) {
 			case tray.ActionSignOut:
 				// FEAT-0014: Sign out, clear runtime state.
 				log.Println("[tray] sign out")
-				os.Setenv("ER1_CONTEXT_ID", "")
+				if err := os.Setenv("ER1_CONTEXT_ID", ""); err != nil {
+					log.Printf("[auth] cannot clear login context: %v", err)
+					app.Notify("Sign Out Failed", "Could not clear the login context; restart the app")
+					return
+				}
 				app.UpdateLoginState(false, "")
 				app.UpdateTooltip("M3C Tools, Signed out")
 				go func() {
@@ -1647,29 +1671,6 @@ func cmdTrayApp(args []string) {
 
 	// systray.Run() blocks: this must be the last call.
 	app.Run()
-}
-
-// openFileWithDefault opens a file with the system default application.
-// BUG-0091: Ensures log file viewer works on all platforms.
-func openFileWithDefault(path string) {
-	if path == "" {
-		log.Printf("[tray] openFileWithDefault called with empty path")
-		return
-	}
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "windows":
-		// SEC-M11: avoid "cmd /c start": route through rundll32's
-		// FileProtocolHandler so the path is never shell-interpreted.
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", path)
-	case "linux":
-		cmd = exec.Command("xdg-open", path)
-	default:
-		cmd = exec.Command("open", path)
-	}
-	if err := cmd.Start(); err != nil {
-		log.Printf("[tray] failed to open file %s: %v", path, err)
-	}
 }
 
 // openBrowserURL opens a URL in the platform default browser.
@@ -1762,6 +1763,11 @@ func trayLoginER1(app *tray.TrayApp) {
 
 // completeTrayLogin finalizes a successful login.
 func completeTrayLogin(app *tray.TrayApp, contextID string) {
+	if err := os.Setenv("ER1_CONTEXT_ID", contextID); err != nil {
+		log.Printf("[auth] cannot apply login context: %v", err)
+		app.Notify("Sign In Failed", "Could not apply the login context; try signing in again")
+		return
+	}
 	log.Printf("[auth] login success context_id=%s", contextID)
 
 	// Persist context_id to the active profile.
@@ -1779,7 +1785,6 @@ func completeTrayLogin(app *tray.TrayApp, contextID string) {
 	}
 
 	// Update runtime state and menu.
-	os.Setenv("ER1_CONTEXT_ID", contextID)
 	app.UpdateLoginState(true, contextID)
 	app.UpdateTooltip(fmt.Sprintf("M3C Tools: Signed in (%s...)", contextID[:min(8, len(contextID))]))
 	go func() {
@@ -1822,7 +1827,9 @@ func startTrayLoginCallbackServer() (*http.Server, string, <-chan trayLoginResul
 	}
 	nonce := make([]byte, 16)
 	if _, err := rand.Read(nonce); err != nil {
-		ln.Close()
+		if closeErr := ln.Close(); closeErr != nil {
+			log.Printf("[auth] close callback listener: %v", closeErr)
+		}
 		return nil, "", nil, nil, fmt.Errorf("generate callback nonce: %w", err)
 	}
 	callbackPath := "/m3c-login-" + hex.EncodeToString(nonce)

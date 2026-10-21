@@ -171,7 +171,7 @@ func (t *Tracker) Add(filenames ...string) error {
 
 	// Ensure parent directory exists.
 	dir := filepath.Dir(t.path)
-	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700). Herleitung: docs/security/gosec-backlog.md, "Klassenentscheidung G301/G306".
+	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("create tracker dir: %w", err)
 	}
@@ -182,11 +182,14 @@ func (t *Tracker) Add(filenames ...string) error {
 		needsHeader = true
 	}
 
-	f, err := os.OpenFile(t.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	f, err := os.OpenFile(t.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
 	if err != nil {
 		return fmt.Errorf("open tracker file for writing: %w", err)
 	}
 	defer f.Close()
+	if err := f.Chmod(0600); err != nil {
+		return fmt.Errorf("restrict tracker permissions: %w", err)
+	}
 
 	if needsHeader {
 		header := fmt.Sprintf(trackerHeader, time.Now().UTC().Format(time.RFC3339))

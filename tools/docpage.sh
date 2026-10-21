@@ -19,15 +19,14 @@
 #
 # Aufruf:
 #   tools/docpage.sh <markdown> [ausgabe.html]
-#   tools/docpage.sh docs/v2/betrieb/ops-human-agent-team.de.md docs/v2/pages/ops-human-agent-team.html
+#   tools/docpage.sh docs/v2/index.md docs/v2/pages/wegweiser.html
 #
 # Vorgabe fuer die Ausgabe: docs/v2/pages/<basisname-ohne-sprachsuffix>.html
 # Der eigene Ordner ist Absicht: Jekyll uebersetzt docs/x.md nach x.html, eine
 # erzeugte docs/x.html wuerde also mit der Uebersetzung kollidieren.
 #
 # Der Titel kommt aus der ersten H1 der Markdown, ohne die Gattungsangabe
-# davor: "# Ops-Runbook: ein Mensch-Agent-Team einrichten" wird zu
-# "Ein Mensch-Agent-Team einrichten". Mit --title laesst sich das ueberschreiben.
+# davor: "# Nutzer: Einstieg" wird zu "Einstieg". Mit --title laesst sich das ueberschreiben.
 #
 # Exit: 0 erzeugt · 1 ein Fehler · 2 Aufrufproblem
 set -euo pipefail
@@ -52,7 +51,6 @@ TPL="${ROOT}/tools/release-templates/docpage.template.html"
 [ -f "$TPL" ] || { echo "Vorlage fehlt: $TPL" >&2; exit 1; }
 
 BASE="$(basename "$SRC" .md)"
-BASE="${BASE%.de}"
 OUT="${ARGS[1]:-${ROOT}/docs/v2/pages/${BASE}.html}"
 
 # Titel aus der ersten H1, die Gattungsangabe vor dem Doppelpunkt faellt weg.
@@ -79,7 +77,8 @@ if grep -qi '</script' "$SRC"; then
 fi
 
 python3 - "$TPL" "$SRC" "$OUT" "$TITLE" "$REL" <<'PY'
-import io, sys
+import io, sys, json, os, re
+from pathlib import Path
 tpl, src, out, title, rel = sys.argv[1:6]
 page = io.open(tpl, encoding="utf-8").read()
 md = io.open(src, encoding="utf-8").read()
@@ -87,13 +86,24 @@ for name, value in (("__TITLE__", title), ("__SOURCE__", rel)):
     if name not in page:
         sys.exit("Platzhalter %s fehlt in der Vorlage" % name)
     page = page.replace(name, value)
+root = Path(tpl).resolve().parents[2]
+register = (root / "scripts/check-docpages.sh").read_text(encoding="utf-8")
+pairs = re.findall(r"(?m)^(docs/[^|\n]+)\|(docs/[^\n]+[.]html)$", register)
+logical_output = next((rendered for original, rendered in pairs if original == rel), "docs/v2/pages/" + Path(out).name)
+outdir = (root / logical_output).parent
+links = {}
+for original, rendered in pairs:
+    links[os.path.relpath(root / original, outdir)] = os.path.relpath(root / rendered, outdir)
+page = page.replace("__DOC_LANG__", "de" if rel.endswith(".de.md") or rel == "docs/v2/index.md" else "en")
+page = page.replace("__DOC_SOURCE__", json.dumps(os.path.relpath(Path(src).resolve(), outdir)))
+page = page.replace("__DOC_LINKS__", json.dumps(links, ensure_ascii=True, sort_keys=True))
 page = page.replace("__MARKDOWN__", md)
 io.open(out, "w", encoding="utf-8").write(page)
 PY
 
 # Tore auf dem Ergebnis. Ein nicht ersetzter Platzhalter waere im Browser erst
 # sichtbar, wenn jemand die Seite oeffnet, und das ist zu spaet.
-for ph in __TITLE__ __SOURCE__ __MARKDOWN__; do
+for ph in __TITLE__ __SOURCE__ __MARKDOWN__ __DOC_SOURCE__ __DOC_LINKS__ __DOC_LANG__; do
   if grep -q "$ph" "$OUT"; then
     echo "FEHLER: Platzhalter $ph steht noch in $OUT" >&2
     exit 1

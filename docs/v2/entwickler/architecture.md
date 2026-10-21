@@ -1,5 +1,7 @@
 # Reference: architecture overview
 
+Sprachen / Languages: [Deutsch](architecture.de.md) | [English](architecture.md)
+
 What the repository is made of and how data flows through it, on one page,
 with links into the gate-checked indexes for every detail. Where this page and
 an index disagree, the index wins: [program-index](../../program-index.md) and
@@ -22,7 +24,7 @@ capture plane is allowed cgo and macOS-only features.
 ER1 is the personal knowledge server every capture flows into: an external
 HTTP service (aims-core), not built in this repo, that stores multimodal
 observations; `pkg/er1` is its client
-([requirements](../../old/requirements-er1-integration.md),
+([client implementation](../../../pkg/er1/),
 [service-index](../../service-index.md#external-dependency-er1--aims-core)).
 The core flow, as `CLAUDE.md` states it and the packages implement it:
 
@@ -36,14 +38,14 @@ er1.Queue.Add(entry)                 -> JSON retry queue, on failure
 
 Three properties carry the design:
 
-1. **Stdlib-only core.** `pkg/transcript`, `pkg/er1` and `pkg/impression` use
-   only the Go standard library; external dependencies (menuet, portaudio)
-   stay in POC and desktop layers (`CLAUDE.md`, "Zero external deps").
+1. **Focused Go core.** `pkg/transcript`, `pkg/er1` and `pkg/impression` implement
+   capture and document processing. Credential storage and private-file permissions
+   use explicit platform helpers; Windows ACL handling uses `golang.org/x/sys/windows`.
+   GUI and audio dependencies (menuet, portaudio) stay in the desktop layers.
 2. **No YouTube API key.** `pkg/transcript` is a complete port of
    youtube-transcript-api on YouTube's InnerTube API (the internal API the
-   YouTube clients themselves use, so no official key is needed); the port
-   surface is preserved in [go-rewrite-plan](../../old/go-rewrite-plan.md)
-   (historical).
+   YouTube clients themselves use, so no official key is needed); the API
+   is implemented in [pkg/transcript](../../../pkg/transcript/).
 3. **ER1 wants all three fields.** Uploads are multipart with
    `transcript_file_ext`, `audio_data_ext`, `image_data`; the client sends
    placeholder audio or image when the real one is absent (`pkg/er1`).
@@ -84,10 +86,10 @@ package-level responsibilities are the
 
 | Convention | Source |
 |---|---|
-| Both CLIs parse `os.Args` by hand; no cobra, no flag package. Follow the `cmdTranscript()` pattern | `CLAUDE.md`, "CLI flag parsing" |
+| m3c-tools parses arguments by hand; skillctl also uses the standard-library `flag` package. Follow the surrounding command implementation | [m3c-tools commands](../../../cmd/m3c-tools/), [skillctl commands](../../../cmd/skillctl/) |
 | A new skillctl verb is REGISTERED in [CLI-VERBS](../referenz/CLI-VERBS.md) before it is implemented; `verbaudit` turns CI red otherwise | CLI-VERBS.md, decided 2026-09-04 |
 | Exit codes are contract: the register row, the manual's `Exit:` line and `pkg/skillctl/exitcode` must agree; `exitaudit` checks all three | CLI-VERBS.md, "Columns" |
-| Tests live in `e2e/`; there are no package-level unit tests | `CLAUDE.md`, "Build & Test Commands" |
+| Package tests sit next to their implementation; end-to-end tests live in `e2e/` | [Developer setup](getting-started.md#part-b-test) |
 | Public plane ships code, private plane keeps reasoning; cross-references by ID only (SPEC-NNNN) | [CONTENT-TOPOLOGY.md](../../../CONTENT-TOPOLOGY.md) |
 
 ## Where to go next
@@ -96,7 +98,6 @@ package-level responsibilities are the
 - Every command and flag: [Manual: m3c-tools](../referenz/manual-m3c-tools.md),
   [Manual: skillctl](../referenz/manual-skillctl.md)
 - What works on which OS: [PLATFORM-DIFFERENCES](../referenz/PLATFORM-DIFFERENCES.md)
-- Historical design notes that still explain code:
-  [go-rewrite-plan](../../old/go-rewrite-plan.md),
-  [spec-plaud-er1-sync](../../old/spec-plaud-er1-sync.md),
-  [requirements-er1-integration](../../old/requirements-er1-integration.md)
+- Capture clients: [ER1](../../../pkg/er1/), [Plaud](../../../pkg/plaud/),
+  [Pocket](../../../pkg/pocket/); commands and configuration are in the
+  [m3c-tools manual](../referenz/manual-m3c-tools.md)

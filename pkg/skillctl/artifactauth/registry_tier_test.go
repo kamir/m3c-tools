@@ -35,7 +35,7 @@ func TestRegistryReadFallsBackToTheWriteTier(t *testing.T) {
 	t.Setenv("M3C_REGISTRY_TOKEN", "write-token")
 	t.Setenv("M3C_REGISTRY_RO_TOKEN", "")
 
-	got, err := New().Credential(context.Background(), "registry", "reg.example", artifact.ModeRead)
+	got, err := New().Credential(context.Background(), "registry", "", artifact.ModeRead)
 	if err != nil {
 		t.Fatal(err)
 	}

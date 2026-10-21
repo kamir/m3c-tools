@@ -1,5 +1,7 @@
 # rag-mcp-server: local workspace RAG (SPEC-0268)
 
+[Deutsch](README.de.md) | [English](README.md)
+
 Local, air-gapped semantic search over a github-backed workspace, built on
 [turbovec](https://github.com/RyanCodrai/turbovec) (TurboQuant) + a local
 embedding model (`BAAI/bge-m3`, multilingual). The shared engine lives here in

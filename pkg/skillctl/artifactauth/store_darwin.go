@@ -29,6 +29,12 @@ func ProtectedStoreName() string { return "macOS Keychain" }
 // so re-running after a token rotation does the obvious thing instead of failing
 // on a duplicate.
 func platformStore(service, account, secret string) error {
+	return storeKeychainWithCommand(service, account, secret, exec.Command)
+}
+
+// storeKeychainWithCommand keeps process construction testable without opening
+// the operator's Keychain. The production wrapper fixes the command factory.
+func storeKeychainWithCommand(service, account, secret string, command func(string, ...string) *exec.Cmd) error {
 	if strings.ContainsAny(secret, "\n\r") {
 		// A newline would end the command line inside `security -i` and turn the
 		// rest of the token into a second command. Refusing is right: no GitLab or
@@ -36,7 +42,7 @@ func platformStore(service, account, secret string) error {
 		// alternative is a half-stored credential.
 		return fmt.Errorf("artifactauth: the token contains a line break; copy it again without the surrounding whitespace")
 	}
-	cmd := exec.Command("/usr/bin/security", "-i")
+	cmd := command("/usr/bin/security", "-i")
 	cmd.Stdin = strings.NewReader(fmt.Sprintf(
 		"add-generic-password -s %s -a %s -w %s -U\n",
 		quoteKC(service), quoteKC(account), quoteKC(secret)))
@@ -50,13 +56,17 @@ func platformStore(service, account, secret string) error {
 
 // platformDelete removes the item. A missing item is not an error.
 func platformDelete(service, account string) error {
+	return deleteKeychainWithCommand(service, account, exec.Command)
+}
+
+func deleteKeychainWithCommand(service, account string, command func(string, ...string) *exec.Cmd) error {
 	// #nosec G204 -- no shell is involved, so there is nothing to inject, and both
 	// arguments are constrained before they get here: `service` comes from the
 	// internal backendCred table (fixed strings, never user input) and `account`
 	// has passed validHost, which rejects a leading dash, whitespace and control
 	// characters. The leading dash is the case that actually mattered: `security`
 	// would have read it as a flag and acted on the wrong item, silently.
-	cmd := exec.Command("/usr/bin/security", "delete-generic-password", "-s", service, "-a", account)
+	cmd := command("/usr/bin/security", "delete-generic-password", "-s", service, "-a", account)
 	var errBuf bytes.Buffer
 	cmd.Stderr = &errBuf
 	if err := cmd.Run(); err != nil {
