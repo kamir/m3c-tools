@@ -131,14 +131,12 @@ jobs:
         run: ./scripts/check-gofmt.sh
 
   ci-hygiene:
-    # A timeout, a concurrency group and a trusted-runner routing expression are
+    # A timeout, a concurrency group and an explicit hosted runner selection are
     # each invisible when absent: nothing turns red, the run simply costs more
     # or risks more. So the absence is what gets checked.
     #
-    # This job is NOT in the required contexts of master, and saying so is part
-    # of the record: it goes red on a pull request and it does not hold a merge.
-    # Making it required is a branch-protection change, which is a human act;
-    # docs/security/required-checks.txt is the tree's copy of that side.
+    # This supplemental job is not required. Runner selection and its failure
+    # contracts also run in the required Pin Guard job.
     name: CI hygiene (timeouts, concurrency, runner trust)
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -147,7 +145,7 @@ jobs:
 
       # PyYAML is preinstalled on the ubuntu runner image, measured by the fact
       # that the duplicate-key guard in pin-guard.yml imports it and runs green.
-      - name: "Guard: timeouts, concurrency groups, trusted-runner routing"
+      - name: "Guard: timeouts, concurrency groups, hosted runners"
         run: ./scripts/ci-matrix.py --check
 
       # The table itself, into the step summary, so a reviewer of a workflow
@@ -336,17 +334,8 @@ jobs:
     name: CLI/manual consistency (docaudit)
     # Pure-stdlib AST gate: it only PARSES cmd/m3c-tools and cmd/skillctl, so it
     # needs no cgo and no PortAudio, and can run on the cheap runner.
-    # Routed: the self-hosted Linux runner when it is switched on and the head
-    # is trusted, a GitHub-hosted runner otherwise. The single blessed spelling,
-    # held verbatim by scripts/ci-matrix.py --check; what each clause is for is
-    # in that script's header under TRUSTED_LINUX.
-    #
-    # Measured on the master2 canary, run 35225881517, with a warm cache:
-    # `go mod tidy` + `git diff --exit-code` under 1s, and the same two cross
-    # builds this file runs in 26s against 69s on ubuntu-latest. The cold first
-    # run (35225260272) needed 169s for those builds, so the gain is the warm
-    # module and build cache of a machine that persists, not the machine itself.
-    runs-on: ${{ (vars.CI_SELF_HOSTED != 'on' || (github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]'))) && fromJSON('["ubuntu-latest"]') || fromJSON('["self-hosted","Linux","X64","master2"]') }}
+    # Public PR code runs on a fresh GitHub-hosted worker.
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -354,27 +343,6 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
-          # cache: false, only on the routed jobs. Measured on run 35226968408,
-          # per step, on master2:
-          #
-          #     docs-gate       setup-go 125s   own work  14s   total 162s
-          #     mod-tidy-check  setup-go 128s   own work   1s   total 148s
-          #     build-cross     setup-go 139s   own work  15s   total 176s
-          #
-          # Six sevenths of the time was actions/setup-go moving a module and
-          # build cache in and out of GitHub's cache service, plus a Post step
-          # to save it again. A self-hosted runner is a PERSISTENT machine: its
-          # GOMODCACHE, whose path the canary prints, is still there from the
-          # previous job. (The path is not quoted here: it is a home directory
-          # on a real machine, and this tree does not carry those.) Restoring
-          # that cache over the network
-          # pays for something the machine already has, and then pays again to
-          # upload it.
-          #
-          # The GitHub-hosted fallback loses the cache when this is false, and
-          # that is the right trade in both directions: a fork or dependabot
-          # head is rare, and correctness there does not depend on a warm cache.
-          cache: false
 
       - name: docaudit unit tests
         run: go test -count=1 ./cmd/docaudit/
@@ -709,17 +677,8 @@ jobs:
   # during a release build.
   mod-tidy-check:
     name: go mod tidy is a no-op
-    # Routed: the self-hosted Linux runner when it is switched on and the head
-    # is trusted, a GitHub-hosted runner otherwise. The single blessed spelling,
-    # held verbatim by scripts/ci-matrix.py --check; what each clause is for is
-    # in that script's header under TRUSTED_LINUX.
-    #
-    # Measured on the master2 canary, run 35225881517, with a warm cache:
-    # `go mod tidy` + `git diff --exit-code` under 1s, and the same two cross
-    # builds this file runs in 26s against 69s on ubuntu-latest. The cold first
-    # run (35225260272) needed 169s for those builds, so the gain is the warm
-    # module and build cache of a machine that persists, not the machine itself.
-    runs-on: ${{ (vars.CI_SELF_HOSTED != 'on' || (github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]'))) && fromJSON('["ubuntu-latest"]') || fromJSON('["self-hosted","Linux","X64","master2"]') }}
+    # Public PR code runs on a fresh GitHub-hosted worker.
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -727,27 +686,6 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
-          # cache: false, only on the routed jobs. Measured on run 35226968408,
-          # per step, on master2:
-          #
-          #     docs-gate       setup-go 125s   own work  14s   total 162s
-          #     mod-tidy-check  setup-go 128s   own work   1s   total 148s
-          #     build-cross     setup-go 139s   own work  15s   total 176s
-          #
-          # Six sevenths of the time was actions/setup-go moving a module and
-          # build cache in and out of GitHub's cache service, plus a Post step
-          # to save it again. A self-hosted runner is a PERSISTENT machine: its
-          # GOMODCACHE, whose path the canary prints, is still there from the
-          # previous job. (The path is not quoted here: it is a home directory
-          # on a real machine, and this tree does not carry those.) Restoring
-          # that cache over the network
-          # pays for something the machine already has, and then pays again to
-          # upload it.
-          #
-          # The GitHub-hosted fallback loses the cache when this is false, and
-          # that is the right trade in both directions: a fork or dependabot
-          # head is rare, and correctness there does not depend on a warm cache.
-          cache: false
 
       - name: go mod tidy && git diff --exit-code
         run: |
@@ -879,17 +817,8 @@ jobs:
 
   build-cross:
     name: Build Cross-Platform (Linux + Windows)
-    # Routed: the self-hosted Linux runner when it is switched on and the head
-    # is trusted, a GitHub-hosted runner otherwise. The single blessed spelling,
-    # held verbatim by scripts/ci-matrix.py --check; what each clause is for is
-    # in that script's header under TRUSTED_LINUX.
-    #
-    # Measured on the master2 canary, run 35225881517, with a warm cache:
-    # `go mod tidy` + `git diff --exit-code` under 1s, and the same two cross
-    # builds this file runs in 26s against 69s on ubuntu-latest. The cold first
-    # run (35225260272) needed 169s for those builds, so the gain is the warm
-    # module and build cache of a machine that persists, not the machine itself.
-    runs-on: ${{ (vars.CI_SELF_HOSTED != 'on' || (github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.event.pull_request.user.login == 'dependabot[bot]'))) && fromJSON('["ubuntu-latest"]') || fromJSON('["self-hosted","Linux","X64","master2"]') }}
+    # Public PR code runs on a fresh GitHub-hosted worker.
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     # No `needs:`, deliberately. Until 2026-09-17 this job waited for lint and
     # test. Neither edge carried data: nothing here downloads an artifact from
@@ -909,27 +838,6 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
-          # cache: false, only on the routed jobs. Measured on run 35226968408,
-          # per step, on master2:
-          #
-          #     docs-gate       setup-go 125s   own work  14s   total 162s
-          #     mod-tidy-check  setup-go 128s   own work   1s   total 148s
-          #     build-cross     setup-go 139s   own work  15s   total 176s
-          #
-          # Six sevenths of the time was actions/setup-go moving a module and
-          # build cache in and out of GitHub's cache service, plus a Post step
-          # to save it again. A self-hosted runner is a PERSISTENT machine: its
-          # GOMODCACHE, whose path the canary prints, is still there from the
-          # previous job. (The path is not quoted here: it is a home directory
-          # on a real machine, and this tree does not carry those.) Restoring
-          # that cache over the network
-          # pays for something the machine already has, and then pays again to
-          # upload it.
-          #
-          # The GitHub-hosted fallback loses the cache when this is false, and
-          # that is the right trade in both directions: a fork or dependabot
-          # head is rare, and correctness there does not depend on a warm cache.
-          cache: false
 
       - name: Build linux/amd64
         run: |

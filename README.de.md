@@ -424,31 +424,29 @@ Auch die CI-Jobs selbst werden geprüft:
 ```bash
 make ci-matrix        # one row per CI job: runner, timeout, triggers, required?
 make check-ci-matrix  # every job has a timeout, every PR workflow a concurrency
-                      # group, every self-hosted runs-on the trusted-routing guard
+                      # group, every local runner selection hosted
 ```
 
 Ein Lauf von `make ci-matrix` gegenüber demselben Ziel auf `origin/master` liefert den
 Vorher-Nachher-Nachweis einer Workflowänderung. Das Verfahren steht im Kopf von
 [`scripts/ci-matrix.py`](scripts/ci-matrix.py).
 
-### Den selbst gehosteten Linux-Runner abschalten
+### Gehostete CI-Runner
 
-Bei `CI_SELF_HOSTED=on` laufen drei Pflichtprüfungen auf dem Linux-Runner `master2`:
-CLI/manual consistency (docaudit), go mod tidy is a no-op und Build Cross-Platform (Linux + Windows).
-Es gibt genau einen solchen Runner; die drei Jobs laufen daher nacheinander.
+Die Repository-Workflows wählen geprüfte GitHub-gehostete Runner. Die Linux-Jobs für
+Dokumentation, Modul-Konsistenz und Cross-Builds verwenden `ubuntu-latest`; keine
+Repository-Variable schaltet sie auf einen dauerhaften eigenen Rechner um. Der frühere
+Canary und die Umschaltanleitung liegen im privaten Maintenance-Archiv.
 
-Ist der Rechner aus oder unerreichbar, melden die Prüfungen kein Ergebnis und blockieren Merges.
-Die Rückkehr benötigt weder Commit noch Review:
-
-```bash
-gh variable delete CI_SELF_HOSTED     # everything returns to GitHub-hosted runners
-gh variable set CI_SELF_HOSTED --body on   # and back again
-```
-
-Das Routing ist optional. Eine fehlende Variable führt zu langsameren und teureren gehosteten
-Runnern, statt zu einer Blockade. Fork-PRs und PRs von `dependabot[bot]` laufen immer auf
-GitHub-gehosteten Runnern: Selbst gehostete Runner sind dauerhafte Rechner, und Dependabot
-ändert gerade den Drittcode, den `go test` anschließend ausführt.
+Der verpflichtende Pin-Guard-Job führt die Runner-Policy-Tests aus und prüft die festen
+Runner-Auswahlen einschließlich aller Runner-Matrixwerte. Eigene Labels, Runner-Gruppen
+und unaufgelöste Ausdrücke werden abgelehnt. Wiederverwendbare Workflows wählen ihre
+Runner selbst und benötigen eine gesonderte Prüfung. Ein PR kann Workflows und diesen
+Checker ändern; der Checker ist deshalb eine zusätzliche Review-Kontrolle. Die
+unabhängige Scheduling-Grenze besteht darin, dieses öffentliche Repository ohne eigene
+Runner-Registrierungen zu betreiben. Eine erneute Registrierung öffnet diese Grenze
+wieder. Das Entfernen einer Registrierung löscht keinen Host und beendet keinen
+bereits laufenden Prozess.
 
 ### Branches und Worktrees
 

@@ -83,6 +83,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      - name: Runner-policy failure contracts
+        run: python3 scripts/ci-matrix.test.py
+
+      - name: Hosted runner selection, timeouts and concurrency
+        run: python3 scripts/ci-matrix.py --check
+
       # (1) CD-T1: every remote action ref must be a 40-hex commit SHA.
       #
       # NARROW EXCEPTION (CD-T5): the SLSA github-generator REUSABLE WORKFLOWS
