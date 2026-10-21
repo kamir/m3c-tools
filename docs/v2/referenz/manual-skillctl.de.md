@@ -607,6 +607,7 @@ dem angegebenen ed25519-Schlüssel und sendet sie per POST an
 
 | Flag | Zweck |
 |------|---------|
+| `-json` | Versionierten Registry-Annahme-Receipt ausgeben. `--json` zuerst setzen, um Fehler beim Parsen der Flags einzuschließen. |
 | `-level green\|yellow\|red` | Governance-Urteil. **Verpflichtend.** |
 | `-rationale` | Freitextbegründung als Audit-Metadaten, **nicht** Teil der signierten Bytes. **Verpflichtend.** |
 | `-reviewer-id` | Identitäts-ID des Reviewers, etwa `id:reviewer@m3c`. **Verpflichtend.** |
@@ -620,6 +621,32 @@ skillctl attest sha256:<hex> --level green --rationale "reviewed" \
   --reviewer-id id:reviewer@m3c --key ~/.config/m3c/skill-keys/reviewer.priv \
   --registry https://aims.example.com/api/skills
 ```
+
+Umgebungs-Credentials für HTTP-Registry-Lesezugriffe und `attest` benötigen einen
+passenden `M3C_REGISTRY_TOKEN_ORIGIN`-Pin (Schema, Hostname, effektiver Port), unabhängig
+von `--registry`. Ungebundene Lesezugriffe bleiben anonym; `attest` bricht vor dem
+Laden des Schlüssels oder Signieren ab. Siehe
+[Migration und native Store-Schalter](../betrieb/ops-registry-tokens.de.md#http-registry-credential-origin-und-migration).
+
+`--json` zuerst setzen, um einen maschinenlesbaren Receipt einschließlich Fehlern
+beim Parsen der Flags zu erhalten. Das Schema lautet
+`m3c.skillctl.attestation-receipt/v1`, mit `operation:"attest"`, `ok` und `exit_code`.
+Ein Erfolg enthält `attestation_id` aus der HTTP-201-Antwort der Registry sowie
+`bundle_digest`, `governance_level`, `reviewer_id` und `attested_at` aus der tatsächlich
+signierten POST-Nachricht. Die Zeit ist kanonisches UTC (`YYYY-MM-DDTHH:MM:SSZ`).
+Dies bestätigt die Annahme dieser Übermittlung durch die Registry; es prüft kein Bundle
+unabhängig, belegt keine Reviewer-Unabhängigkeit und stellt kein bindendes
+Governance-Urteil fest. MCP fordert diesen JSON-Vertrag an und lehnt unvollständige
+oder widersprüchliche Receipts ab, auch Werte, die nicht zum übermittelten Digest,
+zur Stufe und zum Reviewer passen. Fehlende Receipt-Felder werden nie aus der Anfrage
+ergänzt. Fehler enthalten `error`; Prozess- und JSON-Exit-Code müssen übereinstimmen.
+Die menschenlesbare Ausgabe bleibt Standard. Ein Schreibfehler des Receipts liefert
+einen Exit-Code ungleich null, auch wenn die Registry den POST schon angenommen hat;
+vor einem erneuten Versuch die Registry prüfen, um eine doppelte Übermittlung zu vermeiden.
+Antwort-Bodies werden in Fehlerdiagnosen nicht reflektiert. Dieser signierte POST
+verlangt vor dem Laden des Schlüssels HTTPS oder Loopback-HTTP, auch ohne Token.
+Redirects werden abgelehnt. Eine nicht unterstützte oder fehlerhafte Erfolgsantwort ist
+ein Fehler und kein Annahme-Receipt.
 
 Exit: `0` erfolgreich · `1` allgemeiner Fehler/Netzwerk/Nicht-2xx · `2` Aufruffehler.
 

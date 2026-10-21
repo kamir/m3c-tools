@@ -71,6 +71,7 @@ CI ist die Variable ohnehin der Normalfall:
 ```bash
 export M3C_GITLAB_RO_TOKEN='<token>'      # Git-Registry
 export M3C_REGISTRY_RO_TOKEN='<token>'    # HTTP-Registry
+export M3C_REGISTRY_TOKEN_ORIGIN='https://registry.example.com'
 ```
 
 Was wo liegt, zeigt `skillctl token list --host git.example.com`, und zwar
@@ -217,18 +218,46 @@ soll wissen, **was abläuft**, nicht **womit man sich anmeldet**.
 
 Erfüllt AC-14 aus SPEC-0407 und REQ-3.15.
 
+## HTTP-Registry: Credential-Origin und Migration
+
+Für die gemeinsamen HTTP-Registry-Leseclients und `attest` benötigt ein Umgebungstoken
+jetzt einen unabhängig konfigurierten `M3C_REGISTRY_TOKEN_ORIGIN`. Diesen vor Nutzung
+von `M3C_REGISTRY_TOKEN` oder `M3C_REGISTRY_RO_TOKEN` auf den vertrauenswürdigen
+Registry-Origin setzen, zum Beispiel `https://registry.example.com`. Der Vergleich
+bindet Schema, Hostname und effektiven Port (HTTPS standardmäßig 443, HTTP 80).
+Der Pin enthält keine Zugangsdaten, Query, Fragment oder Anwendungspfade. Er wird
+nie aus `--registry`, einem Trust-Roots-Default oder `M3C_REGISTRY_URL` abgeleitet.
+Ein anderes Ziel ändert den Pin nicht.
+
+Migration: Bestehende Konfigurationen mit Umgebungstoken müssen diesen Origin
+explizit ergänzen. Ohne gültigen passenden Pin arbeiten Leseclients anonym weiter
+und senden keinen Umgebungs-Bearer; `attest` bricht vor dem Laden des privaten
+Schlüssels, Signieren und HTTP ab. Ein anderer Host, Port oder ein anderes Schema
+benötigt eine bewusste Pin-Änderung. Credentials werden nur über HTTPS oder explizites
+Loopback-HTTP gesendet. Leseclients bleiben bei HTTP außerhalb von Loopback anonym und fragen keine
+hostgebundenen Credential-Stores ab. Attest verlangt vor dem Laden des Schlüssels
+HTTPS oder Loopback-HTTP, auch wenn kein Token konfiguriert ist. Userinfo, Query und Fragment werden vor dem
+Token-Lookup abgelehnt. Sind keine ausgewählten Umgebungstoken gesetzt, bleiben
+hostgebundene native Credentials verfügbar; die bisherige Read-only-Priorität und
+Fallback-Reihenfolge bleiben erhalten. Das Credential-Origin-Verhalten von
+GitLab/GitHub und andere Mutationstransporte wurden durch diese Änderung nicht geprüft.
+
+`M3C_TOKEN_STORE=file` oder `M3C_TEST_KEYCHAIN=0` schaltet native Credential-Lesezugriffe,
+Statusabfragen, Schreibzugriffe und Löschvorgänge für alle artifactauth-Backends
+explizit aus. Umgebungsauflösung bleibt möglich. Native Verwaltung liefert einen
+klaren Disabled-Fehler; ein neuer File-Credential-Backend wird dadurch nicht implementiert.
+Ohne beide Schalter bleibt das normale Plattformverhalten erhalten.
+`M3C_ER1_KEYCHAIN` ist keine globale Backend-Policy.
+
 ## Reihenfolge, in der gesucht wird
 
 Findet `skillctl` nichts, arbeitet es anonym weiter. Das ist Absicht: eine
 öffentliche Instanz soll ohne Einrichtung funktionieren.
 
 ```
-1. Umgebungsvariable      M3C_GITLAB_RO_TOKEN → M3C_GITLAB_TOKEN
-                          M3C_REGISTRY_RO_TOKEN → M3C_REGISTRY_TOKEN
-2. macOS-Keychain         m3c-skillctl-gitlab-ro → m3c-skillctl-gitlab
-                          m3c-skillctl-registry-ro → m3c-skillctl-registry
-3. Windows-Speicher       DPAPI, je Benutzerkonto
-4. sonst                  anonym
+Read:  RO environment -> RO host store -> WRITE environment -> WRITE host store -> anonymous
+Write: WRITE environment -> WRITE host store -> anonymous
+HTTP Registry environment tokens require M3C_REGISTRY_TOKEN_ORIGIN before lookup.
 ```
 
 Auf einem Lesepfad wird zuerst der Lesetoken gesucht und nur ersatzweise der

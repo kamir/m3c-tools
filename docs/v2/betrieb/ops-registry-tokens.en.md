@@ -72,6 +72,7 @@ is the usual choice for CI anyway:
 ```bash
 export M3C_GITLAB_RO_TOKEN='<token>'      # Git-Registry
 export M3C_REGISTRY_RO_TOKEN='<token>'    # HTTP-Registry
+export M3C_REGISTRY_TOKEN_ORIGIN='https://registry.example.com'
 ```
 
 `skillctl token list --host git.example.com` shows what is stored where,
@@ -216,18 +217,43 @@ know **what expires**, not **what credentials to use**.
 
 Satisfies AC-14 of SPEC-0407 and REQ-3.15.
 
+## HTTP Registry credential origin and migration
+
+For the shared HTTP Registry read clients and `attest`, an environment token now
+requires an independently configured `M3C_REGISTRY_TOKEN_ORIGIN`. Set it to the trusted
+Registry origin, for example `https://registry.example.com`, before using either
+`M3C_REGISTRY_TOKEN` or `M3C_REGISTRY_RO_TOKEN`. Comparison binds scheme, hostname and
+effective port (HTTPS defaults to 443, HTTP to 80). The pin contains no credentials,
+query, fragment or application path. It is never inferred from `--registry`, a
+trust-roots default or `M3C_REGISTRY_URL`. Changing the target does not change the pin.
+
+Migration: existing environment-token setups must add this origin explicitly.
+Without a valid matching pin, read clients continue anonymously and never send the
+environment bearer; `attest` fails before private-key loading, signing or HTTP.
+Changing host, port or scheme requires a deliberately changed pin. Credentials are
+sent only over HTTPS or explicit loopback HTTP. Read clients on plain HTTP outside loopback remain
+anonymous and never query host credential stores. Attest requires HTTPS or loopback
+HTTP before key loading even when no token is configured. Userinfo, query and fragment
+are refused before token lookup. Host-bound native credentials remain available
+when no selected environment token is configured; the existing read-only tier and
+fallback order are retained. GitLab/GitHub credential-origin behavior and other
+mutation transports have not been audited by this change.
+
+`M3C_TOKEN_STORE=file` or `M3C_TEST_KEYCHAIN=0` explicitly disables native credential
+reads, status probes, writes and deletes across artifactauth backends. Environment
+resolution remains available. Native management returns a clear disabled error;
+this does not implement a new file credential backend. With neither switch set,
+normal platform behavior is retained. `M3C_ER1_KEYCHAIN` is not a global backend policy.
+
 ## Lookup order
 
 If `skillctl` finds nothing, it continues anonymously. This is deliberate:
 a public instance should work without setup.
 
 ```
-1. Umgebungsvariable      M3C_GITLAB_RO_TOKEN → M3C_GITLAB_TOKEN
-                          M3C_REGISTRY_RO_TOKEN → M3C_REGISTRY_TOKEN
-2. macOS-Keychain         m3c-skillctl-gitlab-ro → m3c-skillctl-gitlab
-                          m3c-skillctl-registry-ro → m3c-skillctl-registry
-3. Windows-Speicher       DPAPI, je Benutzerkonto
-4. sonst                  anonym
+Read:  RO environment -> RO host store -> WRITE environment -> WRITE host store -> anonymous
+Write: WRITE environment -> WRITE host store -> anonymous
+HTTP Registry environment tokens require M3C_REGISTRY_TOKEN_ORIGIN before lookup.
 ```
 
 On a read path, the read token is looked up first; the write token is only

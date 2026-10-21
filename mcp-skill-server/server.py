@@ -721,9 +721,6 @@ _REMEDIATION = {
 _DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 _VALID_LEVELS = frozenset({"green", "yellow", "red"})
 
-# Human output parsing remains only for the separate attest contract.
-_ATTEST_FIELD_RE = re.compile(r"^(?P<key>attestation_id|bundle_digest|level|attested_at):\s+(?P<value>.+)$")
-
 
 def _resolve_skillctl_bin() -> tuple[str | None, str | None]:
     """Locate the skillctl binary.
@@ -827,32 +824,6 @@ def _run_skillctl_blocking(argv: list[str], timeout: int = 120) -> dict:
         "stderr": completed.stderr or "",
         "error": None,
     }
-
-
-def _parse_attest_output(stdout: str) -> dict:
-    """Pull attestation_id / bundle_digest / level / attested_at from
-    `skillctl attest` stdout."""
-    out = {
-        "attestation_id": "",
-        "bundle_digest": "",
-        "governance_level": "",
-        "attested_at": "",
-    }
-    for line in stdout.splitlines():
-        m = _ATTEST_FIELD_RE.match(line.strip())
-        if not m:
-            continue
-        key = m.group("key")
-        value = m.group("value").strip()
-        if key == "attestation_id":
-            out["attestation_id"] = value
-        elif key == "bundle_digest":
-            out["bundle_digest"] = value
-        elif key == "level":
-            out["governance_level"] = value
-        elif key == "attested_at":
-            out["attested_at"] = value
-    return out
 
 
 def _classify_failure(exit_code: int, stderr: str) -> dict:
@@ -1061,6 +1032,66 @@ async def skill_verify(
     return _do_install_or_verify(argv, timeout=timeout)
 
 
+def _decode_attest_receipt(result: dict, digest: str, level: str, reviewer_id: str) -> dict:
+    """Validate a registry POST receipt, without inferring independent review."""
+    code = result["exit_code"]
+
+    def refused(reason):
+        return {"ok": False, "exit_code": code if code != 0 else 1,
+                "process_exit_code": code, "error_class": "protocol_error", "stderr": reason,
+                "remediation": "Use a compatible skillctl with the versioned attestation receipt contract."}
+
+    def unique_object(pairs):
+        obj = {}
+        for key, value in pairs:
+            if key in obj:
+                raise ValueError("duplicate JSON field")
+            obj[key] = value
+        return obj
+
+    def reject_constant(value):
+        raise ValueError(f"invalid JSON constant: {value}")
+
+    try:
+        payload = json.loads(result["stdout"], object_pairs_hook=unique_object, parse_constant=reject_constant)
+    except (ValueError, TypeError):
+        return refused("skillctl did not emit one valid JSON receipt")
+    if not isinstance(payload, dict):
+        return refused("attestation receipt must be an object")
+    fields = {"schema", "operation", "ok", "exit_code", "attestation_id", "bundle_digest",
+              "governance_level", "reviewer_id", "attested_at", "error"}
+    if set(payload) - fields:
+        return refused("attestation receipt contains unsupported fields")
+    if payload.get("schema") != "m3c.skillctl.attestation-receipt/v1" or payload.get("operation") != "attest":
+        return refused("unsupported attestation receipt schema or operation")
+    if type(payload.get("ok")) is not bool or type(payload.get("exit_code")) is not int:
+        return refused("invalid attestation receipt status types")
+    if payload["exit_code"] != code or payload["ok"] != (code == 0):
+        return refused("attestation receipt contradicts the process exit code")
+    if code != 0:
+        if not isinstance(payload.get("error"), str) or not payload["error"].strip():
+            return refused("attestation failure lacks an error")
+        return _classify_failure(code, payload["error"])
+    if "error" in payload:
+        return refused("attestation success carries an error")
+    for field in ("attestation_id", "bundle_digest", "governance_level", "reviewer_id", "attested_at"):
+        value = payload.get(field)
+        if _validate_safe_token(value, field) or not value.strip():
+            return refused(f"attestation receipt lacks a valid {field}")
+    if not _DIGEST_RE.fullmatch(payload["bundle_digest"]):
+        return refused("attestation receipt digest is not canonical")
+    if (payload["bundle_digest"], payload["governance_level"], payload["reviewer_id"]) != (digest, level, reviewer_id):
+        return refused("attestation receipt does not match the submitted digest, level and reviewer")
+    timestamp = payload["attested_at"]
+    if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z", timestamp):
+        return refused("attestation receipt time is not canonical UTC")
+    try:
+        datetime.strptime(timestamp, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError:
+        return refused("attestation receipt time is invalid")
+    return payload
+
+
 @mcp.tool()
 async def skill_attest(
     digest: str,
@@ -1089,7 +1120,7 @@ async def skill_attest(
     remediation on failure.
     """
     # ----- input validation BEFORE exec -----
-    if not isinstance(digest, str) or not _DIGEST_RE.match(digest or ""):
+    if not isinstance(digest, str) or not _DIGEST_RE.fullmatch(digest or ""):
         return {"ok": False, "exit_code": 2, "error_class": "validation_error", "stderr": "digest must match sha256:[0-9a-f]{64}", "remediation": "Pass a canonical 'sha256:<64-hex-chars>' digest string."}
     if level not in _VALID_LEVELS:
         return {"ok": False, "exit_code": 2, "error_class": "validation_error", "stderr": f"level must be one of {sorted(_VALID_LEVELS)}", "remediation": "Use 'green', 'yellow', or 'red'."}
@@ -1108,7 +1139,7 @@ async def skill_attest(
         return {"ok": False, "exit_code": -1, "error_class": "skillctl_not_found", "stderr": bin_err, "remediation": "Install / build skillctl, or set SKILLCTL_BIN to its absolute path."}
 
     argv = [
-        skillctl, "attest", digest,
+        skillctl, "attest", "--json",
         "--level", level,
         "--rationale", rationale,
         "--reviewer-id", reviewer_id,
@@ -1117,23 +1148,13 @@ async def skill_attest(
     if registry:
         argv += ["--registry", registry]
 
+    argv.extend(["--", digest])
+
     result = _run_skillctl_blocking(argv, timeout=timeout)
     if result["error"]:
         logger.warning("skillctl attest exec error: %s", result["error"])
         return {"ok": False, "exit_code": result["exit_code"], "error_class": "exec_error", "stderr": result["error"], "remediation": "Check the server log; the skillctl process did not run to completion."}
-    if result["exit_code"] != 0:
-        return _classify_failure(result["exit_code"], result["stderr"])
-
-    parsed = _parse_attest_output(result["stdout"])
-    return {
-        "ok": True,
-        "exit_code": 0,
-        "attestation_id": parsed["attestation_id"],
-        "bundle_digest": parsed["bundle_digest"] or digest,
-        "governance_level": parsed["governance_level"] or level,
-        "reviewer_id": reviewer_id,
-        "attested_at": parsed["attested_at"],
-    }
+    return _decode_attest_receipt(result, digest, level, reviewer_id)
 
 
 # === end SPEC-0188 S11-mcp ===

@@ -47,8 +47,8 @@
     {
       "de": "docs/v2/betrieb/ops-registry-tokens.de.md",
       "en": "docs/v2/betrieb/ops-registry-tokens.en.md",
-      "de_sha256": "ca99950e07edbfb73e86f47fceb16a8f898294616134047562c54ca20c1dd5ce",
-      "en_sha256": "1ed780733b41676090b7984700975086c15455190a277f4b5c972792d8ab46e5"
+      "de_sha256": "c9a64c6c2f1a34e88f60e4717ac40f860b2b9784f42f1115f3535bf228eaf300",
+      "en_sha256": "f68b98922c3b651dc59d3b9ec595ef39c997cd432cc34ffd8854d95f4d252916"
     },
     {
       "de": "docs/v2/betrieb/runbook-m3c-tools-capture.de.md",
@@ -179,8 +179,8 @@
     {
       "de": "docs/v2/referenz/manual-skillctl.de.md",
       "en": "docs/v2/referenz/manual-skillctl.md",
-      "de_sha256": "fe518d1013822eb02d80a01804ef430c410afe23d07b42750f2d6851f152f4c9",
-      "en_sha256": "4df0e867f5dc851761fdccd604551e4ae1f61aef49db3f12ea6f35ba7112bfba"
+      "de_sha256": "f40d7041f17f635cdaee2e7d8a8410851f2758b86dff41a1e759f114ded8fc98",
+      "en_sha256": "d917ff72219baa0f99f345528529d17fb3d87b7e198620a26ed0a6a30c9f4c01"
     },
     {
       "de": "docs/v2/sicherheit/audit-spur.de.md",

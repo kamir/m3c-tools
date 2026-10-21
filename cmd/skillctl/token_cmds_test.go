@@ -115,11 +115,22 @@ func TestTokenRmRequiresBackendAndHost(t *testing.T) {
 // who believes a local delete stopped a leaked token has been actively misled.
 func TestTokenRmSaysItIsNotRevocation(t *testing.T) {
 	var out, errb bytes.Buffer
-	if rc := runTokenRm([]string{"--backend", "gitlab", "--host", "nothing.invalid"}, &out, &errb); rc != exitOK {
+	removed := false
+	remove := func(backend string, tier artifactauth.Tier, host string) error {
+		if backend != "gitlab" || tier != artifactauth.TierWrite || host != "nothing.invalid" {
+			t.Fatal("incorrect remove request")
+		}
+		removed = true
+		return nil
+	}
+	if rc := runTokenRmWithDelete([]string{"--backend", "gitlab", "--host", "nothing.invalid"}, &out, &errb, remove); rc != exitOK {
 		t.Fatalf("rc = %d (stderr %s)", rc, errb.String())
 	}
 	if !strings.Contains(out.String(), "not revocation") {
 		t.Errorf("the output must not let a local delete pass for a revocation: %q", out.String())
+	}
+	if !removed {
+		t.Fatal("delete helper not called")
 	}
 }
 
@@ -140,5 +151,14 @@ func TestTokenHelpMentionsStdin(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "stdin") {
 		t.Error("the help must say where the token comes from; that is the property this verb exists for")
+	}
+}
+
+func TestTokenRmExplicitNativeOff(t *testing.T) {
+	t.Setenv("M3C_TOKEN_STORE", "file")
+	var stdout, stderr bytes.Buffer
+	code := runTokenRm([]string{"--backend", "gitlab", "--host", "nothing.invalid"}, &stdout, &stderr)
+	if code != exitGeneric || stdout.Len() != 0 || !strings.Contains(stderr.String(), "disabled") {
+		t.Fatalf("code%d stdout%s stderr%s", code, &stdout, &stderr)
 	}
 }
