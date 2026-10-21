@@ -21,8 +21,7 @@ package main
 // Network policy:
 //   - 30s HTTP timeout (configurable via --timeout but defaults to 30s).
 //   - TLS verification on by default (stdlib default).
-//   - Plain HTTP allowed only for localhost / RFC1918: needed for the homelab
-//     MinIO-style registry at 192.168.0.131:9100. See isPrivateRegistryURL below.
+//   - Plain HTTP allowed only for loopback; private LAN hosts require HTTPS.
 
 import (
 	"bytes"
@@ -100,8 +99,13 @@ func runAttestWithClient(
 	stdout, stderr io.Writer,
 	nowFn func() time.Time,
 	httpClient *http.Client,
-) int {
+) (code int) {
+	var diagnostic strings.Builder
+	stderr = io.MultiWriter(stderr, &diagnostic)
 	fs := flag.NewFlagSet("attest", flag.ContinueOnError)
+	jsonOut := fs.Bool("json", false, "Emit a versioned registry acceptance receipt. Put --json first to include flag parsing failures.")
+	receipt := &attestReceipt{}
+	defer renderAttestReceipt(jsonOut, receipt, &code, &diagnostic, stdout, stderr)
 	fs.SetOutput(stderr)
 
 	level := fs.String("level", "", "Governance verdict: green | yellow | red. Required.")
@@ -126,14 +130,14 @@ func runAttestWithClient(
 		fs.PrintDefaults()
 	}
 
-	// Go's stdlib flag package stops at the first non-flag argument. The
-	// brief shows the bundle-digest as the FIRST positional, before any
-	// flags ("skillctl attest <digest> --level ..."), which is also how
-	// users will type it. To support that ergonomic, extract a single
-	// looks-like-a-digest token from anywhere in args BEFORE handing the
-	// remainder to flag.Parse. We accept any positional that begins with
-	// "sha256:" (validated strictly downstream by canonicalize).
-	digestArg, flagArgs := extractDigestPositional(args)
+	// Retain the legacy digest-first form without scanning option values.
+	// Flags-first callers use the standard parser with a trailing digest.
+	digestArg := ""
+	flagArgs := args
+	if len(args) > 0 && strings.HasPrefix(args[0], "sha256:") {
+		digestArg = args[0]
+		flagArgs = args[1:]
+	}
 
 	if err := fs.Parse(flagArgs); err != nil {
 		return exitUsage
@@ -176,9 +180,15 @@ func runAttestWithClient(
 	if !filepath.IsAbs(*keyPath) {
 		fmt.Fprintf(stderr, "warning: --key %q is a relative path; resolving against CWD\n", *keyPath)
 	}
-	if err := validateRegistryURL(*registry); err != nil {
+	if err := validateAttestRegistryURL(*registry); err != nil {
 		fmt.Fprintf(stderr, "skillctl attest: %v\n", err)
 		return exitUsage
+	}
+
+	tok, err := boundRegistryToken(*registry, artifact.ModeWrite)
+	if err != nil {
+		fmt.Fprintf(stderr, "skillctl attest: %v\n", err)
+		return exitGeneric
 	}
 
 	// ----- Load the private key -----
@@ -253,7 +263,6 @@ func runAttestWithClient(
 	// FR-0117. attest is the WRITE surface of the HTTP registry, so it asks for
 	// the write tier. Empty stays anonymous, which is what a public instance
 	// wants and what every existing test drives.
-	tok := registryToken(*registry, artifact.ModeWrite)
 	if tok != "" {
 		req.Header.Set("Authorization", "Bearer "+tok)
 	}
@@ -261,16 +270,24 @@ func runAttestWithClient(
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: *timeoutFlag}
 	}
-	resp, err := httpClient.Do(req)
+	// A receipt must come from this POST target, never a redirected recipient.
+	client := *httpClient
+	client.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
+	resp, err := client.Do(req)
 	if err != nil {
 		fmt.Fprintf(stderr, "skillctl attest: POST %s: %v\n", endpoint, err)
 		return exitGeneric
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20)) // cap at 1 MiB
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, (1<<20)+1))
 	if err != nil {
 		fmt.Fprintf(stderr, "skillctl attest: read response: %v\n", err)
+		return exitGeneric
+	}
+
+	if len(respBody) > 1<<20 {
+		fmt.Fprintln(stderr, "skillctl attest: registry response exceeds 1 MiB")
 		return exitGeneric
 	}
 
@@ -278,33 +295,46 @@ func runAttestWithClient(
 		// Say which of the two it is. "401" alone cannot distinguish a machine
 		// with no credential from a credential that was refused, and the two
 		// have different next actions.
-		_ = explainUnauthorized(stderr, *registry, tok != "", fmt.Errorf("%s: %w", resp.Status, errRegistryUnauthorized))
+		_ = explainUnauthorized(stderr, *registry, tok != "", fmt.Errorf("HTTP %d %s: %w", resp.StatusCode, http.StatusText(resp.StatusCode), errRegistryUnauthorized))
 		return exitGeneric
 	}
 	if resp.StatusCode != http.StatusCreated {
-		fmt.Fprintf(stderr, "skillctl attest: registry returned %s\n", resp.Status)
-		if len(respBody) > 0 {
-			fmt.Fprintf(stderr, "response body: %s\n", string(respBody))
-		}
+		fmt.Fprintf(stderr, "skillctl attest: registry returned %d %s\n", resp.StatusCode, http.StatusText(resp.StatusCode))
 		return exitGeneric
 	}
 
-	var ok attestResponse
-	if err := json.Unmarshal(respBody, &ok); err != nil {
+	ok, err := decodeAttestResponse(respBody)
+	if err != nil {
 		fmt.Fprintf(stderr, "skillctl attest: registry returned 201 but body is not JSON: %v\n", err)
 		return exitGeneric
 	}
-	if ok.AttestationID == "" {
+	if tok != "" && strings.Contains(ok.AttestationID, tok) {
+		fmt.Fprintln(stderr, "skillctl attest: registry response contains the submitted credential")
+		return exitGeneric
+	}
+	if strings.TrimSpace(ok.AttestationID) == "" || strings.ContainsAny(ok.AttestationID, "\x00\r\n") {
 		fmt.Fprintln(stderr, "skillctl attest: registry returned 201 but no attestation_id")
 		return exitGeneric
 	}
 
-	fmt.Fprintf(stdout, "attestation_id: %s\n", ok.AttestationID)
-	fmt.Fprintf(stdout, "bundle_digest: %s\n", bundleDigest)
-	fmt.Fprintf(stdout, "level: %s\n", *level)
-	fmt.Fprintf(stdout, "attested_at: %s\n", attestedAt)
-	if authorKnownLocally {
-		fmt.Fprintf(stdout, "self_attested: %t\n", selfAttested)
+	receipt.AttestationID = ok.AttestationID
+	receipt.BundleDigest = body.BundleDigest
+	receipt.GovernanceLevel = body.GovernanceLevel
+	receipt.ReviewerID = body.ReviewerID
+	receipt.AttestedAt = body.AttestedAt
+	if !*jsonOut {
+		var text strings.Builder
+		fmt.Fprintf(&text, "attestation_id: %s\n", ok.AttestationID)
+		fmt.Fprintf(&text, "bundle_digest: %s\n", bundleDigest)
+		fmt.Fprintf(&text, "level: %s\n", *level)
+		fmt.Fprintf(&text, "attested_at: %s\n", attestedAt)
+		if authorKnownLocally {
+			fmt.Fprintf(&text, "self_attested: %t\n", selfAttested)
+		}
+		if _, err := io.WriteString(stdout, text.String()); err != nil {
+			fmt.Fprintf(stderr, "skillctl attest: write receipt: %v\n", err)
+			return exitGeneric
+		}
 	}
 
 	// SPEC-0278 L1: best-effort mirror of this signed attestation's digest
@@ -343,6 +373,22 @@ func extractDigestPositional(args []string) (digest string, rest []string) {
 	// the trailing slot, fs.Arg(0) handles that path) or multiple
 	// (ambiguous, bail with empty so downstream usage check fires).
 	return "", args
+}
+
+// validateAttestRegistryURL keeps credentials and ambiguous URL suffixes out of POST targets.
+func validateAttestRegistryURL(raw string) error {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return errors.New("invalid registry URL")
+	}
+	if parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
+		return errors.New("registry URL must not contain userinfo, query or fragment")
+	}
+	_, transportOK, originErr := registryOrigin(raw)
+	if originErr != nil || !transportOK {
+		return errors.New("attest registry URL requires HTTPS or loopback HTTP")
+	}
+	return nil
 }
 
 // isKnownLevel returns true if level is one of the three Ampel verdicts.

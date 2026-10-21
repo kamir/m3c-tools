@@ -58,6 +58,15 @@ def _trust_json(operation, **overrides):
     return json.dumps(payload)
 
 
+def _attest_json(digest, level, reviewer, **changes):
+    payload = {"schema": "m3c.skillctl.attestation-receipt/v1", "operation": "attest",
+               "ok": True, "exit_code": 0, "attestation_id": "synthetic-receipt",
+               "bundle_digest": digest, "governance_level": level, "reviewer_id": reviewer,
+               "attested_at": "2026-05-05T10:00:00Z"}
+    payload.update(changes)
+    return json.dumps(payload)
+
+
 @pytest.fixture(autouse=True)
 def fake_skillctl(tmp_path, monkeypatch):
     """Pin SKILLCTL_BIN to a real-but-fake executable path so the
@@ -270,12 +279,7 @@ def test_verify_propagates_exit_codes(fake_skillctl):
 
 def test_attest_success(fake_skillctl):
     digest = "sha256:" + "d" * 64
-    stdout = (
-        "attestation_id: att_abc123\n"
-        f"bundle_digest: {digest}\n"
-        "level: green\n"
-        "attested_at: 2026-05-05T10:00:00Z\n"
-    )
+    stdout = _attest_json(digest, "green", "id:reviewer@m3c", attestation_id="att_abc123")
     captured = {}
 
     def fake_run(argv, **kwargs):
@@ -296,7 +300,8 @@ def test_attest_success(fake_skillctl):
     #     --reviewer-id <id> --key <path>
     argv = captured["argv"]
     assert argv[1] == "attest"
-    assert argv[2] == digest
+    assert argv[2] == "--json"
+    assert argv[-1] == digest
     assert argv[argv.index("--level") + 1] == "green"
     assert argv[argv.index("--rationale") + 1] == "reviewed and approved"
     assert argv[argv.index("--reviewer-id") + 1] == "id:reviewer@m3c"
@@ -315,7 +320,7 @@ def test_attest_passes_registry_url(fake_skillctl):
 
     def fake_run(argv, **kwargs):
         captured["argv"] = argv
-        return _completed(0, stdout=f"attestation_id: att_xyz\nbundle_digest: {digest}\nlevel: yellow\nattested_at: 2026-05-05T11:00:00Z\n")
+        return _completed(0, stdout=_attest_json(digest, "yellow", "id:r@m3c", attestation_id="att_xyz"))
 
     with patch("subprocess.run", side_effect=fake_run):
         out = _run(server.skill_attest(
@@ -395,7 +400,7 @@ def test_attest_non_zero_exit_classified(fake_skillctl):
     """skillctl attest returning non-zero (e.g. registry rejected the
     POST) surfaces as ok=False with the generic_error class."""
     digest = "sha256:" + "f" * 64
-    with patch("subprocess.run", return_value=_completed(1, stderr="POST failed: 503\n")):
+    with patch("subprocess.run", return_value=_completed(1, stdout=_attest_json(digest, "green", "id:r", ok=False, exit_code=1, error="POST failed: 503"))):
         out = _run(server.skill_attest(
             digest=digest,
             level="green",

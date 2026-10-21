@@ -1,11 +1,7 @@
-// Package artifactauth resolves per-backend credentials for the SPEC-0356
-// artifact backends (D5). It is READ-ONLY: it never writes or deletes a
-// credential store, so it structurally cannot reintroduce the
-// ADR-auth-coexistence `config switch` delete bug.
-//
-// Precedence per (scheme, host): env override → macOS Keychain. When nothing is
-// found it returns an anonymous (empty-token) credential with a nil error, so a
-// public repo or ambient git credentials still work.
+// Package artifactauth resolves per-backend credentials. Resolver operations
+// only read credentials; Store and Delete are separate explicit management APIs.
+// Environment values take precedence over the host-bound native stores.
+// Explicit file/off controls disable native reads and management operations.
 package artifactauth
 
 import (
@@ -81,10 +77,18 @@ func (r *Resolver) Credential(ctx context.Context, scheme, host string, mode art
 // per-OS credential store. Empty tier names (an operator who provisioned no
 // read-only token) are skipped, so a missing RO tier simply yields "".
 func (r *Resolver) lookup(scheme, env, kcService, host string) string {
+	return r.lookupWithNative(scheme, env, kcService, host, keychain, osCredStore)
+}
+
+// lookupWithNative keeps explicit offline-store controls ahead of every native read.
+func (r *Resolver) lookupWithNative(scheme, env, kcService, host string, keychainRead, osStoreRead func(string, string) string) string {
 	if env != "" {
 		if v := strings.TrimSpace(os.Getenv(env)); v != "" {
 			return v
 		}
+	}
+	if nativeCredentialsDisabled() {
+		return ""
 	}
 	if kcService == "" {
 		return ""
@@ -93,13 +97,13 @@ func (r *Resolver) lookup(scheme, env, kcService, host string) string {
 	// exists only on macOS; guarding the call keeps a Windows/Linux box from
 	// spawning (or, worse, PATH-resolving) a non-existent `security` binary.
 	if runtime.GOOS == "darwin" {
-		if v := keychain(kcService, host); v != "" {
+		if v := keychainRead(kcService, host); v != "" {
 			return v
 		}
 	}
 	// Per-OS credential store (Windows DPAPI in creds_windows.go; no-op elsewhere).
 	// Lets a Windows user keep a write-capable PAT out of a plaintext env var.
-	if v := osCredStore(kcService, host); v != "" {
+	if v := osStoreRead(kcService, host); v != "" {
 		return v
 	}
 	return ""
@@ -122,4 +126,8 @@ func keychain(service, account string) string {
 		return ""
 	}
 	return strings.TrimSpace(string(out))
+}
+
+func nativeCredentialsDisabled() bool {
+	return os.Getenv("M3C_TOKEN_STORE") == "file" || os.Getenv("M3C_TEST_KEYCHAIN") == "0"
 }

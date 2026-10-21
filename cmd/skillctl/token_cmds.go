@@ -171,6 +171,10 @@ func runTokenList(args []string, stdout, stderr io.Writer) int {
 }
 
 func runTokenRm(args []string, stdout, stderr io.Writer) int {
+	return runTokenRmWithDelete(args, stdout, stderr, artifactauth.Delete)
+}
+
+func runTokenRmWithDelete(args []string, stdout, stderr io.Writer, remove func(string, artifactauth.Tier, string) error) int {
 	fs := flag.NewFlagSet("token rm", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	backend := fs.String("backend", "", "credential backend")
@@ -183,7 +187,7 @@ func runTokenRm(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "skillctl token rm: --backend and --host are required")
 		return exitUsage
 	}
-	if err := artifactauth.Delete(*backend, tokenTier(*readOnly), *host); err != nil {
+	if err := remove(*backend, tokenTier(*readOnly), *host); err != nil {
 		fmt.Fprintf(stderr, "skillctl token rm: %v\n", err)
 		return exitGeneric
 	}

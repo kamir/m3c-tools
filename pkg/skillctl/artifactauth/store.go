@@ -72,6 +72,10 @@ func Backends() []string {
 // a file or an environment variable would be the worst outcome here: the operator
 // would believe the token is protected because the command said nothing.
 func Store(backend string, tier Tier, host, secret string) error {
+	return storeWithNative(backend, tier, host, secret, platformStore)
+}
+
+func storeWithNative(backend string, tier Tier, host, secret string, nativeStore func(string, string, string) error) error {
 	service, env, ok := ServiceFor(backend, tier)
 	if !ok {
 		return fmt.Errorf("artifactauth: unknown backend %q (known: %v)", backend, Backends())
@@ -85,12 +89,15 @@ func Store(backend string, tier Tier, host, secret string) error {
 	if secret == "" {
 		return fmt.Errorf("artifactauth: refusing to store an empty token")
 	}
+	if nativeCredentialsDisabled() {
+		return fmt.Errorf("artifactauth: native credential management disabled by explicit file/off control")
+	}
 	if !HasProtectedStore() {
 		return fmt.Errorf("artifactauth: %s has no protected credential store here; "+
 			"use the environment variable %s instead, and keep in mind it is inherited by every child process",
 			runtime.GOOS, env)
 	}
-	return platformStore(service, host, secret)
+	return nativeStore(service, host, secret)
 }
 
 // Delete removes the stored credential. A missing entry is not an error: the
@@ -100,6 +107,10 @@ func Store(backend string, tier Tier, host, secret string) error {
 // wherever it was issued until it is revoked there, and any message about this
 // has to say so, or an operator will believe they closed a door they only shut.
 func Delete(backend string, tier Tier, host string) error {
+	return deleteWithNative(backend, tier, host, platformDelete)
+}
+
+func deleteWithNative(backend string, tier Tier, host string, nativeDelete func(string, string) error) error {
 	service, _, ok := ServiceFor(backend, tier)
 	if !ok {
 		return fmt.Errorf("artifactauth: unknown backend %q (known: %v)", backend, Backends())
@@ -110,7 +121,10 @@ func Delete(backend string, tier Tier, host string) error {
 	if err := validHost(host); err != nil {
 		return err
 	}
-	return platformDelete(service, host)
+	if nativeCredentialsDisabled() {
+		return fmt.Errorf("artifactauth: native credential management disabled by explicit file/off control")
+	}
+	return nativeDelete(service, host)
 }
 
 // Provisioned reports where a credential for (backend, tier, host) comes from,
@@ -121,6 +135,10 @@ func Delete(backend string, tier Tier, host string) error {
 // actually wins, will not understand a later failure. The order here is the
 // resolver's order, so what this prints is what a pull would use.
 func Provisioned(backend string, tier Tier, host string) string {
+	return provisionedWithNative(backend, tier, host, keychain, osCredStore)
+}
+
+func provisionedWithNative(backend string, tier Tier, host string, keychainRead, osStoreRead func(string, string) string) string {
 	service, env, ok := ServiceFor(backend, tier)
 	if !ok || service == "" {
 		return ""
@@ -128,10 +146,13 @@ func Provisioned(backend string, tier Tier, host string) string {
 	if env != "" && envValue(env) != "" {
 		return "env " + env
 	}
-	if runtime.GOOS == "darwin" && keychain(service, host) != "" {
+	if nativeCredentialsDisabled() {
+		return ""
+	}
+	if runtime.GOOS == "darwin" && keychainRead(service, host) != "" {
 		return "keychain " + service
 	}
-	if osCredStore(service, host) != "" {
+	if osStoreRead(service, host) != "" {
 		return "protected store " + service
 	}
 	return ""

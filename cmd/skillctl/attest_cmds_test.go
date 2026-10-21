@@ -270,9 +270,8 @@ func TestAttest_UsageError_MissingFlags(t *testing.T) {
 	}
 }
 
-func TestAttest_RegistryReturns400_PropagatesBody(t *testing.T) {
-	// AC5 from brief: server returns 400 → CLI exits 1 with stderr
-	// including the response body.
+func TestAttest_RegistryReturns400_ReportsStatusWithoutBody(t *testing.T) {
+	// Preserve the status without reflecting untrusted server content.
 	dir := t.TempDir()
 	priv, _, pub := makeReviewerKeys(t, dir)
 
@@ -297,8 +296,8 @@ func TestAttest_RegistryReturns400_PropagatesBody(t *testing.T) {
 	if !strings.Contains(errStr, "400") {
 		t.Errorf("stderr missing status: %q", errStr)
 	}
-	if !strings.Contains(errStr, "reviewer is not registered") {
-		t.Errorf("stderr missing response body: %q", errStr)
+	if strings.Contains(errStr, "reviewer is not registered") {
+		t.Errorf("stderr reflected untrusted response body: %q", errStr)
 	}
 }
 

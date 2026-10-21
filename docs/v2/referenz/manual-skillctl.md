@@ -569,6 +569,7 @@ ed25519 key, and POSTs it to `<registry>/attestations`.
 
 | Flag | Purpose |
 |------|---------|
+| `-json` | Emit a versioned Registry acceptance receipt. Put `--json` first to include flag parsing failures. |
 | `-level green\|yellow\|red` | Governance verdict. **Required.** |
 | `-rationale` | Free-text rationale (audit metadata; **not** folded into the signed bytes). **Required.** |
 | `-reviewer-id` | Reviewer identity ID (e.g. `id:reviewer@m3c`). **Required.** |
@@ -582,6 +583,28 @@ skillctl attest sha256:<hex> --level green --rationale "reviewed" \
   --reviewer-id id:reviewer@m3c --key ~/.config/m3c/skill-keys/reviewer.priv \
   --registry https://aims.example.com/api/skills
 ```
+
+Environment credentials for HTTP Registry reads and `attest` require a matching
+`M3C_REGISTRY_TOKEN_ORIGIN` pin (scheme, hostname, effective port), independently of
+`--registry`. Unbound reads stay anonymous; `attest` fails before key loading or signing.
+See the [migration and native-store controls](../betrieb/ops-registry-tokens.en.md#http-registry-credential-origin-and-migration).
+
+Use `--json` first for a machine receipt, including errors during flag parsing.
+The schema is `m3c.skillctl.attestation-receipt/v1`, with `operation:"attest"`,
+`ok` and `exit_code`. Success requires `attestation_id` from the Registry's HTTP 201
+response, plus `bundle_digest`, `governance_level`, `reviewer_id` and `attested_at`
+from the actual signed POST message. The time is canonical UTC (`YYYY-MM-DDTHH:MM:SSZ`).
+This confirms that the Registry accepted that submission; it does not independently
+verify a bundle, prove reviewer independence or establish a binding governance verdict.
+MCP requests this JSON contract and rejects incomplete or contradictory receipts,
+including values that do not match the submitted digest, level and reviewer. It never
+fills missing receipt fields from its input. Errors include `error`, and process and
+JSON exit codes must agree. Human output remains the default. A receipt write failure
+returns nonzero even if the Registry has already accepted the POST; inspect the Registry
+before retrying to avoid a duplicate submission. Response bodies are not reflected in
+failure diagnostics. This signed POST requires HTTPS or loopback HTTP before key
+loading, even without a token. Redirects are refused. An unsupported or
+malformed success response is a failure, not an acceptance receipt.
 
 Exit: `0` ok · `1` generic/network/non-2xx · `2` usage.
 

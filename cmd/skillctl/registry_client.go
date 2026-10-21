@@ -19,8 +19,12 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"strconv"
+	"strings"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifactauth"
@@ -59,22 +63,79 @@ func newRegistryClient(baseURL string, httpClient *http.Client) *registry.Client
 // that may not need a credential at all. What must NOT be silent is the refusal
 // that follows, and that is what explainUnauthorized is for.
 func registryToken(baseURL string, mode artifact.AccessMode) string {
-	u, err := url.Parse(baseURL)
-	if err != nil || u.Host == "" {
-		return ""
+	token, _ := boundRegistryToken(baseURL, mode)
+	return token
+}
+
+// registryOrigin compares scheme, normalized hostname and effective port only.
+func registryOrigin(raw string) (string, bool, error) {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
+		return "", false, errors.New("registry URL must have a host and no userinfo, query or fragment")
 	}
+	scheme := strings.ToLower(u.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return "", false, errors.New("unsupported registry URL scheme")
+	}
+	host := strings.ToLower(u.Hostname())
+	if host == "" {
+		return "", false, errors.New("registry URL has no hostname")
+	}
+	port := u.Port()
+	if port == "" {
+		if scheme == "https" {
+			port = "443"
+		} else {
+			port = "80"
+		}
+	}
+	number, err := strconv.Atoi(port)
+	if err != nil || number < 1 || number > 65535 {
+		return "", false, errors.New("invalid registry port")
+	}
+	ip := net.ParseIP(host)
+	credentialTransport := scheme == "https" || host == "localhost" || (ip != nil && ip.IsLoopback())
+	return scheme + "://" + net.JoinHostPort(host, strconv.Itoa(number)), credentialTransport, nil
+}
+
+// boundRegistryToken refuses unbound environment credentials without mutating the environment.
+func boundRegistryToken(baseURL string, mode artifact.AccessMode) (string, error) {
+	origin, transportOK, err := registryOrigin(baseURL)
+	if err != nil {
+		return "", err
+	}
+	token := ""
+	if mode == artifact.ModeRead {
+		token = strings.TrimSpace(os.Getenv("M3C_REGISTRY_RO_TOKEN"))
+	}
+	if token == "" {
+		token = strings.TrimSpace(os.Getenv("M3C_REGISTRY_TOKEN"))
+	}
+	if token != "" {
+		pin := os.Getenv("M3C_REGISTRY_TOKEN_ORIGIN")
+		pinned, pinnedTransport, pinErr := registryOrigin(pin)
+		parsedPin, parseErr := url.Parse(pin)
+		if pinErr != nil || parseErr != nil || (parsedPin.Path != "" && parsedPin.Path != "/") || !transportOK || !pinnedTransport || origin != pinned {
+			return "", errors.New("registry environment token requires a matching M3C_REGISTRY_TOKEN_ORIGIN (HTTPS or loopback HTTP)")
+		}
+	}
+	// Plain HTTP outside loopback remains anonymous; never consult host stores for it.
+	if !transportOK {
+		return "", nil
+	}
+	u, _ := url.Parse(baseURL)
 	cred, err := artifactauth.New().Credential(context.Background(), registryCredScheme, u.Host, mode)
 	if err != nil {
-		return ""
+		return "", err
 	}
-	return cred.Token
+	return cred.Token, nil
 }
 
 // explainUnauthorized turns a 401 or 403 into a message that names the next
 // action, and returns err unchanged for anything else.
 //
 // The point is the distinction a bare status code cannot make: whether no
-// credential was sent (provision one) or the one sent was rejected (it is wrong,
+// credential was sent (absent, disabled or blocked by policy) or the sent token was rejected (wrong,
 // expired or lacks the scope). The client knows which, because it knows whether
 // it set the header.
 func explainUnauthorized(w io.Writer, baseURL string, sent bool, err error) error {
@@ -92,10 +153,11 @@ func explainUnauthorized(w io.Writer, baseURL string, sent bool, err error) erro
 		return err
 	}
 	fmt.Fprintf(w, "registry %s: this instance requires authentication and NO token was sent.\n", host)
-	fmt.Fprintln(w, "  why: no credential is provisioned on this machine for that host.")
-	fmt.Fprintf(w, "  fix: provide one of, in this order of precedence:\n")
-	fmt.Fprintf(w, "         env   M3C_REGISTRY_TOKEN (read-only: M3C_REGISTRY_RO_TOKEN)\n")
-	fmt.Fprintf(w, "         macOS security add-generic-password -s m3c-skillctl-registry -a %s -w '<token>' -U\n", host)
-	fmt.Fprintln(w, "  The full routine, including how a KuP account issues the token: docs/v2/betrieb/ops-registry-tokens.de.md")
+	fmt.Fprintln(w, "  why: credentials may be absent, native storage disabled, or an environment token blocked by its origin pin.")
+	fmt.Fprintln(w, "  fix: configure M3C_REGISTRY_TOKEN (read-only: M3C_REGISTRY_RO_TOKEN) together with")
+	fmt.Fprintln(w, "       M3C_REGISTRY_TOKEN_ORIGIN set to the separately approved HTTPS or loopback-HTTP origin (scheme, host, port).")
+	fmt.Fprintln(w, "       Where protected storage is supported, use skillctl token set --backend registry --host <registry-host> [--read-only].")
+	fmt.Fprintln(w, "       Native management is disabled by M3C_TOKEN_STORE=file or M3C_TEST_KEYCHAIN=0.")
+	fmt.Fprintln(w, "  Guide: docs/v2/betrieb/ops-registry-tokens.en.md (DE: ops-registry-tokens.de.md)")
 	return err
 }
