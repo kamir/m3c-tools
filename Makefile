@@ -475,6 +475,7 @@ code-review: check-review-contracts
 check-review-contracts:
 	@bash scripts/code-review.test.sh
 	@python3 scripts/collect-release-checks.test.py
+	@python3 tools/skillctl_release_fallback_test.py
 
 # Check documentation consistency with implementation
 .PHONY: check-docs

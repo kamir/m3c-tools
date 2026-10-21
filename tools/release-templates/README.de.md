@@ -4,7 +4,7 @@
 
 ## Generator für Onboarding-Runbooks (Standard der Release-Vorbereitung)
 
-Jedes skillctl-Release enthält ein **zur Version passendes Onboarding-Runbook**:
+Bei der Release-Vorbereitung ein **zur Version passendes Onboarding-Runbook** ausdrücklich erzeugen:
 ein eigenständiges, CSP-konformes HTML-Arbeitsblatt, das neue Herausgeber für
 *genau diese Version* durch install → keygen → login → package → publish → upgrade führt.
 
@@ -13,10 +13,10 @@ ein eigenständiges, CSP-konformes HTML-Arbeitsblatt, das neue Herausgeber für
 - **Generator:** `tools/skillctl-runbook.sh <tag> [out.html]` setzt die Version
   ein und prüft anschließend, dass keine Platzhalter und keine externen Ressourcen
   übrig bleiben; damit bleibt das Ergebnis CSP-konform und offline nutzbar.
-- **In die Release-Vorbereitung eingebunden:** `tools/skillctl-release.sh <tag>`
-  ruft den Generator automatisch auf und legt `skillctl-publisher-runbook.html`
-  neben den Binärdateien in `release/<tag>/` ab. Jedes Release erzeugt dadurch
-  ohne manuellen Zusatzschritt das passende Runbook.
+- **Separate Release-Schritte:** Den Generator ausdrücklich aufrufen. Der lokale
+  Helfer `tools/skillctl-release.sh <tag>` signiert ausschließlich geprüfte
+  bestehende CI-Manifest-Bytes und erzeugt oder veröffentlicht keine Runbooks.
+  Siehe [Fallback-Signaturverfahren](../../docs/security/release-fallback.de.md).
 
 ## Der Deskriptor: `runbook.meta.json` (BUG-0224)
 

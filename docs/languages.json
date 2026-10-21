@@ -17,8 +17,8 @@
     {
       "de": "docs/program-index.de.md",
       "en": "docs/program-index.md",
-      "de_sha256": "9e3f39d4d6c850dcaed86820a1db9317243f0af632a7bb0a77cf46587cd64b03",
-      "en_sha256": "cf98181a8f9f44834d973fc6a92e947e03e0f93a19d24b2b22f49843be37a5e6"
+      "de_sha256": "2f0eb89d3698528e862350dfd1ce448789fcdaa5c0312f8449492589db19b231",
+      "en_sha256": "dacfdee13cb0c634d3171bbde307172460a5df3b39529cf2902b0b88e778d1f5"
     },
     {
       "de": "docs/service-index.de.md",
@@ -281,8 +281,8 @@
     {
       "de": "tools/release-templates/README.de.md",
       "en": "tools/release-templates/README.md",
-      "de_sha256": "c30e48a4fccc043fb52610673011b4db48386b1f6fb26771abed8d5dcfc8f7fb",
-      "en_sha256": "0a9ac2190c593daebb95aec049bb15b9db35166019c51bed63e8f26569c3038a"
+      "de_sha256": "db1a12027319b8543f3923e9cab6c072e20db9b6c81887bfb68414bcbe955096",
+      "en_sha256": "9d22beb1dde6f188b69fcc9c2f8c18966f6eac317cf91da7928897b8187e0b47"
     },
     {
       "de": "tools/scheduling/README.de.md",
@@ -295,6 +295,12 @@
       "en": "tests/evidence/trust-freeze/README.md",
       "de_sha256": "90a158f33df1c3fe18a11bfc4449e41530a477595eda86134e84d3f164ba6f65",
       "en_sha256": "750eba417b5510884f89fde68f29d1736e0d45dd364e296201fee584d3d810b8"
+    },
+    {
+      "de": "docs/security/release-fallback.de.md",
+      "en": "docs/security/release-fallback.en.md",
+      "de_sha256": "36bd03eac1b54a372ce5b09fb4e01d53e929ae239b3727801e78274635ff953c",
+      "en_sha256": "eb1a25dd11bfbcce0179649af5c4a46ca55b32b825eab5f4aab8c92bacedbab9"
     }
   ]
 }

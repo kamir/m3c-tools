@@ -31,14 +31,14 @@ name: skillctl Release (SLSA L3 provenance)
 #
 # The `build` job's CycloneDX SBOM step is BLOCKING (H5): no SBOM → no release.
 #
-# Output format mirrors tools/skillctl-release.sh exactly (raw per-arch binaries +
-# SHA256SUMS) so the published install.sh keeps working; this adds a signed SLSA
+# Raw per-arch binaries + SHA256SUMS remain compatible with install.sh and the
+# local verified-CI fallback signer. CI also supplies signed SLSA
 # provenance (*.intoto.jsonl), a cosign bundle, and a CycloneDX SBOM.
 #
 # Creates a DRAFT release. The operator reviews it and promotes it: and, DURING
 # THE ED25519->COSIGN TRANSITION, also attaches the ed25519 SHA256SUMS.sig (cut
-# locally with tools/skillctl-release.sh, whose deterministic build produces a
-# byte-identical SHA256SUMS) so users WITHOUT cosign still verify via the pinned
+# locally with tools/skillctl-release.sh from the downloaded, Cosign/SLSA-verified
+# CI manifest bytes) so users WITHOUT cosign still verify via the pinned
 # ed25519 fallback in install.sh. Once cosign is the only track, that step drops.
 
 on:
@@ -282,8 +282,9 @@ jobs:
   #    the generator ran from this signed vX.Y.Z release tag, and a commit-SHA ref
   #    breaks builder-identity verification (documented slsa-github-generator
   #    constraint). pin-guard.yml carries a narrow, scoped exception for exactly
-  #    this reusable workflow. Tag movement is detected by slsa-verifier + the Rekor
-  #    transparency log, so the tag is not "mutable" in the harmful sense.
+  #    this reusable workflow. Verification authenticates provenance and the
+  #    configured builder identity; Rekor records signed evidence. Neither freezes
+  #    a Git tag permanently nor independently pins its current target commit.
   #    v2.1.0 = commit f7dd8c54c2067bafc12ca7a55595d5ee9b75204a (recorded for audit).
   provenance:
     name: SLSA L3 provenance (isolated generator)
