@@ -567,8 +567,7 @@ Felder erhalten und ihre konfigurierte Verifier-Policy anwenden. MCP install/ver
 fordert diesen JSON-Vertrag an und lehnt fehlerhafte, unvollständige oder widersprüchliche
 Erfolgsmeldungen ab. Die menschenlesbare Standardausgabe bleibt erhalten. Der Sidecar-Pfad
 hat derzeit keinen maschinenlesbaren Vertrauensvertrag; `verify --json` lehnt diesen
-Fallback explizit ab. Der gesonderte Sweep `verify --all` behält seinen bisherigen
-Ausgabevertrag.
+Fallback explizit ab. Der gesonderte Sweep `verify --all` hat den nachfolgend beschriebenen versionierten Inventarvertrag.
 
 **`verify --all`: Flottenprüfung** (SPEC-0247 P0.2). `--all` wird *vor* dem
 Flag-Parsing erkannt und aktiviert einen anderen Flag-Satz: Alle installierten
@@ -581,6 +580,59 @@ ist eine eigene Aufgabe.
 | `--quarantine` | An VERTRAUENSPRÜFUNGEN scheiternde *verwaltete* Skills aus `~/.claude/skills/` ins Quarantäneverzeichnis verschieben. |
 | `--budget` | Gesamtes Echtzeitbudget. Nicht erreichte Skills erhalten `unverified` und werden niemals quarantänisiert; eine langsame Registry kann Ihre Skills daher nicht löschen. |
 | `--session-id` | Gespeicherte Urteilscache-Zeilen mit dieser Sitzungs-ID aus dem `SessionStart`-Ereignis versehen. |
+
+
+Der JSON-Vertrag des Sweeps lautet `m3c.skillctl.sweep-result/v1`, Operation `verify_all`.
+`--json` muss zuerst stehen, damit auch Fehler beim Flag-Parsing JSON liefern. Stdout
+enthält genau ein JSON-Objekt, auch bei fehlendem oder leerem Skills-Verzeichnis
+(`total: 0`, `entries: []`). Ein erfolgreicher leerer Lauf belegt ausschließlich,
+dass dieser Sweep keine Skills zur Prüfung gefunden hat.
+
+Text- und JSON-Modus liefern Prozess-Exit `0` nur bei vollständig gültigem oder leerem
+Bestand, `1` bei ungültigen, unvollständig geprüften oder übersprungenen Skills sowie
+I/O-/Aktionsfehlern und `2` bei ungültigen Argumenten. Dies ersetzt den früher immer
+erfolgreichen Sweep-Exit `0`. `exit` je Eintrag erhält den konkreten Verifier- oder
+Policy-Ablehnungsgrund. `complete` bedeutet, dass die erforderliche Entscheidung
+abschließend getroffen wurde; ein ungültiges Ergebnis kann vollständig sein, während
+`ok` false bleibt. Auswerter müssen sowohl `ok` als auch `complete` prüfen.
+
+Jeder Eintrag enthält `status` (`valid`, `invalid`, `incomplete`, `skipped`), das bisherige
+`state`, eine Begründung und benannte Prüfungen für Inhaltsbindung, Vertrauenskette,
+Governance, Abhängigkeiten und Widerrufe. Prüfergebnisse sind `pass`, `fail`,
+`unconfirmed` oder `not_checked`. `check_scope` unterscheidet Online-/Offline-Ketten,
+erneut verankerte Sidecars, Legacy-Sidecars und reine Policy-Entscheidungen. Ein
+Offline-Erfolg bestätigt keine frischen Widerrufsinformationen. `revocation_source`
+kennzeichnet die konfigurierte Online-Autorität, authentifizierten Cache, Gossip-Ablehnung,
+unbestätigte oder nicht verfügbare Nachweise; Gossip allein belegt keinen sauberen
+Widerrufsstand.
+
+`digest` wird, sofern verfügbar, aus den tatsächlichen hinterlegten Bundle-Bytes
+berechnet; `digest_source` ist `actual_bundle`. Lokale Provenienzmetadaten liefern
+diesen Wert nicht. `digest_verified` verlangt zusätzlich authentifizierte Prüfung
+und Inhaltsbindung. `governance_verified` erhält die Information, ob Governance
+kryptografisch geprüft wurde; eine erlaubte advisory Entscheidung kann false belassen.
+Das nullable Feld `self_attested` belegt allein keine unabhängige Prüfung. Legacy-Sidecars
+bleiben unvollständig. Deklarierte Abhängigkeiten ohne Resolver sind `unconfirmed`,
+wodurch der Sweep insgesamt scheitert; eine transitive Auflösung wird nicht behauptet.
+
+`total = verified + invalid + unverified + skipped`; `unverified` zählt unvollständige
+Ergebnisse. `quarantined` zählt nur tatsächliche Verschiebungen; `quarantine_candidates`
+zählt auch nur gemeldete und fehlgeschlagene Versuche. `disposition` unterscheidet
+`unchanged`, `would_quarantine`, `quarantined` und `quarantine_failed`. Nur ein tatsächliches
+Verschieben hat einen `quarantine_path`; ein anschließender Schreibfehler der Notiz erhält
+diesen Pfad und meldet `action_error`, Unvollständigkeit und einen Fehler-Exit insgesamt.
+Ohne `--quarantine` bleiben Skills am Ort; Urteils- und Audit-Caches können aktualisiert werden.
+
+Budgetprüfungen erfolgen zwischen Skills und begrenzen die Online-Prüfung; synchrone
+Dateisystem- und Widerrufsoperationen sind keine unterbrechbare Transaktion. Ein Timeout
+kann nach bereits abgeschlossenen Verschiebungen eintreten. Vor Wiederholung Bestand prüfen.
+
+MCP bietet `skill_verify_all(quarantine=False, registry="", governance_min="",
+budget_seconds=60, timeout=90)`. Das Budget ist ganzzahlig von 1 bis 300 Sekunden;
+der Timeout muss größer sein und darf höchstens 600 Sekunden betragen. Standardmäßig
+werden keine Skills verschoben. Der Server erhält den validierten CLI-Inhalt einschließlich
+aller fehlgeschlagenen Einträge und weist fehlerhafte oder widersprüchliche Ergebnisse
+zurück, statt menschlichen Ausgabetext zu parsen.
 
 ```bash
 skillctl verify my-skill

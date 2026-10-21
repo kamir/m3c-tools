@@ -94,7 +94,7 @@ func Katas() []*Kata {
 			RequiredReps:  3,
 			setup:         setupK2,
 			observe: func(res RunResult) int {
-				if _, code, ok := sweepVerdict(res.Stdout, demoSkillName); ok {
+				if _, code, ok := sweepVerdict(res, demoSkillName); ok {
 					return code
 				}
 				return -1
@@ -183,7 +183,7 @@ func setupK2(sb *Sandbox, run kataRunner, narrate func(Event), nonce string) (re
 		return repPlan{}, err
 	}
 	narrate(Event{Kind: "note", Text: "OBSTACLE ahead: the bytes now differ from the signed .skb → digest mismatch (exit 10)."})
-	narrate(Event{Kind: "note", Text: "Note: `verify --all`'s PROCESS exit is 0 by design (it is a sweep); the ENFORCING per-skill trust verdict is what this Kata asserts."})
+	narrate(Event{Kind: "note", Text: "Note: an invalid `verify --all` sweep exits 1. This Kata also requires an actual quarantine and per-skill digest-mismatch code 10."})
 	return repPlan{
 		Args:     []string{"verify", "--all", "--quarantine", "--json"},
 		Cmd:      "skillctl verify --all --quarantine --json   (SessionStart sweep; the per-skill verdict is the beat)",

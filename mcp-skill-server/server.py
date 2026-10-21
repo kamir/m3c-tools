@@ -671,10 +671,9 @@ def _save_usage_local(event: dict):
 #     {green, yellow, red}; names/reviewer IDs must be free of newlines
 #     and null bytes.
 #   - Exit codes are mapped to error_class strings per SPEC-0188 §11.
-#   - stdout is parsed with simple line-oriented regexes so the JSON
-#     response shape stays stable even as the CLI evolves its
-#     human-readable output (the chain summary is a deterministic
-#     "<digest>: signed by <author>, admitted by <key>, attested <level>").
+#   - Install, verify, inventory sweeps and attest decode versioned JSON
+#     from the actual CLI. Missing or contradictory proof fields cannot be
+#     filled from human output or caller inputs.
 
 # Exit code → error_class mapping (SPEC-0188 §11). Any code not in this
 # table maps to "generic_error" so callers always get a machine-checkable
@@ -1030,6 +1029,196 @@ async def skill_verify(
 
     argv.extend(["--", name])
     return _do_install_or_verify(argv, timeout=timeout)
+
+
+def _decode_sweep_result(result: dict) -> dict:
+    """Retain every typed sweep decision, including failed or incomplete entries."""
+    code = result["exit_code"]
+
+    def protocol_error(reason: str) -> dict:
+        return {"ok": False, "exit_code": code if code != 0 else 1,
+                "process_exit_code": code, "error_class": "protocol_error", "stderr": reason,
+                "remediation": "Use a compatible skillctl with the versioned sweep JSON contract."}
+
+    def unique_object(pairs):
+        obj = {}
+        for key, value in pairs:
+            if key in obj:
+                raise ValueError("duplicate JSON field")
+            obj[key] = value
+        return obj
+
+    def reject_constant(value):
+        raise ValueError("non-finite JSON constant")
+
+    try:
+        payload = json.loads(result["stdout"], object_pairs_hook=unique_object, parse_constant=reject_constant)
+    except (ValueError, TypeError):
+        return protocol_error("skillctl did not emit one valid sweep JSON object")
+    required = {"schema", "operation", "ok", "complete", "exit_code", "skills_dir", "total", "verified",
+                "invalid", "quarantined", "quarantine_candidates", "unverified", "skipped", "entries"}
+    optional = {"error", "roots_error", "revocation_unavailable"}
+    if not isinstance(payload, dict) or not required <= payload.keys() or payload.keys() - required - optional:
+        return protocol_error("skillctl sweep has missing or unsupported fields")
+    if payload["schema"] != "m3c.skillctl.sweep-result/v1" or payload["operation"] != "verify_all":
+        return protocol_error("skillctl sweep has an unsupported schema or operation")
+    if type(payload["ok"]) is not bool or type(payload["complete"]) is not bool or type(payload["exit_code"]) is not int:
+        return protocol_error("skillctl sweep has invalid status types")
+    if type(code) is not int or code not in (0, 1, 2) or payload["exit_code"] != code or payload["ok"] != (code == 0):
+        return protocol_error("skillctl sweep status contradicts the process exit code")
+    if not isinstance(payload["skills_dir"], str) or (code == 0 and not payload["skills_dir"]):
+        return protocol_error("skillctl sweep has no skills directory")
+    if any(type(payload[field]) is not int or payload[field] < 0 for field in
+           ("total", "verified", "invalid", "quarantined", "quarantine_candidates", "unverified", "skipped")):
+        return protocol_error("skillctl sweep has invalid counters")
+    for field in optional:
+        if field in payload and (not isinstance(payload[field], str) or not payload[field].strip()):
+            return protocol_error("skillctl sweep has an invalid diagnostic")
+    if (code == 0 and "error" in payload) or (code != 0 and "error" not in payload):
+        return protocol_error("skillctl sweep has a contradictory error")
+    entries = payload["entries"]
+    if not isinstance(entries, list) or len(entries) != payload["total"]:
+        return protocol_error("skillctl sweep entries do not match the total")
+    entry_required = {"skill", "state", "status", "disposition", "complete", "exit", "reason", "check_scope",
+                      "revocation_source", "checks", "governance_verified", "self_attested", "digest_verified"}
+    entry_optional = {"digest", "digest_source", "quarantine_path", "action_error"}
+    scopes = {"online_trust_chain", "offline_trust_chain", "sidecar_reanchored", "sidecar_legacy",
+              "revocation_policy", "unmanaged_policy", "not_checked"}
+    counts = {"valid": 0, "invalid": 0, "incomplete": 0, "skipped": 0}
+    names = set()
+    quarantined = candidates = 0
+    for entry in entries:
+        if not isinstance(entry, dict) or not entry_required <= entry.keys() or entry.keys() - entry_required - entry_optional:
+            return protocol_error("skillctl sweep entry has missing or unsupported fields")
+        if _validate_safe_token(entry["skill"], "skill") or entry["skill"] in names:
+            return protocol_error("skillctl sweep has an invalid or duplicate skill")
+        names.add(entry["skill"])
+        if entry["state"] not in ("verified", "quarantined", "unverified", "skipped") or not isinstance(entry["status"], str) or entry["status"] not in counts:
+            return protocol_error("skillctl sweep entry has an invalid status")
+        if entry["disposition"] not in ("unchanged", "would_quarantine", "quarantined", "quarantine_failed"):
+            return protocol_error("skillctl sweep entry has an invalid disposition")
+        if type(entry["exit"]) is not int or not 0 <= entry["exit"] <= 255 or not isinstance(entry["reason"], str):
+            return protocol_error("skillctl sweep entry has invalid exit or reason")
+        if any(type(entry[field]) is not bool for field in ("complete", "digest_verified", "governance_verified")):
+            return protocol_error("skillctl sweep entry has invalid proof types")
+        if entry["self_attested"] is not None and type(entry["self_attested"]) is not bool:
+            return protocol_error("skillctl sweep entry has invalid self-attestation provenance")
+        if not isinstance(entry["check_scope"], str) or entry["check_scope"] not in scopes or entry["revocation_source"] not in ("online", "cached", "gossip", "unconfirmed", "unavailable"):
+            return protocol_error("skillctl sweep entry has invalid verification scope")
+        if not isinstance(entry["checks"], list):
+            return protocol_error("skillctl sweep entry lacks checks")
+        checks = {}
+        for check in entry["checks"]:
+            if not isinstance(check, dict) or set(check) != {"name", "status"}:
+                return protocol_error("skillctl sweep check has invalid fields")
+            name = check["name"]
+            if not isinstance(name, str) or name in checks or check["status"] not in ("pass", "fail", "unconfirmed", "not_checked"):
+                return protocol_error("skillctl sweep check has an invalid or duplicate decision")
+            checks[name] = check["status"]
+        if set(checks) != {"content_binding", "trust_chain", "governance", "dependencies", "revocation"}:
+            return protocol_error("skillctl sweep entry has missing or unsupported checks")
+        if checks["revocation"] == "pass" and entry["revocation_source"] not in ("online", "cached"):
+            return protocol_error("skillctl sweep asserts unconfirmed revocation freshness")
+        if "digest" in entry:
+            if not isinstance(entry["digest"], str) or not _DIGEST_RE.fullmatch(entry["digest"]) or entry.get("digest_source") != "actual_bundle":
+                return protocol_error("skillctl sweep entry has an invalid digest or provenance")
+        elif "digest_source" in entry or entry["digest_verified"]:
+            return protocol_error("skillctl sweep entry lacks its asserted bundle digest")
+        authenticated_scopes = ("online_trust_chain", "offline_trust_chain", "sidecar_reanchored")
+        if entry["digest_verified"] and (entry["check_scope"] not in authenticated_scopes or checks["content_binding"] != "pass" or
+                                         checks["trust_chain"] != "pass" or entry["status"] in ("invalid", "skipped")):
+            return protocol_error("skillctl sweep digest assertion contradicts its checks")
+        if entry["governance_verified"] and (entry["check_scope"] not in authenticated_scopes or checks["governance"] != "pass"):
+            return protocol_error("skillctl sweep governance assertion contradicts its scope or checks")
+        if checks["trust_chain"] == "pass" and not entry["digest_verified"]:
+            return protocol_error("skillctl sweep trust-chain success lacks its authenticated digest")
+        if checks["dependencies"] == "pass" and not entry["digest_verified"]:
+            return protocol_error("skillctl sweep dependency declaration lacks its authenticated digest")
+        if entry["check_scope"] in ("not_checked", "unmanaged_policy", "revocation_policy") and any(value == "pass" for value in checks.values()):
+            return protocol_error("skillctl sweep policy-only entry asserts unperformed verification")
+        if entry["check_scope"] == "sidecar_legacy" and any(checks[name] == "pass" for name in ("trust_chain", "governance", "dependencies")):
+            return protocol_error("skillctl sweep legacy sidecar asserts authenticated checks")
+        moved = entry["disposition"] == "quarantined"
+        if moved != ("quarantine_path" in entry):
+            return protocol_error("skillctl sweep quarantine action lacks its actual path")
+        if moved and (not isinstance(entry["quarantine_path"], str) or not entry["quarantine_path"].strip()):
+            return protocol_error("skillctl sweep quarantine path is invalid")
+        if "action_error" in entry and (not isinstance(entry["action_error"], str) or not entry["action_error"].strip() or entry["complete"]):
+            return protocol_error("skillctl sweep action error contradicts completion")
+        if entry["disposition"] == "quarantine_failed" and "action_error" not in entry:
+            return protocol_error("skillctl sweep failed quarantine lacks its action error")
+        if entry["status"] == "invalid" and (entry["exit"] == 0 or entry["state"] != "quarantined" or entry["disposition"] == "unchanged"):
+            return protocol_error("skillctl sweep invalid decision contradicts its state or refusal")
+        if entry["status"] != "valid" and not entry["reason"].strip():
+            return protocol_error("skillctl sweep failed or skipped entry lacks its reason")
+        if entry["status"] == "skipped" and (entry["state"] != "skipped" or entry["exit"] != 0 or entry["disposition"] != "unchanged" or
+                                             entry["digest_verified"] or entry["governance_verified"]):
+            return protocol_error("skillctl sweep skipped decision asserts verification or an action")
+        if entry["status"] == "incomplete" and (entry["state"] not in ("verified", "unverified") or entry["disposition"] != "unchanged"):
+            return protocol_error("skillctl sweep incomplete decision contradicts its state or action")
+        if entry["status"] == "valid" and (not entry["complete"] or entry["exit"] != 0 or entry["state"] != "verified" or
+                                           not entry["digest_verified"] or any(value != "pass" for value in checks.values()) or
+                                           entry["disposition"] != "unchanged"):
+            return protocol_error("skillctl sweep asserts validity without complete verification")
+        if entry["status"] in ("incomplete", "skipped") and entry["complete"]:
+            return protocol_error("skillctl sweep asserts completion for an unverified skill")
+        counts[entry["status"]] += 1
+        quarantined += moved
+        candidates += entry["disposition"] != "unchanged"
+    if any(payload[field] != counts[status] for field, status in
+           (("verified", "valid"), ("invalid", "invalid"), ("unverified", "incomplete"), ("skipped", "skipped"))):
+        return protocol_error("skillctl sweep counters contradict individual decisions")
+    if payload["quarantined"] != quarantined or payload["quarantine_candidates"] != candidates:
+        return protocol_error("skillctl sweep counters contradict actual quarantine actions")
+    if payload["complete"] and any(not entry["complete"] for entry in entries):
+        return protocol_error("skillctl sweep completion contradicts an incomplete entry")
+    if payload["ok"] and (not payload["complete"] or any(entry["status"] != "valid" for entry in entries)):
+        return protocol_error("skillctl sweep success contradicts individual decisions")
+    return payload
+
+
+@mcp.tool()
+async def skill_verify_all(
+    quarantine: bool = False,
+    registry: str = "",
+    governance_min: str = "",
+    budget_seconds: int = 60,
+    timeout: int = 90,
+) -> dict:
+    """Verify the installed inventory and preserve every result, including failures.
+
+    The sweep updates verdict/audit caches. Skills move only when quarantine=True.
+    Incomplete, skipped and unconfirmed checks cannot become overall success.
+    Budget is 1..300 seconds; timeout must exceed budget and be at most 600 seconds.
+    """
+    def invalid(reason):
+        return {"ok": False, "exit_code": 2, "error_class": "validation_error", "stderr": reason,
+                "remediation": "Use a positive bounded budget, a larger timeout and valid registry/governance values."}
+
+    if type(quarantine) is not bool or type(budget_seconds) is not int or not 1 <= budget_seconds <= 300:
+        return invalid("quarantine must be boolean and budget_seconds an integer in 1..300")
+    if type(timeout) is not int or not budget_seconds < timeout <= 600:
+        return invalid("timeout must exceed budget_seconds and be at most 600 seconds")
+    if not isinstance(registry, str) or (registry and _validate_safe_token(registry, "registry")):
+        return invalid("registry must be a string without newlines or null bytes")
+    if not isinstance(governance_min, str) or governance_min not in ("", "green", "yellow"):
+        return invalid("governance_min must be empty, green or yellow")
+    binary, err = _resolve_skillctl_bin()
+    if err:
+        return {"ok": False, "exit_code": -1, "error_class": "skillctl_not_found", "stderr": err,
+                "remediation": "Install skillctl or set SKILLCTL_BIN to its absolute path."}
+    argv = [binary, "verify", "--json", "--all", "--budget", f"{budget_seconds}s"]
+    if quarantine:
+        argv.append("--quarantine")
+    if registry:
+        argv.extend(["--registry", registry])
+    if governance_min:
+        argv.extend(["--governance-min", governance_min])
+    result = _run_skillctl_blocking(argv, timeout=timeout)
+    if result["error"]:
+        return {"ok": False, "exit_code": result["exit_code"], "error_class": "exec_error", "stderr": result["error"],
+                "remediation": "The sweep did not finish; inspect the registry and installed inventory before retrying quarantine."}
+    return _decode_sweep_result(result)
 
 
 def _decode_attest_receipt(result: dict, digest: str, level: str, reviewer_id: str) -> dict:

@@ -129,8 +129,10 @@ echo "$HOOK_OUT" | grep -q BLOCKED && ok "deny message announces BLOCKED" || bad
 
 set +e
 SWEEP_OUT="$(RUN verify --all --quarantine --json --budget 8s 2>&1)"
+SWEEP_CODE=$?
 set -e
 eviv "03-sweep.json" "$SWEEP_OUT"
+if [ "$SWEEP_CODE" = 1 ]; then ok "sweep exits 1 for the invalid aggregate"; else bad "tampered sweep should exit 1, got $SWEEP_CODE"; fi
 if QPRESENT >/dev/null 2>&1; then ok "sweep QUARANTINED the skill (moved out of ~/.claude/skills/)"; else bad "sweep should quarantine the tampered skill"; fi
 if BODYPRESENT; then bad "tampered body still present in skills/ after sweep"; else ok "tampered body removed from skills/ (in quarantine now)"; fi
 

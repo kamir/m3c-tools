@@ -35,8 +35,8 @@
     {
       "de": "docs/v2/betrieb/ops-monitoring.de.md",
       "en": "docs/v2/betrieb/ops-monitoring.en.md",
-      "de_sha256": "89d0ca5da34a8908c758e2410e16ddb6dd04c6c0b0d0018c43bc9897f82799c1",
-      "en_sha256": "726e69dfdcd74fadf103ea88f89bb26aa2f301e76b78390d84c0859e072c05ca"
+      "de_sha256": "db0b00066f0036fe3eb64262509cd35745d0cafd88531e7354f4fd70d1433f19",
+      "en_sha256": "aa07f35b199c4efaf8aeadf49675b99847067d4effea718a1f15295c9fc8c799"
     },
     {
       "de": "docs/v2/betrieb/ops-registry-backup-restore.de.md",
@@ -179,8 +179,8 @@
     {
       "de": "docs/v2/referenz/manual-skillctl.de.md",
       "en": "docs/v2/referenz/manual-skillctl.md",
-      "de_sha256": "f40d7041f17f635cdaee2e7d8a8410851f2758b86dff41a1e759f114ded8fc98",
-      "en_sha256": "d917ff72219baa0f99f345528529d17fb3d87b7e198620a26ed0a6a30c9f4c01"
+      "de_sha256": "95027d2980d0deb5c766f738e969dc466834645683a63f3e5d0f1a41cff925b6",
+      "en_sha256": "552cae2e448bf843a6365248b5e865fd65cd31af42588686c0dd5c0968ac8ce3"
     },
     {
       "de": "docs/v2/sicherheit/audit-spur.de.md",
@@ -287,8 +287,8 @@
     {
       "de": "tools/scheduling/README.de.md",
       "en": "tools/scheduling/README.md",
-      "de_sha256": "a8858dd8ee555f46729b433db256f838d8ffc16689205a89e20e1836ee49c494",
-      "en_sha256": "d58dfd1dfc4ac3329636c4ac6eb6416c795720b9d0ebb82b31a15403a3b8c49c"
+      "de_sha256": "e1dc5c8e835d1868edfd9f6e3ea132b0faf353aa5c9d33f3d7448225662f0b24",
+      "en_sha256": "0e010df8243e59a211d20fd651aea5a421e4d4233e3063bb396144f3b8ba79a7"
     },
     {
       "de": "tests/evidence/trust-freeze/README.de.md",

@@ -531,8 +531,7 @@ alone does not prove independent review. Consumers must retain both fields and a
 their configured verifier policy. MCP install/verify requests this JSON contract and
 rejects malformed, incomplete or contradictory success results. The human default
 remains unchanged. Sidecar-tier verification currently has no machine trust contract;
-`verify --json` rejects that fallback explicitly. The separate `verify --all` sweep
-retains its existing output contract.
+`verify --json` rejects that fallback explicitly. The separate `verify --all` sweep has the versioned inventory contract described below.
 
 **`verify --all`: the fleet sweep** (SPEC-0247 P0.2). `--all` is detected *before* flag
 parsing and switches to a different flag set, because the sweep is a different job: verify
@@ -544,6 +543,55 @@ every installed skill, report one verdict per skill, and optionally quarantine t
 | `--quarantine` | Move TRUST-failing *managed* skills out of `~/.claude/skills/` into the quarantine dir. |
 | `--budget` | Total wall-clock budget for the sweep. Skills not reached are reported `unverified`, never quarantined, so a slow registry cannot delete your skills. |
 | `--session-id` | Stamp the recorded verdict-cache rows with this session id (the one from the `SessionStart` event). |
+
+
+The sweep JSON contract is `m3c.skillctl.sweep-result/v1`, operation `verify_all`.
+Put `--json` first to include flag parsing failures. Stdout contains one JSON object,
+including for a missing or empty skills directory (`total: 0`, `entries: []`).
+A zero-item success proves only that this sweep found no skills to evaluate.
+
+Both human and JSON mode return process exit `0` only for a complete, valid inventory
+or an empty inventory, `1` for invalid, incomplete or skipped skills and I/O/action
+failures, and `2` for invalid arguments. This replaces the previous unconditional
+sweep exit `0`. Per-entry `exit` retains the specific verifier or policy refusal.
+`complete` means the required decision was conclusive; an invalid result may be
+complete while `ok` remains false. Consumers must check both `ok` and `complete`.
+
+Each entry has `status` (`valid`, `invalid`, `incomplete`, `skipped`), the legacy
+`state`, a reason and named checks for content binding, trust chain, governance,
+dependencies and revocation. Check outcomes are `pass`, `fail`, `unconfirmed` or
+`not_checked`. `check_scope` distinguishes online/offline trust chains, re-anchored
+sidecars, legacy sidecars and policy-only decisions. An offline pass does not prove
+fresh revocation information. `revocation_source` identifies the configured online
+authority, authenticated cache, gossip denial, unconfirmed or unavailable evidence;
+gossip alone cannot prove a clean revocation state.
+
+`digest`, when available, is calculated from the actual stashed bundle bytes, with
+`digest_source: actual_bundle`. It is not copied from local provenance metadata.
+`digest_verified` additionally requires authenticated verification and content binding.
+`governance_verified` preserves whether governance was cryptographically verified;
+a permitted advisory verdict may leave it false. Nullable `self_attested` does not
+by itself establish reviewer independence. Legacy sidecars remain incomplete.
+Declared dependencies without a resolver are `unconfirmed`, so the sweep fails overall;
+no transitive dependency resolution is claimed.
+
+`total = verified + invalid + unverified + skipped`, where `unverified` counts
+incomplete results. `quarantined` counts actual moves only; `quarantine_candidates`
+also counts report-only and failed attempts. `disposition` distinguishes `unchanged`,
+`would_quarantine`, `quarantined` and `quarantine_failed`. Only an actual move has a
+`quarantine_path`; a subsequent note-write failure retains that path and reports
+`action_error`, `complete: false` and a nonzero overall exit. Without `--quarantine`,
+skills stay in place, while verdict and audit caches may still be updated.
+
+Budget checks occur between skills and constrain online verification; synchronous
+filesystem and revocation operations are not an interruptible transaction. A timeout
+may follow earlier completed moves. Inspect the inventory before retrying.
+
+MCP exposes `skill_verify_all(quarantine=False, registry="", governance_min="",
+budget_seconds=60, timeout=90)`. Budget is an integer from 1 to 300 seconds;
+timeout must exceed it and be at most 600 seconds. The default does not move skills.
+The server preserves the validated CLI payload, including every failed entry, and
+rejects malformed or contradictory results instead of parsing human output.
 
 ```bash
 skillctl verify my-skill

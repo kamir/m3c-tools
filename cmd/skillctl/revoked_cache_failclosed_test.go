@@ -22,7 +22,9 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -33,6 +35,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/skillbundle"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 )
 
@@ -48,6 +51,7 @@ import (
 // makes the skill verify clean and the test FAIL.
 func TestSweep_RevocationUnavailableUnderManaged_FailsClosed(t *testing.T) {
 	home := t.TempDir()
+	setUserProfile(t, home)
 	writeSidecarDigest(t, home, "er1-push", "sha256:beef")
 
 	stubRootsOK(t)
@@ -63,10 +67,16 @@ func TestSweep_RevocationUnavailableUnderManaged_FailsClosed(t *testing.T) {
 	t.Cleanup(func() { sweepRevokedFn = orig })
 
 	rep := runSweepReport(t, home, "--quarantine")
+	if rep.ExitCode != exitGeneric || rep.OK {
+		t.Fatalf("unavailable revocation authority must fail aggregate: %+v", rep)
+	}
 	e := findEntry(t, rep, "er1-push")
 	if e.State != "quarantined" || e.Exit != exitRevocationStale {
 		t.Fatalf("managed skill must FAIL CLOSED via the R01 branch (state=quarantined exit=%d); got state=%q exit=%d reason=%q",
 			exitRevocationStale, e.State, e.Exit, e.Reason)
+	}
+	if e.Scope != "revocation_policy" || e.RevocationSource != "unavailable" {
+		t.Fatalf("wrong authority scope: %+v", e)
 	}
 	if !containsAll(e.Reason, "revocation", "WF-001") {
 		t.Fatalf("quarantine reason must name the fail-closed cause; got %q", e.Reason)
@@ -80,7 +90,25 @@ func TestSweep_RevocationUnavailableUnderManaged_FailsClosed(t *testing.T) {
 // quarantine a managed-looking skill.
 func TestSweep_UnmanagedCleanFetch_NoSpuriousDeny(t *testing.T) {
 	home := t.TempDir()
-	writeSidecarDigest(t, home, "er1-push", "sha256:beef")
+	setUserProfile(t, home)
+	blob := twoPartyBundle(t, "er1-push", "synthetic clean revocation fixture")
+	sum := sha256.Sum256(blob)
+	digest := "sha256:" + hex.EncodeToString(sum[:])
+	writeSidecarDigest(t, home, "er1-push", digest)
+	directory := filepath.Join(home, ".claude", "skills", "er1-push")
+	if err := os.Remove(filepath.Join(directory, "SKILL.md")); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := skillbundle.Unpack(blob, skillbundle.UnpackOptions{StripWrapper: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := skillbundle.ExtractTo(entries, directory); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(directory, "er1-push.skb"), blob, 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	stubRootsOK(t)
 	stubVerify(t, exitOK, "ok", nil)
@@ -91,9 +119,16 @@ func TestSweep_UnmanagedCleanFetch_NoSpuriousDeny(t *testing.T) {
 	}
 	t.Cleanup(func() { sweepRevokedFn = orig })
 
-	_, out := runSweep(t, home, "--quarantine")
+	rep := runSweepReport(t, home, "--quarantine")
+	entry := findEntry(t, rep, "er1-push")
+	if rep.ExitCode != exitGeneric || rep.OK || entry.Status != "incomplete" || entry.Complete || entry.Exit != exitOK {
+		t.Fatalf("unconfirmed clean state must remain incomplete, without inventing a trust failure: %+v entry=%+v", rep, entry)
+	}
+	if entry.Digest != digest || entry.DigestSource != "actual_bundle" || entry.Scope != "online_trust_chain" || entry.RevocationSource != "unconfirmed" {
+		t.Fatalf("wrong digest or check scope: %+v", entry)
+	}
 	if q, _ := quarantined(t, home, "er1-push"); q {
-		t.Fatalf("clean fetch must NOT quarantine (no spurious hard-deny); out=\n%s", out)
+		t.Fatal("unconfirmed clean state must NOT quarantine (no spurious hard-deny)")
 	}
 }
 
