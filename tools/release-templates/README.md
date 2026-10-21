@@ -13,10 +13,10 @@ install → keygen → login → package → publish → upgrade for *that exact
 - **Generator:** `tools/skillctl-runbook.sh <tag> [out.html]`: stamps the
   version, then gates on (a) no unresolved placeholder and (b) no external
   resource (CSP-safe / offline).
-- **Wired into release prep:** `tools/skillctl-release.sh <tag>` calls the
-  generator automatically, dropping `skillctl-publisher-runbook.html` into
-  `release/<tag>/` alongside the binaries. So cutting a release always produces
-  the matching runbook: no manual step.
+- **Separate release steps:** Run the generator explicitly. The local
+  `tools/skillctl-release.sh <tag>` helper only signs verified existing CI
+  manifest bytes and does not generate or publish runbooks. See the
+  [fallback-signing procedure](../../docs/security/release-fallback.en.md).
 
 ## The descriptor: `runbook.meta.json` (BUG-0224)
 

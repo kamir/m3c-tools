@@ -85,7 +85,7 @@ Both run as long-lived services: see [Service Index](service-index.md).
 |------|----------|---------|
 | Build & packaging | `scripts/build-all.sh`, `scripts/build-windows.sh`, `scripts/build-portaudio-universal.sh`, `scripts/make-dmg.sh`, `scripts/make-icns.sh` | Cross-platform builds, macOS bundle/DMG, Windows binary. |
 | Installers | `scripts/installer.nsi`, `tools/skillctl-install.sh`, `tools/skillctl-install.ps1` | NSIS installer, skillctl install one-liners. |
-| skillctl release/runbook | `tools/skillctl-release.sh`, `tools/skillctl-runbook.sh`, `tools/skillctl-runbook-publish.sh`, `scripts/publish-skb.sh` | Release + `.skb` publish + runbook automation. |
+| skillctl release/runbook | `tools/skillctl-release.sh`, `tools/skillctl-runbook.sh`, `tools/skillctl-runbook-publish.sh`, `scripts/publish-skb.sh` | Verified CI fallback signature; separate `.skb` and runbook publication. |
 | Capture-source login/checks | `tools/plaud-mcp-login.mjs`, `tools/plaud-e2e-check.sh`, `scripts/e2e-plaud-sync-local.sh` | Plaud OAuth login + E2E sync verification. |
 | CI / docs / review | `scripts/code-review.sh`, `scripts/check-docs.sh`, `scripts/check-index.sh`, `scripts/e2e-device-token-proof.sh` | `check-docs.sh` runs the docaudit / verbaudit / tutorial / index gates locally; `check-index.sh` is the index gate itself, and the CI `docs-gate` job calls it directly. |
 

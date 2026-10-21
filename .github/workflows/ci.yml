@@ -107,6 +107,8 @@ jobs:
 
       - name: Release-check execution provenance contracts
         run: python3 scripts/collect-release-checks.test.py
+      - name: Verified CI fallback signing contracts (offline)
+        run: python3 tools/skillctl_release_fallback_test.py
 
   format-gate:
     name: Format (gofmt)

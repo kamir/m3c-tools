@@ -8,8 +8,8 @@
 # Auth: device token (FR-0043). Reads $ER1_DEVICE_TOKEN, else the persisted
 # token (same as skillctl). Endpoint: POST <ER1_BASE>/api/thoh/runbooks.
 #
-# NOTE: not wired into skillctl-release.sh yet: activate that one-liner once
-# thoh_manager is deployed (the endpoint must exist). Until then, run manually.
+# Publication is an explicit separate operation; skillctl-release.sh never
+# invokes this publisher or reads catalog credentials.
 #
 # Usage:
 #   tools/skillctl-runbook-publish.sh <tag> <runbook.html> [ER1_BASE]

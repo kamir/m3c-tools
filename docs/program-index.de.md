@@ -82,7 +82,7 @@ Beide laufen dauerhaft: siehe [Dienste](service-index.de.md).
 |------|----------|---------|
 | Build und Paketierung | `scripts/build-all.sh`, `scripts/build-windows.sh`, `scripts/build-portaudio-universal.sh`, `scripts/make-dmg.sh`, `scripts/make-icns.sh` | Plattformübergreifende Builds, macOS-Bundle/DMG, Windows-Binärdatei. |
 | Installer | `scripts/installer.nsi`, `tools/skillctl-install.sh`, `tools/skillctl-install.ps1` | NSIS-Installer und skillctl-Installations-Einzeiler. |
-| skillctl-Release/Runbook | `tools/skillctl-release.sh`, `tools/skillctl-runbook.sh`, `tools/skillctl-runbook-publish.sh`, `scripts/publish-skb.sh` | Release, Veröffentlichung von `.skb` und Runbook-Automatisierung. |
+| skillctl-Release/Runbook | `tools/skillctl-release.sh`, `tools/skillctl-runbook.sh`, `tools/skillctl-runbook-publish.sh`, `scripts/publish-skb.sh` | Fallback-Signatur geprüfter CI-Bytes; separate `.skb`- und Runbook-Veröffentlichung. |
 | Anmeldung und Prüfung der Aufnahmequellen | `tools/plaud-mcp-login.mjs`, `tools/plaud-e2e-check.sh`, `scripts/e2e-plaud-sync-local.sh` | Plaud-OAuth-Anmeldung und E2E-Synchronisierungsprüfung. |
 | CI, Dokumentation und Review | `scripts/code-review.sh`, `scripts/check-docs.sh`, `scripts/check-index.sh`, `scripts/e2e-device-token-proof.sh` | `check-docs.sh` startet lokale docaudit-, verbaudit-, Tutorial- und Indexprüfungen. `check-index.sh` prüft die Indizes; der CI-Job `docs-gate` ruft es direkt auf. |
 

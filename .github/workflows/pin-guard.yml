@@ -87,13 +87,13 @@ jobs:
       #
       # NARROW EXCEPTION (CD-T5): the SLSA github-generator REUSABLE WORKFLOWS
       # (slsa-framework/slsa-github-generator/.github/workflows/*.yml) MUST be
-      # referenced by an immutable `@vX.Y.Z` release tag, NOT a commit SHA:
+      # referenced by a full `@vX.Y.Z` release tag, NOT a commit SHA:
       # slsa-verifier verifies the generator ran from that signed tag, and a
       # SHA ref (or a shorter @vX / @vX.Y tag) breaks builder-identity
       # verification. This is a documented, intentional slsa-github-generator
       # constraint. The ONE place SHA-pinning is not just discouraged but wrong.
-      # Tag movement is caught by slsa-verifier + the Rekor transparency log, so
-      # this is not a "mutable tag" hole. The exception is scoped to that exact
+      # Verifier identity checks and Rekor authenticate signed evidence, not a
+      # permanent freeze of mutable Git refs. The exception is scoped to that exact
       # repo + workflows dir + a full 3-part semver tag; everything else (incl.
       # slsa-verifier's own installer action) must still be a 40-hex SHA.
       # (0) A workflow file GitHub will not even parse is worse than a failing
