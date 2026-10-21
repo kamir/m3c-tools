@@ -182,7 +182,8 @@ jobs:
           path: win-trust.json
 
   # ── Drift guard (the "forever") ───────────────────────────────────────────
-  # Two cheap, robust checks keep the opt-out contract honest:
+  # Linux test success and Windows execution parity are both required here.
+  # Two additional checks keep the opt-out contract honest:
   #   1. grep guard: fail if a `-run` allow-list ever reappears in the
   #      windows-trust job. This is the primary guard: it makes the only way to
   #      hide a trust test from Windows be a self-skip, not a CI exclusion.
@@ -195,6 +196,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: windows-trust
+    env:
+      M3C_TOKEN_STORE: file
+      M3C_TEST_KEYCHAIN: "0"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
@@ -229,13 +233,17 @@ jobs:
 
       # (2) Parity: run the same set on Linux, compare executed-test counts.
       - name: Linux run of the same trust set (-json)
+        shell: bash
         run: |
+          set -euo pipefail
+          export GOPATH="$(go env GOPATH)"
+          export GOMODCACHE="$(go env GOMODCACHE)"
+          export GOCACHE="$(go env GOCACHE)"
+          trust_home="$(mktemp -d)"
+          export HOME="$trust_home" USERPROFILE="$trust_home"
           go test -json -count=1 -timeout=300s \
             ./pkg/skillctl/... ./cmd/skillctl/... ./evaluation/... \
             | tee lin-trust.json
-        # Don't fail the parity job on a red test here. The windows-trust job
-        # is the authority on green/red; this run only counts executed tests.
-        continue-on-error: true
 
       - name: Download Windows test report
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4

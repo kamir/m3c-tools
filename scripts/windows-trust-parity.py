@@ -3,7 +3,8 @@
 
 Compares two `go test -json` event streams (a Linux run and a Windows run of the
 SAME package set: ./pkg/skillctl/... ./cmd/skillctl/... ./evaluation/...) and
-fails if the Windows run executed materially FEWER tests than the Linux run.
+rejects test/package failures or empty reports on either OS, then fails if the
+Windows run executed materially FEWER tests than the Linux run.
 
 Why this exists
 ---------------
@@ -16,16 +17,16 @@ opt-out.
 
 What counts as "executed"
 -------------------------
-Every top-level test that reaches a terminal action (pass, fail, OR skip) is
-counted as executed. A platform-gated test that calls t.Skip("…windows…") STILL
+Every top-level test that reaches a terminal pass or skip is counted as
+executed. Any test or package failure rejects the report. A platform-gated test that calls t.Skip("…windows…") STILL
 COUNTS: it ran, made its decision, and skipped. So legitimate platform self-skips
 do NOT widen the gap; only a test that never ran at all (missing/!build) does.
 
 Self-skip allowance
 -------------------
-The trust surface today has NO live-external-service tests (every server is an
-in-process httptest fake), so the Linux and Windows executed-counts should match
-almost exactly. We allow a small slack (ALLOWANCE) for the handful of tests that
+Live-service and platform-specific tests can self-skip. Those terminal skips
+remain counted, so the Linux and Windows executed-counts should match almost
+exactly. We allow a small slack (ALLOWANCE) for the handful of tests that
 are present on one OS's run but legitimately absent on the other (e.g. a future
 Unix-only helper test guarded by a build tag). If Windows trails Linux by more
 than ALLOWANCE executed tests, that's drift → fail.
@@ -62,18 +63,28 @@ def executed_tests(path):
                 except json.JSONDecodeError:
                     # `go test -json` can interleave non-JSON build output.
                     continue
+                if not isinstance(ev, dict):
+                    raise ValueError(f"{path}: test event is not an object")
                 action = ev.get("Action")
                 test = ev.get("Test")
                 pkg = ev.get("Package", "")
-                if test is None:
+                if action == "fail":
+                    raise ValueError(f"{path}: failed test/package {pkg}::{test or '(package)'}")
+                if "Test" not in ev:
                     continue  # package-level event, not a test
                 if action not in ("pass", "fail", "skip"):
                     continue
+                if not isinstance(test, str) or not test.strip():
+                    raise ValueError(f"{path}: invalid terminal test identity")
+                if not isinstance(pkg, str) or not pkg.strip():
+                    raise ValueError(f"{path}: invalid terminal package identity")
                 top = test.split("/", 1)[0]  # collapse subtests
                 executed.add(f"{pkg}::{top}")
     except FileNotFoundError:
         print(f"ERROR: report not found: {path}", file=sys.stderr)
         sys.exit(2)
+    if not executed:
+        raise ValueError(f"{path}: no executed tests in report")
     return executed
 
 
@@ -81,8 +92,12 @@ def main(argv):
     if len(argv) != 3:
         print(__doc__)
         return 2
-    linux = executed_tests(argv[1])
-    windows = executed_tests(argv[2])
+    try:
+        linux = executed_tests(argv[1])
+        windows = executed_tests(argv[2])
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
 
     n_lin, n_win = len(linux), len(windows)
     missing_on_windows = sorted(linux - windows)

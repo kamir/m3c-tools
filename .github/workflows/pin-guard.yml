@@ -86,6 +86,9 @@ jobs:
       - name: Runner-policy failure contracts
         run: python3 scripts/ci-matrix.test.py
 
+      - name: Linux trust and parity failure contracts
+        run: python3 scripts/windows-trust-parity.test.py
+
       - name: Hosted runner selection, timeouts and concurrency
         run: python3 scripts/ci-matrix.py --check
 
