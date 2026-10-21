@@ -36,6 +36,33 @@ type sweepVerification struct {
 	scope  string
 }
 
+// readSweepInventory distinguishes a missing inventory from an obstructed path.
+// Windows can report ErrNotExist when ReadDir encounters a regular file, so a
+// missing-path decision also requires an existing directory ancestor.
+func readSweepInventory(path string) ([]os.DirEntry, error) {
+	for probe := path; ; probe = filepath.Dir(probe) {
+		_, err := os.Lstat(probe)
+		if err == nil {
+			// Stat also resolves Windows junctions and mount points, whose
+			// Lstat mode need not carry ModeSymlink or ModeDir.
+			info, err := os.Stat(probe)
+			if err != nil {
+				return nil, err
+			}
+			if !info.IsDir() {
+				return nil, fmt.Errorf("inventory path is not a directory: %s", probe)
+			}
+			if probe != path {
+				return []os.DirEntry{}, nil
+			}
+			return os.ReadDir(path)
+		}
+		if !errors.Is(err, os.ErrNotExist) || filepath.Dir(probe) == probe {
+			return nil, err
+		}
+	}
+}
+
 func runVerifyAll(args []string, stdout, stderr io.Writer) (code int) {
 	var diagnostic strings.Builder
 	stderr = io.MultiWriter(stderr, &diagnostic)
@@ -75,10 +102,7 @@ func runVerifyAll(args []string, stdout, stderr io.Writer) (code int) {
 	}
 	skillsDir := filepath.Join(home, ".claude", "skills")
 	rep.SkillsDir = skillsDir
-	entries, err := os.ReadDir(skillsDir)
-	if errors.Is(err, os.ErrNotExist) {
-		return exitOK
-	}
+	entries, err := readSweepInventory(skillsDir)
 	if err != nil {
 		fmt.Fprintf(stderr, "verify --all: enumerate skills: %v\n", err)
 		return exitGeneric

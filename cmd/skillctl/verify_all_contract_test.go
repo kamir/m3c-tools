@@ -50,16 +50,86 @@ func TestSweepContractEmptyAndEarlyFailures(t *testing.T) {
 }
 
 func TestSweepContractEnumerationErrorIsNotEmpty(t *testing.T) {
+	for _, obstruction := range []string{"home", "claude", "skills"} {
+		t.Run(obstruction, func(t *testing.T) {
+			home := filepath.Join(t.TempDir(), "home")
+			path := home
+			if obstruction != "home" {
+				path = filepath.Join(home, ".claude")
+			}
+			if obstruction == "skills" {
+				path = filepath.Join(path, "skills")
+			}
+			if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte("not a directory"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			code, rep := sweepJSON(t, home)
+			if code != 1 || rep.OK || rep.Complete || rep.Error == "" {
+				t.Fatalf("false empty success %+v", rep)
+			}
+		})
+	}
+}
+
+func TestSweepContractMissingInventoryAncestors(t *testing.T) {
+	for _, existing := range []string{"none", "home", "claude", "skills"} {
+		t.Run(existing, func(t *testing.T) {
+			home := filepath.Join(t.TempDir(), "home")
+			path := home
+			if existing == "claude" || existing == "skills" {
+				path = filepath.Join(path, ".claude")
+			}
+			if existing == "skills" {
+				path = filepath.Join(path, "skills")
+			}
+			if existing != "none" {
+				if err := os.MkdirAll(path, 0700); err != nil {
+					t.Fatal(err)
+				}
+			}
+			code, rep := sweepJSON(t, home)
+			if code != 0 || !rep.OK || !rep.Complete || rep.Total != 0 || rep.Entries == nil {
+				t.Fatalf("missing or empty inventory rejected %+v", rep)
+			}
+		})
+	}
+}
+
+func TestSweepContractBrokenInventoryLinkIsNotEmpty(t *testing.T) {
 	home := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(home, ".claude"), 0700); err != nil {
+	parent := filepath.Join(home, ".claude")
+	if err := os.MkdirAll(parent, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(home, ".claude", "skills"), []byte("not a directory"), 0600); err != nil {
-		t.Fatal(err)
+	if err := os.Symlink(filepath.Join(home, "missing"), filepath.Join(parent, "skills")); err != nil {
+		t.Skip(err)
 	}
 	code, rep := sweepJSON(t, home)
 	if code != 1 || rep.OK || rep.Complete || rep.Error == "" {
-		t.Fatalf("false empty success %+v", rep)
+		t.Fatalf("broken inventory link reported empty %+v", rep)
+	}
+}
+
+func TestSweepInventoryDirectoryLink(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(root, "target")
+	if err := os.MkdirAll(filepath.Join(target, "child"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "linked")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skip(err)
+	}
+	entries, err := readSweepInventory(link)
+	if err != nil || len(entries) != 1 || entries[0].Name() != "child" {
+		t.Fatalf("linked directory not read: entries=%v err=%v", entries, err)
+	}
+	entries, err = readSweepInventory(filepath.Join(link, "missing"))
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("missing descendant under directory link rejected: entries=%v err=%v", entries, err)
 	}
 }
 
