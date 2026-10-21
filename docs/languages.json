@@ -281,8 +281,8 @@
     {
       "de": "tools/release-templates/README.de.md",
       "en": "tools/release-templates/README.md",
-      "de_sha256": "f77ffcc032f37fb45020ba4452a77112a989de0de5e3fd6277f8cd39fbb08540",
-      "en_sha256": "e04d20f5dea557e055c06a46b2b65a7d1dcb64ded1307cdf4e0d89b2c5039937"
+      "de_sha256": "db1a12027319b8543f3923e9cab6c072e20db9b6c81887bfb68414bcbe955096",
+      "en_sha256": "9d22beb1dde6f188b69fcc9c2f8c18966f6eac317cf91da7928897b8187e0b47"
     },
     {
       "de": "tools/scheduling/README.de.md",

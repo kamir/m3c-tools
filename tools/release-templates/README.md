@@ -4,7 +4,7 @@
 
 ## Onboarding runbook generator (release-prep standard)
 
-Every skillctl release ships a **version-matched onboarding runbook**: a
+Generate a **version-matched onboarding runbook** explicitly during release preparation: a
 self-contained, CSP-safe HTML worksheet that walks a new publisher through
 install → keygen → login → package → publish → upgrade for *that exact version*.
 

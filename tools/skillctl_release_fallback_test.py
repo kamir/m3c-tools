@@ -210,6 +210,29 @@ class FallbackTests(unittest.TestCase):
         self.mutate_manifest = mutate
         self.assert_refused_before_sign()
 
+    def assert_manifest_parser_refuses(self, mutate, reason):
+        # Exercise parsing directly, independently of the earlier download-size guard.
+        stage = self.root / "parser-stage"
+        stage.mkdir()
+        self.external_run(["gh", "release", "download", "--dir", str(stage)])
+        manifest = stage / "SHA256SUMS"
+        manifest.write_bytes(mutate(manifest.read_bytes()))
+        with self.assertRaisesRegex(m.VerificationError, reason):
+            m.check_manifest(stage)
+
+    def test_manifest_parser_rejects_crlf(self):
+        self.assert_manifest_parser_refuses(
+            lambda raw: raw.replace(b"\n", b"\r\n"), "unsupported checksum line format")
+
+    def test_manifest_parser_rejects_traversal(self):
+        self.assert_manifest_parser_refuses(
+            lambda raw: raw.replace(m.BINARIES[0].encode(), b"../outside"),
+            "unsupported checksum line format")
+
+    def test_manifest_parser_rejects_extra_entry(self):
+        self.assert_manifest_parser_refuses(
+            lambda raw: raw + b"0" * 64 + b"  extra\n", "manifest must contain exactly five binaries")
+
     def test_multiple_provenance_assets(self):
         self.mutate_assets = lambda assets: assets + ["other.intoto.jsonl"]
         self.assert_refused_before_sign()
