@@ -320,6 +320,9 @@ type finishOpts struct {
 // The caller owns the staging directory's lifetime; this function removes it on
 // success only.
 func finishInstall(o finishOpts) (*Result, error) {
+	if err := verifyInstallSnapshot(o.blob, o.verRes, o.digest); err != nil {
+		return nil, err
+	}
 	// ----- extract -----
 	extractDir := filepath.Join(o.stagingDir, "extracted")
 	// 0750, not 0755. Nothing outside this user needs to traverse a staging

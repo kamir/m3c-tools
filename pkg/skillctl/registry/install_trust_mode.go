@@ -414,7 +414,7 @@ func installOne(b *StagedBundle, opts InstallOpts) (*InstallResult, error) {
 	if err := sanitizeBundleName(b.Name); err != nil {
 		return nil, err
 	}
-	skb, err := os.ReadFile(b.StagedSkbPath)
+	skb, err := readBoundInstallSnapshot(b.StagedSkbPath, b.Digest)
 	if err != nil {
 		return nil, fmt.Errorf("install: read staged .skb: %w", err)
 	}

@@ -980,6 +980,9 @@ func ReadDigestVerifiedManifest(bundlePath, expectedDigest string) (map[string]a
 	if _, err := decodeShaHexDigest(expectedDigest); err != nil {
 		return nil, fmt.Errorf("verify: invalid expected digest: %w", errors.Join(ErrDigestMismatch, err))
 	}
+	// Caller-selected local input; no path sandbox is promised. The same bounded
+	// bytes must match expectedDigest before any manifest is returned.
+	// #nosec G304 -- reading an operator-selected local bundle is intentional.
 	f, err := os.Open(bundlePath)
 	if err != nil {
 		return nil, fmt.Errorf("read bundle: %w", err)
