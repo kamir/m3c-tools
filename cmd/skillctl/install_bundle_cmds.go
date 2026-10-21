@@ -26,6 +26,7 @@ import (
 )
 
 type installBundleParams struct {
+	result         *bundleVerifyResult
 	bundlePath     string
 	metaPath       string
 	trustRootsPath string
@@ -142,6 +143,9 @@ func runInstallBundle(p installBundleParams, stdout, stderr io.Writer) (code int
 			})
 			// SPEC-0279 R6: every freshness decision leaves a durable record,
 			// allow or deny.
+			if p.result != nil {
+				p.result.Freshness = &fresh.Decision
+			}
 			auditFreshnessDecision("install-bundle", res.Digest, fresh)
 			if fresh.Err != nil {
 				gateCode = freshnessExitCode(fresh)
@@ -180,6 +184,12 @@ func runInstallBundle(p installBundleParams, stdout, stderr io.Writer) (code int
 	// The recorded name is the SIGNED one, read back from where the skill
 	// actually landed, not from anything the sender supplied.
 	audName = filepath.Base(res.InstalledPath)
+	if p.result != nil {
+		p.result.setVerified(res.Verify)
+		p.result.InstallPath = res.InstalledPath
+		p.result.ArchivedPath = res.ArchivedPath
+		return exitOK
+	}
 
 	fmt.Fprintln(stdout, res.Verify.ChainSummary)
 	fmt.Fprintf(stdout, "installed: %s\n", res.InstalledPath)

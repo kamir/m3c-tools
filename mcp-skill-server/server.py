@@ -689,6 +689,13 @@ _EXIT_CODE_TO_CLASS = {
     13: "governance_below_min",
     14: "deps_unsatisfied",
     15: "blob_missing",
+    16: "tenant_blocked",
+    17: "source_policy_denied",
+    18: "intent_inconsistent",
+    19: "identity_mismatch",
+    20: "self_attested",
+    22: "revocation_stale",
+    23: "log_inclusion_missing",
 }
 
 # Human-readable remediation strings, indexed by error_class.
@@ -699,6 +706,13 @@ _REMEDIATION = {
     "governance_below_min": "Bundle governance level is below the trust-root minimum. Review the bundle's attestations or pass --allow-yellow if your policy allows it.",
     "deps_unsatisfied": "One or more depends_on entries cannot be satisfied. Install the missing skill/package, or pass --ignore-deps to override (audited).",
     "blob_missing": "Registry has metadata for the digest but the blob storage is unreachable. Try again or contact the registry operator.",
+    "tenant_blocked": "The tenant policy blocked this bundle. Contact the tenant policy owner.",
+    "source_policy_denied": "Source policy, identity revocation or bundle revocation denied this bundle. Inspect the verifier diagnostic.",
+    "intent_inconsistent": "The declared intent contradicts the bundle data dependencies. Review the signed manifest.",
+    "identity_mismatch": "The identity binding does not match the required identity. Inspect the verifier diagnostic.",
+    "self_attested": "The configured verifier policy requires an eligible reviewer. Supply a qualifying signed attestation.",
+    "revocation_stale": "The revocation snapshot is stale. Refresh the trusted revocation evidence.",
+    "log_inclusion_missing": "The required log inclusion evidence is missing or invalid. Obtain a trusted inclusion receipt.",
     "usage_error": "skillctl rejected the invocation. Check the stderr message for the specific flag/argument issue.",
     "generic_error": "skillctl exited with a non-zero status that does not map to a SPEC-0188 §11 sentinel. See stderr.",
 }
@@ -707,19 +721,7 @@ _REMEDIATION = {
 _DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 _VALID_LEVELS = frozenset({"green", "yellow", "red"})
 
-# stdout parsers. The CLI prints a deterministic chain-summary one-liner
-# of the form "<digest>: signed by <author>, admitted by <reg-key>,
-# attested <level>": see pkg/skillctl/verify/verify.go:201. We parse it
-# back out so the MCP tool response is structured rather than free-text.
-_CHAIN_SUMMARY_RE = re.compile(
-    r"^(?P<digest>sha256:[0-9a-f]{64}):\s+"
-    r"signed by (?P<author>\S+),\s+"
-    r"admitted by (?P<key>\S+),\s+"
-    r"attested (?P<level>green|yellow|red)\s*$"
-)
-# install: "installed: <abs path>"
-_INSTALLED_PATH_RE = re.compile(r"^installed:\s+(?P<path>.+)$")
-# attest: line-oriented "key: value" output
+# Human output parsing remains only for the separate attest contract.
 _ATTEST_FIELD_RE = re.compile(r"^(?P<key>attestation_id|bundle_digest|level|attested_at):\s+(?P<value>.+)$")
 
 
@@ -812,7 +814,7 @@ def _run_skillctl_blocking(argv: list[str], timeout: int = 120) -> dict:
             "stderr": "",
             "error": f"skillctl binary not found: {exc}",
         }
-    except OSError as exc:
+    except (OSError, UnicodeError) as exc:
         return {
             "exit_code": -1,
             "stdout": "",
@@ -825,42 +827,6 @@ def _run_skillctl_blocking(argv: list[str], timeout: int = 120) -> dict:
         "stderr": completed.stderr or "",
         "error": None,
     }
-
-
-def _parse_chain_summary(stdout: str) -> dict:
-    """Pull the structured fields out of the CLI's chain-summary line.
-
-    Returns a dict with keys digest, author_identity, registry_key_id,
-    governance_level, chain_summary. Empty-string values for any field
-    not present (e.g. malformed CLI output) so callers always get a
-    stable shape.
-    """
-    out = {
-        "digest": "",
-        "author_identity": "",
-        "registry_key_id": "",
-        "governance_level": "",
-        "chain_summary": "",
-    }
-    for line in stdout.splitlines():
-        m = _CHAIN_SUMMARY_RE.match(line.strip())
-        if m:
-            out["chain_summary"] = line.strip()
-            out["digest"] = m.group("digest")
-            out["author_identity"] = m.group("author")
-            out["registry_key_id"] = m.group("key")
-            out["governance_level"] = m.group("level")
-            break
-    return out
-
-
-def _parse_installed_path(stdout: str) -> str:
-    """Pull the absolute install path printed by `skillctl install`."""
-    for line in stdout.splitlines():
-        m = _INSTALLED_PATH_RE.match(line.strip())
-        if m:
-            return m.group("path").strip()
-    return ""
 
 
 def _parse_attest_output(stdout: str) -> dict:
@@ -937,15 +903,69 @@ def _do_install_or_verify(argv_tail: list[str], timeout: int) -> dict:
             "remediation": "Check the server log; the skillctl process did not run to completion.",
         }
 
-    if result["exit_code"] != 0:
-        return _classify_failure(result["exit_code"], result["stderr"])
+    return _decode_trust_result(result, argv_tail[0])
 
-    parsed = _parse_chain_summary(result["stdout"])
-    return {
-        "ok": True,
-        "exit_code": 0,
-        **parsed,
-    }
+
+def _decode_trust_result(result: dict, operation: str) -> dict:
+    """Accept one typed CLI result; a process success alone proves no trust fields."""
+    code = result["exit_code"]
+
+    def protocol_error(reason: str) -> dict:
+        return {
+            "ok": False,
+            "exit_code": code if code != 0 else 1,
+            "process_exit_code": code,
+            "error_class": "protocol_error",
+            "stderr": reason,
+            "remediation": "Use a compatible skillctl with the versioned JSON trust contract.",
+        }
+
+    def unique_object(pairs):
+        obj = {}
+        for key, value in pairs:
+            if key in obj:
+                raise ValueError("duplicate JSON field")
+            obj[key] = value
+        return obj
+
+    def reject_constant(value):
+        raise ValueError(f"invalid JSON constant: {value}")
+
+    try:
+        payload = json.loads(result["stdout"], object_pairs_hook=unique_object, parse_constant=reject_constant)
+    except (ValueError, TypeError):
+        # Preserve a failing process's numeric diagnosis, including older CLIs.
+        if code != 0 and not result["stdout"].strip():
+            return _classify_failure(code, result["stderr"])
+        return protocol_error("skillctl did not emit one valid JSON object")
+    if not isinstance(payload, dict):
+        return protocol_error("skillctl result must be a JSON object")
+    if payload.get("schema") != "m3c.skillctl.trust-result/v1" or payload.get("operation") != operation:
+        return protocol_error("skillctl result has an unsupported schema or mismatched operation")
+    if type(payload.get("ok")) is not bool or type(payload.get("exit_code")) is not int:
+        return protocol_error("skillctl result has invalid status types")
+    if payload["exit_code"] != code or payload["ok"] != (code == 0):
+        return protocol_error("skillctl JSON status contradicts the process exit code")
+    if code != 0:
+        if not isinstance(payload.get("error"), str) or not payload["error"].strip():
+            return protocol_error("skillctl failure result lacks an error")
+        return _classify_failure(code, payload["error"])
+    if "error" in payload:
+        return protocol_error("skillctl success result carries a contradictory error")
+    if not isinstance(payload.get("digest"), str) or not _DIGEST_RE.fullmatch(payload["digest"]):
+        return protocol_error("skillctl success result lacks a canonical digest")
+    for field in ("author_identity", "registry_key_id", "chain_summary"):
+        if not isinstance(payload.get(field), str) or not payload[field].strip():
+            return protocol_error(f"skillctl success result lacks {field}")
+    if not isinstance(payload.get("governance_level"), str) or payload["governance_level"] not in _VALID_LEVELS:
+        return protocol_error("skillctl success result has an invalid governance level")
+    if type(payload.get("governance_verified")) is not bool:
+        return protocol_error("skillctl result lacks a boolean governance_verified")
+    if "self_attested" not in payload or (payload["self_attested"] is not None and type(payload["self_attested"]) is not bool):
+        return protocol_error("skillctl result lacks a nullable boolean self_attested")
+    if operation == "install" and (not isinstance(payload.get("install_path"), str) or not payload["install_path"].strip()):
+        return protocol_error("skillctl install result lacks install_path")
+    return payload
 
 
 @mcp.tool()
@@ -993,7 +1013,7 @@ async def skill_install(
 
     # ----- assemble argv -----
     spec_arg = f"{name}@{version}" if version else name
-    argv: list[str] = ["install", spec_arg]
+    argv: list[str] = ["install", "--json"]
     if registry:
         argv += ["--registry", registry]
     if governance_min:
@@ -1003,25 +1023,8 @@ async def skill_install(
     if ignore_deps:
         argv.append("--ignore-deps")
 
-    skillctl, bin_err = _resolve_skillctl_bin()
-    if bin_err:
-        return {"ok": False, "exit_code": -1, "error_class": "skillctl_not_found", "stderr": bin_err, "remediation": "Install / build skillctl, or set SKILLCTL_BIN to its absolute path."}
-
-    result = _run_skillctl_blocking([skillctl] + argv, timeout=timeout)
-    if result["error"]:
-        logger.warning("skillctl install exec error: %s", result["error"])
-        return {"ok": False, "exit_code": result["exit_code"], "error_class": "exec_error", "stderr": result["error"], "remediation": "Check the server log; the skillctl process did not run to completion."}
-    if result["exit_code"] != 0:
-        return _classify_failure(result["exit_code"], result["stderr"])
-
-    parsed = _parse_chain_summary(result["stdout"])
-    install_path = _parse_installed_path(result["stdout"])
-    return {
-        "ok": True,
-        "exit_code": 0,
-        **parsed,
-        "install_path": install_path,
-    }
+    argv.extend(["--", spec_arg])
+    return _do_install_or_verify(argv, timeout=timeout)
 
 
 @mcp.tool()
@@ -1046,7 +1049,7 @@ async def skill_verify(
     if governance_min and governance_min not in _VALID_LEVELS:
         return {"ok": False, "exit_code": 2, "error_class": "validation_error", "stderr": f"governance_min must be one of {sorted(_VALID_LEVELS)}", "remediation": "Use 'green', 'yellow', or 'red'."}
 
-    argv: list[str] = ["verify", name]
+    argv: list[str] = ["verify", "--json"]
     if registry:
         argv += ["--registry", registry]
     if governance_min:
@@ -1054,6 +1057,7 @@ async def skill_verify(
     if allow_yellow:
         argv.append("--allow-yellow")
 
+    argv.extend(["--", name])
     return _do_install_or_verify(argv, timeout=timeout)
 
 

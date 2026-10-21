@@ -15,6 +15,7 @@ Run:
 from __future__ import annotations
 
 import asyncio
+import json
 import subprocess
 from unittest.mock import patch
 
@@ -45,6 +46,18 @@ def _completed(returncode: int, stdout: str = "", stderr: str = ""):
     return subprocess.CompletedProcess(args=[], returncode=returncode, stdout=stdout, stderr=stderr)
 
 
+def _trust_json(operation, **overrides):
+    payload = {
+        "schema": "m3c.skillctl.trust-result/v1", "operation": operation,
+        "ok": True, "exit_code": 0, "digest": "sha256:" + "a" * 64,
+        "author_identity": "id:author@m3c", "registry_key_id": "reg-key-1",
+        "governance_level": "green", "governance_verified": False,
+        "self_attested": None, "chain_summary": "sha256:" + "a" * 64 + ": advisory green",
+    }
+    payload.update(overrides)
+    return json.dumps(payload)
+
+
 @pytest.fixture(autouse=True)
 def fake_skillctl(tmp_path, monkeypatch):
     """Pin SKILLCTL_BIN to a real-but-fake executable path so the
@@ -66,10 +79,7 @@ def test_install_success_parses_chain_summary(fake_skillctl):
     install_path. The argv passed to subprocess matches the documented
     CLI shape."""
     digest = "sha256:" + "a" * 64
-    stdout = (
-        f"{digest}: signed by id:author@m3c, admitted by reg-key-1, attested green\n"
-        "installed: /Users/test/.claude/skills/fetch-contract\n"
-    )
+    stdout = _trust_json("install", digest=digest, install_path="/Users/test/.claude/skills/fetch-contract")
     captured = {}
 
     def fake_run(argv, **kwargs):
@@ -82,7 +92,7 @@ def test_install_success_parses_chain_summary(fake_skillctl):
 
     # Argv shape: skillctl install fetch-contract
     assert captured["argv"][0] == fake_skillctl
-    assert captured["argv"][1:] == ["install", "fetch-contract"]
+    assert captured["argv"][1:] == ["install", "--json", "--", "fetch-contract"]
     # No shell=True (defense in depth).
     assert captured["kwargs"].get("shell", False) is False
     # capture_output + text are how we get stdout/stderr as strings.
@@ -106,10 +116,7 @@ def test_install_passes_version_and_flags(fake_skillctl):
 
     def fake_run(argv, **kwargs):
         captured["argv"] = argv
-        return _completed(0, stdout=(
-            "sha256:" + "b" * 64 + ": signed by id:x, admitted by k, attested yellow\n"
-            "installed: /tmp/x\n"
-        ))
+        return _completed(0, stdout=_trust_json("install", digest="sha256:" + "b" * 64, governance_level="yellow", install_path="/tmp/x"))
 
     with patch("subprocess.run", side_effect=fake_run):
         out = _run(server.skill_install(
@@ -124,7 +131,8 @@ def test_install_passes_version_and_flags(fake_skillctl):
     assert out["ok"] is True
     argv = captured["argv"]
     assert argv[1] == "install"
-    assert argv[2] == "fetch-contract@1.0.0"
+    assert argv[-1] == "fetch-contract@1.0.0"
+    assert argv[2] == "--json"
     assert "--registry" in argv
     assert argv[argv.index("--registry") + 1] == "https://reg.example.com"
     assert "--governance-min" in argv
@@ -220,7 +228,7 @@ def test_install_timeout_returns_exec_error(fake_skillctl):
 
 def test_verify_success_returns_chain_summary(fake_skillctl):
     digest = "sha256:" + "c" * 64
-    stdout = f"{digest}: signed by id:author@m3c, admitted by reg-key-2, attested green\n"
+    stdout = _trust_json("verify", digest=digest, registry_key_id="reg-key-2")
     captured = {}
 
     def fake_run(argv, **kwargs):
@@ -230,7 +238,7 @@ def test_verify_success_returns_chain_summary(fake_skillctl):
     with patch("subprocess.run", side_effect=fake_run):
         out = _run(server.skill_verify("fetch-contract"))
 
-    assert captured["argv"][1:] == ["verify", "fetch-contract"]
+    assert captured["argv"][1:] == ["verify", "--json", "--", "fetch-contract"]
     assert out["ok"] is True
     assert out["digest"] == digest
     assert out["registry_key_id"] == "reg-key-2"

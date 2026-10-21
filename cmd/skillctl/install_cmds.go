@@ -32,7 +32,7 @@ import (
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
 )
 
-// runInstall implements `skillctl install <name>[@<version>] [flags]`.
+// runInstall implements `skillctl install [flags] <name>[@<version>]`.
 //
 // Resolves the trust-root (either by --registry exact-match or, if the
 // trust-roots file pins exactly one registry, by single-pin shortcut),
@@ -40,7 +40,12 @@ import (
 //
 // Returns the SPEC-0188 §11 numeric exit code on failure; 0 on success.
 func runInstall(args []string, stdout, stderr io.Writer) (code int) {
+	var diagnostic strings.Builder
+	stderr = io.MultiWriter(stderr, &diagnostic)
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
+	jsonOut := fs.Bool("json", false, "Emit a versioned machine trust result for a single skill. Put --json first to include flag parsing failures.")
+	result := &bundleVerifyResult{}
+	defer renderTrustResult(jsonOut, result, "install", &code, &diagnostic, stdout, stderr)
 	fs.SetOutput(stderr)
 
 	registryURL := fs.String("registry", "", "Registry base URL. Required only when trust-roots has multiple registries pinned.")
@@ -59,7 +64,7 @@ func runInstall(args []string, stdout, stderr io.Writer) (code int) {
 	emergencyPath := fs.String("emergency", "", "Path to a signed emergency deny-list (SPEC-0279 R5). A named digest denies immediately (exit 17), short-circuiting the staleness cadence; a forged list → exit 12.")
 
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: skillctl install <name>[@<version>] [flags]")
+		fmt.Fprintln(stderr, "Usage: skillctl install [flags] <name>[@<version>]")
 		fmt.Fprintln(stderr, "   or: skillctl install --bundle <file.skb> [--meta <f>] [--trust-roots <f>]")
 		fmt.Fprintln(stderr, "                        [--revocations <f>] [--checkpoint <f>] [--emergency <f>]")
 		fmt.Fprintln(stderr, "")
@@ -97,6 +102,7 @@ func runInstall(args []string, stdout, stderr io.Writer) (code int) {
 			return exitUsage
 		}
 		return runInstallBundle(installBundleParams{
+			result:          machineTrustResult(*jsonOut, result),
 			bundlePath:      *bundlePath,
 			metaPath:        *metaPath,
 			trustRootsPath:  *trustRootsPath,
@@ -203,6 +209,12 @@ func runInstall(args []string, stdout, stderr io.Writer) (code int) {
 		return verify.ExitCode(err)
 	}
 	audDigest = res.Verify.Digest
+	if *jsonOut {
+		result.setVerified(res.Verify)
+		result.InstallPath = res.InstalledPath
+		result.ArchivedPath = res.ArchivedPath
+		return exitOK
+	}
 
 	// One-line chain summary on success, plus the install path so the
 	// user can find what just landed.
@@ -214,7 +226,7 @@ func runInstall(args []string, stdout, stderr io.Writer) (code int) {
 	return exitOK
 }
 
-// runVerify implements `skillctl verify <name> [flags]`.
+// runVerify implements `skillctl verify [flags] <name>`.
 //
 // Re-runs the §7 algorithm against an already-installed skill. Reads the
 // stashed .skb from ~/.claude/skills/<name>/, fetches fresh metadata
@@ -233,7 +245,12 @@ func runVerify(args []string, stdout, stderr io.Writer) (code int) {
 		}
 	}
 
+	var diagnostic strings.Builder
+	stderr = io.MultiWriter(stderr, &diagnostic)
 	fs := flag.NewFlagSet("verify", flag.ContinueOnError)
+	jsonOut := fs.Bool("json", false, "Emit a versioned machine trust result for a single skill. Put --json first to include flag parsing failures.")
+	result := &bundleVerifyResult{}
+	defer renderTrustResult(jsonOut, result, "verify", &code, &diagnostic, stdout, stderr)
 	fs.SetOutput(stderr)
 
 	registryURL := fs.String("registry", "", "Registry base URL. Required only when trust-roots has multiple registries pinned.")
@@ -250,12 +267,11 @@ func runVerify(args []string, stdout, stderr io.Writer) (code int) {
 	revocationsPath := fs.String("revocations", "", "Path to a signed revocation list (JSON) to enforce offline for --bundle. A revoked digest → exit 17; an untrusted/forged list → exit 12.")
 	checkpointPath := fs.String("checkpoint", "", "Path to a signed freshness checkpoint (SPEC-0279 R4) that can reset the staleness clock for --revocations without a full re-sync. A forged/stale/rollback checkpoint → exit 12.")
 	emergencyPath := fs.String("emergency", "", "Path to a signed emergency deny-list (SPEC-0279 R5). A named digest denies immediately (exit 17), short-circuiting the staleness cadence; a forged list → exit 12.")
-	jsonOut := fs.Bool("json", false, "Emit the verification result as JSON (--bundle mode).")
 
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: skillctl verify <name> [flags]")
+		fmt.Fprintln(stderr, "Usage: skillctl verify [flags] <name>")
 		fmt.Fprintln(stderr, "   or: skillctl verify --all [--quarantine]")
-		fmt.Fprintln(stderr, "   or: skillctl verify --bundle <file.skb> [--trust-roots <file>] [--json]")
+		fmt.Fprintln(stderr, "   or: skillctl verify [--json] --bundle <file.skb> [--trust-roots <file>]")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Re-runs the SPEC-0188 §7 trust-chain check against an already-installed")
 		fmt.Fprintln(stderr, "skill (~/.claude/skills/<name>/). Useful for catching post-install registry")
@@ -291,7 +307,7 @@ func runVerify(args []string, stdout, stderr io.Writer) (code int) {
 			governanceMin:   *governanceMin,
 			allowYellow:     *allowYellow,
 			tenantFlag:      *tenantFlag,
-			jsonOut:         *jsonOut,
+			result:          machineTrustResult(*jsonOut, result),
 			verbose:         *verboseFlag,
 		}, stdout, stderr)
 	}
@@ -336,6 +352,10 @@ func runVerify(args []string, stdout, stderr io.Writer) (code int) {
 	// `verify <name>` now does the same.
 	tr, root, err := loadAndPickRoot(*registryURL)
 	if err != nil {
+		if *jsonOut {
+			fmt.Fprintln(stderr, "skillctl verify: JSON requires a registry trust root; sidecar verification has no machine trust contract")
+			return exitGeneric
+		}
 		if code, handled := verifySidecarTier(name, *homeOverride, *governanceMin, *verboseFlag, stdout, stderr); handled {
 			return code
 		}
@@ -370,6 +390,10 @@ func runVerify(args []string, stdout, stderr io.Writer) (code int) {
 			return verify.ExitCode(err)
 		}
 		audDigest = res.Digest
+		if *jsonOut {
+			result.setVerified(res)
+			return exitOK
+		}
 		fmt.Fprintln(stdout, res.ChainSummary+" (offline)")
 		return exitOK
 	}
@@ -394,6 +418,10 @@ func runVerify(args []string, stdout, stderr io.Writer) (code int) {
 		return verify.ExitCode(err)
 	}
 	audDigest = res.Digest
+	if *jsonOut {
+		result.setVerified(res)
+		return exitOK
+	}
 	fmt.Fprintln(stdout, res.ChainSummary)
 	return exitOK
 }

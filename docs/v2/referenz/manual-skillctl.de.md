@@ -445,7 +445,7 @@ skillctl cross-sign --key governance-root.priv \
 ### `install`: abrufen, prüfen und installieren
 
 ```bash
-skillctl install <name>[@<version>] [flags]
+skillctl install [flags] <name>[@<version>]
 skillctl install --bundle <file.skb> [--meta <f>] [--trust-roots <f>] [--revocations <f>] [--checkpoint <f>] [--emergency <f>]
 ```
 
@@ -476,6 +476,7 @@ Installationsort, nicht der Dateiname. Diese drei Offline-Eingaben erfordern
 | `-governance-min green\|yellow` | `governance_minimum` des Vertrauensankers überschreiben; leer verwendet dessen Wert. |
 | `-home` | Installationswurzel überschreiben; fortgeschrittene Verwendung, Standard `$HOME`. |
 | `-ignore-deps` | Auflösung von `depends_on` überspringen; wird protokolliert. |
+| `-json` | Versioniertes maschinenlesbares Vertrauensergebnis ausgeben. `--json` zuerst setzen, damit auch Fehler beim Parsen der Flags enthalten sind. |
 | `-meta` | Pfad des BundleMeta-JSON-Umschlags bei `--bundle`; Standard ist die Begleitdatei `.skbmeta.json`. |
 | `-registry` | Registry-Basis-URL; nur erforderlich, wenn Vertrauensanker mehrere Registries festlegen. |
 | `-revocations` | Signierte, offline durchgesetzte Widerrufsliste bei `--bundle`, dieselbe Semantik wie `verify --bundle`. Widerrufener Digest → `17`; gefälschte Liste → `12`; veralteter Snapshot bei Hochrisiko-Bundle → `22`. |
@@ -486,7 +487,7 @@ Installationsort, nicht der Dateiname. Diese drei Offline-Eingaben erfordern
 
 ```bash
 skillctl install my-skill@1.0.0
-skillctl install my-skill@sha256:<hex> --verbose
+skillctl install --verbose my-skill@sha256:<hex>
 skillctl install --bundle demo@1.0.0.skb --trust-roots roots.yaml --revocations revocations.json
 ```
 
@@ -505,9 +506,9 @@ ausschließlich über `translog verify` erreichbar.
 ### `verify`: Vertrauenskette erneut prüfen
 
 ```bash
-skillctl verify <name> [flags]
+skillctl verify [flags] <name>
 skillctl verify --all [--quarantine]
-skillctl verify --bundle <file.skb> [--trust-roots <file>] [--json]
+skillctl verify [--json] --bundle <file.skb> [--trust-roots <file>]
 ```
 
 Prüft die Vertrauenskette aus SPEC-0188 §7 erneut für einen installierten Skill.
@@ -539,11 +540,35 @@ Dritte benötigt `<file>.skbmeta.json` oder `--meta` als Begleitdaten.
 | `-allow-yellow` | Gelbes Ergebnis trotz grün verlangendem Vertrauensanker zulassen; kein erneutes Audit. |
 | `-governance-min green\|yellow` | `governance_minimum` des Vertrauensankers überschreiben. |
 | `-home` | Installationswurzel überschreiben. |
-| `-json` | Prüfergebnis bei `--bundle` als JSON ausgeben. |
+| `-json` | Versioniertes maschinenlesbares Vertrauensergebnis für einzelne Registry-, Installed-offline- oder eigenständige Bundle-Prüfungen ausgeben. `--json` zuerst setzen, damit auch Fehler beim Parsen der Flags enthalten sind. |
 | `-registry` | Registry-Basis-URL; nur bei mehreren fest hinterlegten Registries erforderlich. |
 | `-tenant` | Prüfung an einen Mandantenbereich binden (§7, Schritt 5.5). |
 | `-timeout` | HTTP-Zeitlimit für Registry-Aufrufe, standardmäßig `30s`. |
 | `-verbose` | Strukturierte Logzeilen je Prüfschritt auf stderr ausgeben. |
+
+Maschinenleser setzen `--json` vor den Namen: `skillctl install --json my-skill`
+oder `skillctl verify --json --offline my-skill`. `--json` steht zuerst, damit auch Fehler beim Parsen der Flags als JSON erscheinen;
+alle weiteren Flags stehen vor Positionsargumenten. Ein unbekanntes Flag vor `--json`
+beendet das Parsen, bevor die JSON-Ausgabe aktiviert ist.
+Jeder unterstützte Pfad für ein einzelnes Skill gibt genau ein JSON-Objekt mit `schema`
+als `m3c.skillctl.trust-result/v1`, `operation` (`install` oder `verify`), `ok` und
+`exit_code` aus. Fehler enthalten `error`; Erfolg enthält `digest`, `author_identity`,
+`registry_key_id`, `governance_level`, `governance_verified`, das nullable Feld
+`self_attested` und `chain_summary`. Install enthält zusätzlich `install_path` und,
+wenn vorhanden, `archived_path`. Die bisherigen Bundle-Felder `data_scopes` und
+`freshness` bleiben verfügbar, wenn der Verifier sie liefert. Diagnosen stehen auf
+stderr. Ein Fehler beim Schreiben des JSON liefert einen Exit-Code ungleich null.
+Prozess-Exit-Code und JSON-Feld `exit_code` müssen übereinstimmen.
+
+`governance_verified:false` bedeutet, dass die gemeldete Governance-Stufe nur beratend
+ist. `self_attested:null` bedeutet, dass keine bindende Reviewer-Beziehung festgestellt
+wurde; `false` allein beweist keine unabhängige Prüfung. Verbraucher müssen beide
+Felder erhalten und ihre konfigurierte Verifier-Policy anwenden. MCP install/verify
+fordert diesen JSON-Vertrag an und lehnt fehlerhafte, unvollständige oder widersprüchliche
+Erfolgsmeldungen ab. Die menschenlesbare Standardausgabe bleibt erhalten. Der Sidecar-Pfad
+hat derzeit keinen maschinenlesbaren Vertrauensvertrag; `verify --json` lehnt diesen
+Fallback explizit ab. Der gesonderte Sweep `verify --all` behält seinen bisherigen
+Ausgabevertrag.
 
 **`verify --all`: Flottenprüfung** (SPEC-0247 P0.2). `--all` wird *vor* dem
 Flag-Parsing erkannt und aktiviert einen anderen Flag-Satz: Alle installierten
@@ -560,7 +585,7 @@ ist eine eigene Aufgabe.
 ```bash
 skillctl verify my-skill
 skillctl verify --all
-skillctl verify --bundle my-skill.skb --trust-roots ./roots.yaml --json
+skillctl verify --json --bundle my-skill.skb --trust-roots ./roots.yaml
 ```
 
 Exit: wie `install`; siehe [Exit-Codes](manual-skillctl.md#exit-codes).
@@ -2782,7 +2807,7 @@ Autorensignatur offline prüfen und eine signierte Attestierung für den Digest
 unter einer vom Autor *verschiedenen* Identität veröffentlichen.
 
 ```bash
-skillctl verify --bundle my-skill.skb --trust-roots ./roots.yaml --json   # inspect offline, no install
+skillctl verify --json --bundle my-skill.skb --trust-roots ./roots.yaml   # inspect offline, no install
 skillctl attest sha256:<hex> --level green \
   --rationale "activation gate passed; intent matches data-scopes" \
   --reviewer-id id:reviewer@m3c --author-id id:author@m3c \

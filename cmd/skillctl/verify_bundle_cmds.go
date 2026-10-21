@@ -46,38 +46,8 @@ type verifyBundleParams struct {
 	governanceMin  string
 	allowYellow    bool
 	tenantFlag     string
-	jsonOut        bool
+	result         *bundleVerifyResult
 	verbose        bool
-}
-
-// bundleVerifyResult is the --json shape. Stable field names so CI scripts can
-// branch on `.ok` / `.exit_code` without parsing human text.
-type bundleVerifyResult struct {
-	OK            bool   `json:"ok"`
-	Digest        string `json:"digest,omitempty"`
-	Author        string `json:"author_identity,omitempty"`
-	RegistryKeyID string `json:"registry_key_id,omitempty"`
-	Governance    string `json:"governance_level,omitempty"`
-	// GovernanceVerified (SPEC-0281) lets machine consumers distinguish a
-	// cryptographically re-verified "attested" level from an unsigned advisory
-	// one, without scraping chain_summary free text.
-	GovernanceVerified bool `json:"governance_verified"`
-	// SelfAttested (SPEC-0246 §5) surfaces whether the binding governance
-	// attestation was reviewed by the bundle's own author. Pointer-valued:
-	// true (self), false (independent), null (unknown / no binding attestation).
-	SelfAttested *bool `json:"self_attested"`
-	// DataScopes (SPEC-0196 §12 Q1 / P2b) surfaces the declared data-scope with
-	// provenance: "signed-manifest" (author-signature-covered, authoritative)
-	// vs "bundle-row" (mutable post-admit PATCH, advisory). A CISO consumer can
-	// branch on `.data_scopes[].provenance` to tell author-bound from post-admit.
-	DataScopes   []verify.DeclaredScope `json:"data_scopes,omitempty"`
-	ChainSummary string                 `json:"chain_summary,omitempty"`
-	// Freshness (SPEC-0279 R6) surfaces the auditable freshness decision so a CI
-	// consumer can branch on the epoch/staleness/risk/fail_policy/outcome without
-	// parsing the human summary line. Nil when no freshness policy was in play.
-	Freshness *verify.FreshnessDecision `json:"freshness,omitempty"`
-	Error     string                    `json:"error,omitempty"`
-	ExitCode  int                       `json:"exit_code"`
 }
 
 // runVerifyBundle implements the --bundle path. Returns the SPEC-0188 §11
@@ -171,8 +141,8 @@ func runVerifyBundle(p verifyBundleParams, stdout, stderr io.Writer) int {
 		auditFreshnessDecision("verify-bundle", res.Digest, fresh)
 	}
 
-	if p.jsonOut {
-		out := bundleVerifyResult{}
+	if p.result != nil {
+		out := p.result
 		switch {
 		case verr != nil:
 			out.Error = verr.Error()
@@ -204,9 +174,6 @@ func runVerifyBundle(p verifyBundleParams, stdout, stderr io.Writer) int {
 			}
 			out.ExitCode = exitOK
 		}
-		enc := json.NewEncoder(stdout)
-		enc.SetIndent("", "  ")
-		_ = enc.Encode(out)
 		return out.ExitCode
 	}
 
