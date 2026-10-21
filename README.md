@@ -451,7 +451,7 @@ Every branch that carries a pull request must be named
 `[A-Za-z0-9._-]`. The allowed prefixes are:
 
 `feat` · `feature` · `fix` · `chore` · `docs` · `test` · `refactor` ·
-`spec-<n>` · `s<n>-m<n>` · `r-<n>` · `archive` · `rescue`
+`spec-<n>` · `s<n>-m<n>` · `r-<n>` · `archive` · `rescue` · `codex`
 
 ```bash
 feat/spec-0188-bundle-pack        # passes

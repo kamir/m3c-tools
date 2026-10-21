@@ -456,7 +456,7 @@ PR-Branches heißen `<prefix>/<name>` mit genau einem Schrägstrich und einem Na
 `[A-Za-z0-9._-]`. Erlaubte Präfixe:
 
 `feat` · `feature` · `fix` · `chore` · `docs` · `test` · `refactor` ·
-`spec-<n>` · `s<n>-m<n>` · `r-<n>` · `archive` · `rescue`
+`spec-<n>` · `s<n>-m<n>` · `r-<n>` · `archive` · `rescue` · `codex`
 
 ```bash
 feat/spec-0188-bundle-pack        # passes

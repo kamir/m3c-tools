@@ -98,7 +98,7 @@ jobs:
           # address. It carries no prefix list: `git grep -nE
           # 'rescue|archive|refactor' -- Makefile` is empty, measured
           # 2026-09-08, so half of the obligation pointed at nothing.)
-          regex='^(feat|feature|fix|chore|docs|test|refactor|spec-[0-9]+|s[0-9]+-m[0-9]+|r-[0-9]+|archive|rescue)\/[A-Za-z0-9._-]+$'
+          regex='^(feat|feature|fix|chore|docs|test|refactor|codex|spec-[0-9]+|s[0-9]+-m[0-9]+|r-[0-9]+|archive|rescue)\/[A-Za-z0-9._-]+$'
           if [[ "$HEAD_REF" =~ $regex ]]; then
             echo "✓ branch name '$HEAD_REF' matches convention"
             exit 0
