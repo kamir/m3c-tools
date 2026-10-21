@@ -29,14 +29,12 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 
-	"github.com/kamir/m3c-tools/pkg/skillbundle"
 	"github.com/kamir/m3c-tools/pkg/skillctl/govlevel"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/signing"
@@ -54,8 +52,8 @@ type identityFetcher interface {
 // by the caller; Verify does not mutate any of them.
 type VerifyOpts struct {
 	// BundlePath is the on-disk location of the staged blob whose digest
-	// is being verified. The verifier reads this file ONCE: see
-	// step 1 (digest recomputation).
+	// is being verified. Step 1 computes its digest; manifest scope reads
+	// separately compare their own snapshot against that authenticated digest.
 	BundlePath string
 
 	// BundleMeta is the registry's metadata envelope: the bundle's
@@ -309,7 +307,7 @@ func Verify(opts VerifyOpts) (*VerifyResult, error) {
 	// bundle-row scope is read from the mutable registry row. Advisory: this
 	// never changes the verdict. A read failure is non-fatal. A chain that
 	// otherwise passed must not fail just because we could not surface scope.
-	dataScopes := collectDeclaredScopes(opts.BundlePath, opts.BundleMeta, opts.Logger)
+	dataScopes := collectDeclaredScopes(opts.BundlePath, digestStr, opts.BundleMeta, opts.Logger)
 	logStep(opts.Logger, "datascope_ok", "scopes=%d", len(dataScopes))
 
 	res := &VerifyResult{
@@ -942,11 +940,11 @@ func stepResolveDeps(meta *registry.BundleMeta) error {
 // The signed-manifest scopes are listed first so the authoritative declaration
 // is what a CISO reads at the top. Errors are swallowed (logged): surfacing is
 // advisory and must never turn a passing chain into a failure.
-func collectDeclaredScopes(bundlePath string, meta *registry.BundleMeta, logger io.Writer) []DeclaredScope {
+func collectDeclaredScopes(bundlePath, expectedDigest string, meta *registry.BundleMeta, logger io.Writer) []DeclaredScope {
 	var out []DeclaredScope
 
 	// 1. Author-signed scope from the digest-verified .skb's bundle.json.
-	if signed, err := readSignedManifestScopes(bundlePath); err != nil {
+	if signed, err := readSignedManifestScopes(bundlePath, expectedDigest); err != nil {
 		logStep(logger, "datascope_signed_skip", "err=%v", err)
 	} else {
 		for _, raw := range signed {
@@ -963,107 +961,34 @@ func collectDeclaredScopes(bundlePath string, meta *registry.BundleMeta, logger 
 	return out
 }
 
-// readSignedManifestScopes opens the .skb, finds bundle.json, and returns its
-// `data_dependencies` entries as raw maps. Because the caller only invokes this
-// AFTER the digest of this exact file matched the advertised + signed digest,
-// the bytes returned here are author-signature-covered.
-func readSignedManifestScopes(bundlePath string) ([]map[string]any, error) {
-	if bundlePath == "" {
-		return nil, errors.New("no bundle path")
-	}
-	blob, err := os.ReadFile(bundlePath)
+// readSignedManifestScopes reads scopes bound to the digest authenticated by Verify.
+func readSignedManifestScopes(bundlePath, expectedDigest string) ([]map[string]any, error) {
+	manifest, err := ReadDigestVerifiedManifest(bundlePath, expectedDigest)
 	if err != nil {
-		return nil, fmt.Errorf("read bundle: %w", err)
+		return nil, err
 	}
-	// StripWrapper: same reason as ReadDigestVerifiedManifest. A wrapped bundle
-	// previously yielded no signed scopes at all, which reads as "none declared".
-	entries, err := skillbundle.Unpack(blob, skillbundle.UnpackOptions{StripWrapper: true})
-	if err != nil {
-		return nil, fmt.Errorf("unpack bundle: %w", err)
-	}
-	for _, e := range entries {
-		if e.Rel != "bundle.json" {
-			continue
-		}
-		var m map[string]any
-		if err := json.Unmarshal(e.Content, &m); err != nil {
-			return nil, fmt.Errorf("decode bundle.json: %w", err)
-		}
-		return rawScopeList(m), nil
-	}
-	return nil, errors.New("bundle.json not found in archive")
+	return rawScopeList(manifest), nil
 }
 
-// ReadDigestVerifiedManifest is the SAME P2b trust boundary `Verify` uses,
-// exported so read-only inspectors (e.g. `skillctl intent show --bundle`) can label
-// a scope AUTHORITATIVE / signed-manifest WITHOUT reimplementing, or weakening:
-// the rule.
-//
-// It is the ONLY way to obtain author-signature-covered bundle.json content: it
-//
-//  1. recomputes the digest of the on-disk .skb at bundlePath (NEVER trusts an
-//     advertised/embedded value: see stepRecomputeDigest), then
-//  2. constant-time-compares it against expectedDigest ("sha256:<hex>", the digest
-//     the registry advertised AND that the author signature covers), failing
-//     CLOSED with ErrDigestMismatch on any mismatch, then
-//  3. only on a match, unpacks and returns the parsed bundle.json map. These bytes
-//     are author-signature-covered (tampering them breaks the digest, which we just
-//     matched). The caller reads `intent` / `data_dependencies` from it.
-//
-// This deliberately does NOT read meta.Manifest or any registry row: the registry
-// copy is untrusted (plain HTTP, no signature). A caller that has only the registry
-// view MUST label the scope registry-reported / UNVERIFIED, never authoritative,
-// that is the invariant documented at collectDeclaredScopes above, and `intent
-// show` now honors it too.
+// ReadDigestVerifiedManifest hashes and parses the same bounded archive bytes.
+// A digest match binds content only: callers must separately authenticate the
+// expected digest before treating the returned manifest as author-signed.
 func ReadDigestVerifiedManifest(bundlePath, expectedDigest string) (map[string]any, error) {
 	if bundlePath == "" {
 		return nil, errors.New("no bundle path")
 	}
-	if strings.TrimSpace(expectedDigest) == "" {
-		return nil, fmt.Errorf("verify: no expected digest to compare against: %w", ErrDigestMismatch)
+	if _, err := decodeShaHexDigest(expectedDigest); err != nil {
+		return nil, fmt.Errorf("verify: invalid expected digest: %w", errors.Join(ErrDigestMismatch, err))
 	}
-	// 1. Recompute the digest of THIS exact file: never trust an advertised value.
-	recomputed, err := signing.ComputeBundleDigest(bundlePath)
-	if err != nil {
-		return nil, fmt.Errorf("verify: recompute digest %s: %w", bundlePath, errors.Join(ErrDigestMismatch, err))
-	}
-	// 2. Fail-closed compare against the registry-advertised + author-signed digest.
-	rawExpected, err := decodeShaHexDigest(expectedDigest)
-	if err != nil {
-		return nil, fmt.Errorf("verify: expected digest %q: %w", expectedDigest, errors.Join(ErrDigestMismatch, err))
-	}
-	if subtle.ConstantTimeCompare(recomputed[:], rawExpected) != 1 {
-		return nil, fmt.Errorf("verify: digest mismatch (recomputed=sha256:%s, expected=%s): %w",
-			hexLower(recomputed[:]), expectedDigest, ErrDigestMismatch)
-	}
-	// 3. Digest matched → the bundle.json bytes are author-signature-covered.
-	blob, err := os.ReadFile(bundlePath)
+	// Caller-selected local input; no path sandbox is promised. The same bounded
+	// bytes must match expectedDigest before any manifest is returned.
+	// #nosec G304 -- reading an operator-selected local bundle is intentional.
+	f, err := os.Open(bundlePath)
 	if err != nil {
 		return nil, fmt.Errorf("read bundle: %w", err)
 	}
-	// StripWrapper collapses the single top-level dir of a SPEC-0188 §3.1 wrapped
-	// bundle. Without it this lookup only ever found bundle.json in a FLAT archive
-	// (what our own `pack` writes), and silently found nothing in a wrapped one,
-	// which the unpacker, the installer and the spec all support. "Found nothing"
-	// is the dangerous outcome here: for the data-scope caller it reads as "the
-	// author declared no scopes" rather than "we could not look". It collapses
-	// only when there is exactly one common top-level dir, so a flat archive is
-	// unaffected.
-	entries, err := skillbundle.Unpack(blob, skillbundle.UnpackOptions{StripWrapper: true})
-	if err != nil {
-		return nil, fmt.Errorf("unpack bundle: %w", err)
-	}
-	for _, e := range entries {
-		if e.Rel != "bundle.json" {
-			continue
-		}
-		var m map[string]any
-		if err := json.Unmarshal(e.Content, &m); err != nil {
-			return nil, fmt.Errorf("decode bundle.json: %w", err)
-		}
-		return m, nil
-	}
-	return nil, errors.New("bundle.json not found in archive")
+	defer f.Close()
+	return readDigestVerifiedManifest(f, expectedDigest, registry.MaxBlobSize)
 }
 
 // rawScopeList pulls `data_dependencies` out of a map as a slice of raw entry

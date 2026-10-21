@@ -107,7 +107,7 @@ func InstallBundle(opts BundleOpts) (*Result, error) {
 		return nil, errors.New("install: a pinned trust root is required")
 	}
 
-	blob, err := os.ReadFile(opts.BundlePath) // #nosec G304 -- an operator-supplied path to the artifact they asked to install.
+	blob, err := readLocalInstallSnapshot(opts.BundlePath)
 	if err != nil {
 		return nil, fmt.Errorf("install: read bundle %s: %w", opts.BundlePath, err)
 	}
@@ -130,6 +130,10 @@ func InstallBundle(opts BundleOpts) (*Result, error) {
 		Logger:          opts.Logger,
 	})
 	if err != nil {
+		return nil, err
+	}
+
+	if err := verifyInstallSnapshot(blob, verRes, verRes.Digest); err != nil {
 		return nil, err
 	}
 
