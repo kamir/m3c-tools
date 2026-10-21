@@ -65,29 +65,15 @@ WHAT --check ENFORCES, and why each one
      group. Without one, a second push to a branch leaves the first run going,
      and the two compete for the same runners.
 
-  3. every `runs-on` that names a self-hosted runner is spelled EXACTLY as
-     TRUSTED_LINUX below. A self-hosted runner is a persistent machine: code
-     from an untrusted pull request executing on it can read the runner token
-     and whatever else that machine holds. The one blessed spelling routes
-     untrusted heads to a GitHub-hosted runner instead, and holding it verbatim
-     is what keeps a later edit from quietly loosening it. Not "contains
-     self-hosted, looks guarded": one string, compared whole.
+  3. every local job selects a reviewed GitHub-hosted runner, either literally
+     or through a finite literal matrix. Unknown labels, runner groups and
+     dynamic expressions fail closed. Reusable workflow jobs select runners in
+     the called workflow and remain outside this local selection check.
 
-     Untrusted means two things here, and the second is the one that is easy to
-     miss. A head from a FORK is untrusted in the obvious way. A pull request
-     from `dependabot[bot]` has its head branch inside this repository, so every
-     fork test calls it trusted, and yet what it changes is precisely the set of
-     third-party code that `go test` will then execute, and this repository arms
-     auto-merge on those pull requests (owner decision E2). Both route away.
-
-     The leading `vars.CI_SELF_HOSTED != 'on'` is the kill switch, and its
-     default direction is the point. The repository has ONE self-hosted runner,
-     and three of the jobs routed to it are required contexts on master: if that
-     machine is off, those checks never report and nothing can merge. Unsetting
-     the variable, or setting it to anything but `on`, sends every routed job
-     back to a GitHub-hosted runner within one API call and with no commit. It
-     is opt-IN, so a lost or forgotten variable degrades to slower and costlier
-     rather than to stuck.
+     This is a source review control, not an independent scheduling boundary:
+     a PR can change this checker too. Removing self-hosted registrations from
+     this public repository is the independent platform control. Neither check
+     claims to wipe an old host or stop an already running process.
 
   4. no job name is declared twice within one workflow file under two job ids.
      Two jobs reporting the same context in one run make the required check a
@@ -106,15 +92,12 @@ import sys
 
 import yaml
 
-# The ONE spelling a self-hosted `runs-on` may carry. Compared whole, never by
-# substring: a rule matched loosely is a rule that drifts.
-TRUSTED_LINUX = (
-    "${{ (vars.CI_SELF_HOSTED != 'on' || (github.event_name == 'pull_request' && "
-    "(github.event.pull_request.head.repo.full_name != github.repository || "
-    "github.event.pull_request.user.login == 'dependabot[bot]'))) "
-    "&& fromJSON('[\"ubuntu-latest\"]') "
-    "|| fromJSON('[\"self-hosted\",\"Linux\",\"X64\",\"master2\"]') }}"
-)
+# Exact reviewed labels; a custom label resembling a hosted image is not enough.
+HOSTED_RUNNERS = frozenset({
+    "ubuntu-latest", "ubuntu-24.04-arm", "macos-latest", "macos-14",
+    "windows-latest",
+})
+MATRIX_RUNNER = re.compile(r"\$\{\{\s*matrix\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
 
 EXPR = re.compile(r"\$\{\{([^}]*)\}\}")
 
@@ -229,6 +212,40 @@ def runner_of(job):
     return str(raw)
 
 
+def runner_policy_error(job):
+    """Require explicit hosted labels, including every matrix selection."""
+    raw = job.get("runs-on")
+    if raw is None and isinstance(job.get("uses"), str):
+        return ""  # The called workflow owns its runner; not locally certified.
+    if isinstance(raw, str) and raw in HOSTED_RUNNERS:
+        return ""
+    selector = MATRIX_RUNNER.fullmatch(raw) if isinstance(raw, str) else None
+    if selector is None:
+        return "runs-on must select a reviewed hosted label or literal matrix axis"
+    axis = selector.group(1)
+    strategy = job.get("strategy")
+    matrix = strategy.get("matrix") if isinstance(strategy, dict) else None
+    if not isinstance(matrix, dict):
+        return "runner matrix must be a literal mapping"
+    values = []
+    if axis in matrix:
+        base = matrix[axis]
+        if not isinstance(base, list) or not base:
+            return "runner matrix axis must be a nonempty literal list"
+        values.extend(base)
+    if "include" in matrix:
+        include = matrix["include"]
+        if not isinstance(include, list) or not include:
+            return "runner matrix include must be a nonempty literal list"
+        for item in include:
+            if not isinstance(item, dict) or axis not in item:
+                return "every runner matrix include entry must specify its hosted label"
+            values.append(item[axis])
+    if not values or any(not isinstance(v, str) or v not in HOSTED_RUNNERS for v in values):
+        return "every runner matrix value must be a reviewed hosted label"
+    return ""
+
+
 def required_names(root):
     path = os.path.join(root, "docs", "security", "required-checks.txt")
     names = set()
@@ -265,6 +282,8 @@ def rows(root):
                 names = default_matrix_names(job_id, matrix)
             else:
                 names = [job_id]
+            # An empty axis must not hide a job from policy evaluation.
+            names = names or [str(job.get("name") or job_id)]
             timeout = job.get("timeout-minutes")
             needs = job.get("needs")
             if isinstance(needs, list):
@@ -275,6 +294,7 @@ def rows(root):
                     "job": job_id,
                     "name": name,
                     "runs_on": runner_of(job),
+                    "runner_error": runner_policy_error(job),
                     "timeout": str(timeout) if timeout is not None else "none",
                     "events": evs,
                     "pr": pr,
@@ -317,15 +337,13 @@ def check(data):
                     "%s: reaches a pull request and declares no concurrency group"
                     % row["file"])
 
+    seen_runners = set()
     for row in data:
-        if "self-hosted" not in row["runs_on"]:
-            continue
-        if row["runs_on"] != TRUSTED_LINUX:
-            findings.append(
-                "%s: job '%s' runs-on names a self-hosted runner but is not the "
-                "blessed trusted-routing spelling (see TRUSTED_LINUX in this "
-                "script); untrusted heads could execute on a persistent machine"
-                % (row["file"], row["job"]))
+        ident = (row["file"], row["job"])
+        if row["runner_error"] and ident not in seen_runners:
+            seen_runners.add(ident)
+            findings.append("%s: job '%s': %s" % (
+                row["file"], row["job"], row["runner_error"]))
 
     per_file = {}
     for row in data:
@@ -379,8 +397,8 @@ def main():
                   "header of scripts/ci-matrix.py." % len(findings))
             return 1
         print("OK: %d jobs; every job has a timeout, every pull-request workflow "
-              "has a concurrency group, every self-hosted runs-on carries the "
-              "trusted-routing guard, no name has two producers." % len(data))
+              "has a concurrency group, every local runner selection is hosted, "
+              "no name has two producers." % len(data))
         return 0
 
     header = ("file", "job", "name", "runs_on", "timeout", "events", "pr",
