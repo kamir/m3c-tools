@@ -1,32 +1,9 @@
 package main
 
-// verify_all_cmds.go: `skillctl verify --all [--quarantine] [--json]`
-// (SPEC-0247 P0.2: the SessionStart sweep).
-//
-// Iterates every ~/.claude/skills/<name>/ and re-runs the SPEC-0188 §7 chain.
-// Wired as a SessionStart hook, it runs BEFORE skill discovery, so a skill it
-// quarantines (moves out of ~/.claude/skills/) never has its description
-// injected into the model's context this session (SPEC-0247 R-3.1). It is also
-// the structural fallback for the /slash path, which PreToolUse cannot gate
-// (§3.4): a skill that isn't on disk cannot be /slash-invoked.
-//
-// SAFETY: three dispositions, not one:
-//   - managed (has a stashed .skb) + TRUST failure (§7 exit ≥10) → quarantine
-//     (only with --quarantine). These are real signature/digest/governance/
-//     revocation failures.
-//   - managed + AVAILABILITY failure (network down, registry unreachable, trust
-//     roots absent, budget exceeded → exit <10) → reported "unverified
-//     (freshness unknown)" and LEFT IN PLACE. Quarantining on a flaky network
-//     would nuke every skill; the cost is that a revocation can't be confirmed
-//     offline until the P1 offline-stashed verifier lands.
-//   - unmanaged (no .skb: plugins, hand-installed skills like `browse`) → follows
-//     the gate-policy unmanaged disposition (§9): allow/warn → skipped; deny →
-//     quarantined. Default `allow` means the sweep never touches non-skillctl
-//     skills unless the operator opts into strict mode.
-
+// The sweep preserves existing quarantine policy while reporting incomplete checks.
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -40,305 +17,279 @@ import (
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
 )
 
-// --- seams (stubbed in tests so the sweep runs offline) ---
-
-// loadRootsFn resolves the trust roots + the single pinned root. Production
-// uses loadAndPickRoot; tests stub it so the sweep needs no real trust-roots
-// file.
 var loadRootsFn = loadAndPickRoot
-
-// sweepVerifyManagedFn verifies one installed managed skill and returns
-// (exitCode, chainSummary, err). Production = sweepVerifyManaged (talks to the
-// registry); tests stub it to return a chosen verdict without a network.
 var sweepVerifyManagedFn = sweepVerifyManaged
-
-// sweepClockFn returns "now"; pulled out so a test can drive the time budget.
+var sweepVerifyOfflineFn = sweepVerifyOffline
 var sweepClockFn = time.Now
 
 type sweepCtx struct {
-	client *registry.Client
-	root   *verify.TrustRoot
-	tenant string
-	govMin string
-	home   string
+	client      *registry.Client
+	root        *verify.TrustRoot
+	tenant      string
+	govMin      string
+	home        string
+	registryURL string
 }
 
-// --- report shape ---
-
-type sweepEntry struct {
-	Skill          string `json:"skill"`
-	State          string `json:"state"` // verified | quarantined | unverified | skipped
-	Exit           int    `json:"exit,omitempty"`
-	Reason         string `json:"reason,omitempty"`
-	QuarantinePath string `json:"quarantine_path,omitempty"`
+type sweepVerification struct {
+	result *verify.VerifyResult
+	scope  string
 }
 
-type sweepReport struct {
-	SkillsDir   string `json:"skills_dir"`
-	Total       int    `json:"total"`
-	Verified    int    `json:"verified"`
-	Quarantined int    `json:"quarantined"`
-	Unverified  int    `json:"unverified"`
-	Skipped     int    `json:"skipped"`
-	RootsError  string `json:"roots_error,omitempty"`
-	// RevocationUnavailable is the WF-001 H-F1 fail-closed signal: under managed
-	// self-trust-root config the revoked-set fetch was unavailable AND no fresh
-	// cache bounds staleness, so managed skills are failed CLOSED this sweep.
-	RevocationUnavailable string       `json:"revocation_unavailable,omitempty"`
-	Entries               []sweepEntry `json:"entries"`
-}
-
-// runVerifyAll implements `skillctl verify --all`.
-func runVerifyAll(args []string, stdout, stderr io.Writer) int {
+func runVerifyAll(args []string, stdout, stderr io.Writer) (code int) {
+	var diagnostic strings.Builder
+	stderr = io.MultiWriter(stderr, &diagnostic)
 	fs := flag.NewFlagSet("verify --all", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	_ = fs.Bool("all", false, "Sweep every installed skill (this mode).")
-	quarantine := fs.Bool("quarantine", false, "Move TRUST-failing managed skills out of ~/.claude/skills/ into the quarantine dir.")
-	jsonOut := fs.Bool("json", false, "Emit a machine-readable JSON report on stdout.")
-	budget := fs.Duration("budget", 60*time.Second, "Total wall-clock budget for the sweep; skills not reached are 'unverified', never quarantined.")
-	homeOverride := fs.String("home", "", "Override the install root (advanced; defaults to $HOME).")
-	registryURL := fs.String("registry", "", "Registry base URL (only if trust-roots pins multiple registries).")
-	governanceMin := fs.String("governance-min", "", "Override the trust-root governance minimum (green | yellow).")
-	sessionID := fs.String("session-id", "", "Stamp recorded verdict-cache rows with this session id (from the SessionStart event).")
-
+	_ = fs.Bool("all", false, "Sweep every installed skill.")
+	quarantine := fs.Bool("quarantine", false, "Move trust-failing skills into quarantine; availability failures stay in place.")
+	jsonOut := fs.Bool("json", false, "Emit a versioned sweep result. Put --json first to include flag parsing failures.")
+	budget := fs.Duration("budget", 60*time.Second, "Positive wall-clock budget; unreached skills remain incomplete.")
+	homeOverride := fs.String("home", "", "Override the install root.")
+	registryURL := fs.String("registry", "", "Registry base URL selected from pinned trust roots.")
+	governanceMin := fs.String("governance-min", "", "Override the governance minimum (green | yellow).")
+	sessionID := fs.String("session-id", "", "Session identifier for verdict cache rows.")
+	rep := sweepReport{Entries: []sweepEntry{}}
+	defer func() { finishSweep(&rep, *jsonOut, *quarantine, &code, diagnostic.String(), stdout, stderr) }()
 	if err := fs.Parse(args); err != nil {
 		return exitUsage
 	}
-
+	if fs.NArg() != 0 || *budget <= 0 || (*governanceMin != "" && *governanceMin != "green" && *governanceMin != "yellow") {
+		fmt.Fprintln(stderr, "verify --all: unexpected operands, nonpositive budget or invalid governance minimum")
+		return exitUsage
+	}
+	if *registryURL != "" {
+		if _, _, err := registryOrigin(*registryURL); err != nil {
+			fmt.Fprintln(stderr, "verify --all: registry URL requires an HTTP(S) host and no userinfo, query or fragment")
+			return exitUsage
+		}
+	}
 	home := *homeOverride
 	if home == "" {
-		h, err := userHome()
+		var err error
+		home, err = userHome()
 		if err != nil {
-			fmt.Fprintf(stderr, "verify --all: resolve home dir: %v\n", err)
+			fmt.Fprintf(stderr, "verify --all: resolve home: %v\n", err)
 			return exitGeneric
 		}
-		home = h
 	}
 	skillsDir := filepath.Join(home, ".claude", "skills")
-
-	rep := sweepReport{SkillsDir: skillsDir}
-
+	rep.SkillsDir = skillsDir
 	entries, err := os.ReadDir(skillsDir)
-	if err != nil {
-		// No skills dir → nothing to sweep. Not an error.
-		fmt.Fprintf(stdout, "skillctl verify --all: no installed skills at %s (nothing to sweep)\n", skillsDir)
-		if *jsonOut {
-			emitSweepJSON(stdout, rep)
-		}
+	if errors.Is(err, os.ErrNotExist) {
 		return exitOK
 	}
-
-	// Resolve trust roots once. If unavailable, managed skills cannot be
-	// verified. Report that clearly and DO NOT quarantine anything.
+	if err != nil {
+		fmt.Fprintf(stderr, "verify --all: enumerate skills: %v\n", err)
+		return exitGeneric
+	}
+	// Empty directories require neither registry access nor a revocation refresh.
+	if len(entries) == 0 {
+		return exitOK
+	}
+	start := sweepClockFn()
 	tr, root, rootErr := loadRootsFn(*registryURL)
-	var sc sweepCtx
+	sc := sweepCtx{home: home, root: root, govMin: *governanceMin, registryURL: *registryURL}
 	if rootErr == nil {
-		sc = sweepCtx{
-			client: newRegistryClient(root.RegistryURL, install.HTTPClientOf(verifyHookTimeout)),
-			root:   root,
-			tenant: resolveTenant("", tr),
-			govMin: *governanceMin,
-			home:   home,
-		}
+		sc.client = newRegistryClient(root.RegistryURL, install.HTTPClientOf(verifyHookTimeout))
+		sc.tenant = resolveTenant("", tr)
 	} else {
 		rep.RootsError = rootErr.Error()
+		sc.root = nil
 	}
-
 	pol := loadGatePolicy()
-	start := sweepClockFn()
-
-	// SPEC-0266 F1: fetch the live revoked-digest set once. The sweep is the
-	// revocation authority: a managed skill whose bundle digest is revoked is
-	// quarantined regardless of its §7 result, and the set is cached so the
-	// per-invocation offline gate denies it too until the next sweep.
-	//
-	// WF-001 H-F1 / R01: a non-nil error is the MANAGED fail-CLOSED signal: under
-	// self-trust-root config the revoked-set fetch was unavailable AND no fresh
-	// last-known-good cache bounds staleness, so we can no longer prove any managed
-	// bundle is un-revoked. We must NOT read the (empty/stale) set as "nothing
-	// revoked": that is exactly the revocation-suppression the wave-1 challenge
-	// gate flagged (block the network / hostile 5xx → empty set → known-revoked
-	// digest runs). The UNMANAGED/dev path returns err==nil (best-effort fail-open),
-	// so this never bricks a default machine. See the per-skill fail-closed branch.
-	revoked, _, revErr := sweepRevokedFn(home)
-	revUnavailable := revErr != nil
-	if revUnavailable {
+	revoked, fetchedOnline, revErr := sweepRevokedFn(home)
+	source := sweepRevocationSource(home, fetchedOnline, revErr)
+	if revErr != nil {
 		rep.RevocationUnavailable = revErr.Error()
 	}
-
+	gossip := loadGossipedRevoked(home)
 	for _, e := range entries {
 		name := e.Name()
-		// The tool's own staging directory is not a skill. Counting it made the
-		// sweep apply the unmanaged-skill policy to our own scratch space, which
-		// under a deny policy is noise at best and a wrong verdict at worst.
 		if name == install.StagingDirName {
 			continue
 		}
 		dir := filepath.Join(skillsDir, name)
-		// os.Stat FOLLOWS symlinks. A symlinked skill dir (common here:
-		// gstack symlinks like `browse → gstack/browse`) still has its
-		// description loaded into context, so the sweep MUST see it.
-		// e.IsDir() is lstat-based and would silently skip every symlink:
-		// an evasion gap for a security sweep.
 		info, statErr := os.Stat(dir)
-		if statErr != nil || !info.IsDir() {
+		if statErr == nil && !info.IsDir() {
 			continue
 		}
-		rep.Total++
-
-		// Unmanaged (no .skb) → gate-policy disposition.
-		if !dirHasSkb(dir) {
-			switch pol.Unmanaged {
-			case "deny":
-				rep.Entries = append(rep.Entries, quarantineOrReport(home, name, *quarantine, "unmanaged (no .skb) and policy unmanaged_skills=deny", 0, &rep))
-			default: // allow | warn
-				rep.Skipped++
-				rep.Entries = append(rep.Entries, sweepEntry{Skill: name, State: "skipped", Reason: "unmanaged (no .skb): not skillctl-installed"})
+		entry := newSweepEntry(name, source)
+		if statErr != nil {
+			entry.Reason = "cannot inspect skill: " + statErr.Error()
+			rep.Entries = append(rep.Entries, entry)
+			continue
+		}
+		files, readErr := os.ReadDir(dir)
+		if readErr != nil {
+			entry.Reason = "cannot enumerate skill: " + readErr.Error()
+			rep.Entries = append(rep.Entries, entry)
+			continue
+		}
+		var blobs []string
+		managedMarker := false
+		for _, file := range files {
+			if !file.IsDir() && strings.HasSuffix(file.Name(), ".skb") {
+				blobs = append(blobs, filepath.Join(dir, file.Name()))
 			}
+			if file.Name() == ".skillctl-offline.json" || file.Name() == registry.ProvenanceSidecarName || file.Name() == registry.AttestationStashName {
+				managedMarker = true
+			}
+		}
+		if len(blobs) == 0 && !managedMarker {
+			entry.Scope = "unmanaged_policy"
+			entry.Status, entry.State = "skipped", "skipped"
+			entry.Reason = "unmanaged (no .skb): not skillctl-installed"
+			if pol.Unmanaged == "deny" {
+				entry = sweepQuarantine(entry, home, *quarantine, "unmanaged (no .skb) and policy unmanaged_skills=deny", exitGeneric)
+			}
+			rep.Entries = append(rep.Entries, entry)
 			continue
 		}
-
-		// WF-001 H-F1 / R01: REVOCATION-SUPPRESSION FAIL-CLOSED. The managed
-		// revoked-set fetch was unavailable AND no fresh last-known-good cache
-		// bounds staleness (see fetchRevokedOnline / revokedUnavailableUnderManaged),
-		// so we cannot prove THIS managed bundle is not revoked. Fail CLOSED: quar-
-		// antine rather than let the empty/stale set read as "nothing revoked" (the
-		// pre-fix fail-open: block the network → known-revoked digest still runs).
-		// Only reached under managed config (self-trust-roots present); the unmanaged
-		// path returns err==nil, so a default/dev machine never lands here. In report-
-		// only mode this is advisory (quarantineOrReport does not move anything until
-		// --quarantine). Placed BEFORE the definite-revoke check because the cached
-		// set here is stale and cannot be trusted as authoritative.
-		if revUnavailable {
-			rep.Entries = append(rep.Entries, quarantineOrReport(home, name, *quarantine,
-				fmt.Sprintf("revocation authority unavailable under managed trust roots and no fresh cache. Failing closed (cannot confirm this bundle is not revoked; WF-001 H-F1): %v", revErr),
-				exitRevocationStale, &rep))
+		if len(blobs) != 1 {
+			entry.Reason = "managed skill requires exactly one stashed .skb"
+			entry.Exit = verify.ExitDigestMismatch
+			entry = sweepQuarantine(entry, home, *quarantine, entry.Reason, entry.Exit)
+			recordVerdict(home, name, *sessionID, entry.Exit, "", sweepClockFn())
+			rep.Entries = append(rep.Entries, entry)
+			continue
+		}
+		if revErr == nil && *budget-sweepClockFn().Sub(start) <= 0 {
+			entry.Reason = "sweep budget exceeded: left in place"
+			rep.Entries = append(rep.Entries, entry)
+			continue
+		}
+		if revErr != nil {
+			if actual, _, inspectErr := inspectSweepBundle(blobs[0]); inspectErr == nil {
+				entry.Digest, entry.DigestSource = actual, "actual_bundle"
+			}
+			entry.Scope = "revocation_policy"
+			entry = sweepQuarantine(entry, home, *quarantine, "revocation authority unavailable under managed trust roots and no fresh cache (WF-001 H-F1)", exitRevocationStale)
+			entry.Complete = false
+			setSweepCheck(&entry, "revocation", "unconfirmed")
 			recordVerdict(home, name, *sessionID, exitRevocationStale, "", sweepClockFn())
+			rep.Entries = append(rep.Entries, entry)
+			continue
+		}
+		digest, manifest, inspectErr := inspectSweepBundle(blobs[0])
+		entry.Digest, entry.DigestSource = digest, "actual_bundle"
+		if digest == "" {
+			entry.DigestSource = ""
+		}
+		if inspectErr != nil {
+			var pathErr *os.PathError
+			if errors.As(inspectErr, &pathErr) {
+				entry.Exit = exitGeneric
+				entry.Reason = "bundle read unavailable: " + inspectErr.Error() + ": left in place"
+				rep.Entries = append(rep.Entries, entry)
+				continue
+			}
+			entry = sweepQuarantine(entry, home, *quarantine, "cannot inspect stashed bundle: "+inspectErr.Error(), verify.ExitDigestMismatch)
+			recordVerdict(home, name, *sessionID, verify.ExitDigestMismatch, "", sweepClockFn())
+			rep.Entries = append(rep.Entries, entry)
 			continue
 		}
 
-		// SPEC-0266 F1: revoked bundle → quarantine, no matter what §7 says.
-		// Checked before verification so a revoked-but-still-signature-valid
-		// bundle is removed (the post-install revocation case).
-		if dig := installedSkillDigest(home, name); dig != "" {
-			if _, isRevoked := revoked[dig]; isRevoked {
-				rep.Entries = append(rep.Entries, quarantineOrReport(home, name, *quarantine,
-					"revoked: a BundleRevokedEvent was published for this bundle digest", exitBundleRevoked, &rep))
-				recordVerdict(home, name, *sessionID, exitBundleRevoked, "", sweepClockFn())
+		if _, denied := revoked[digest]; denied {
+			entry.Scope = "revocation_policy"
+			if _, fromGossip := gossip[digest]; fromGossip {
+				entry.RevocationSource = "gossip"
+			}
+			entry = sweepQuarantine(entry, home, *quarantine, "revoked: a BundleRevokedEvent was published for this bundle digest", exitBundleRevoked)
+			setSweepCheck(&entry, "revocation", "fail")
+			recordVerdict(home, name, *sessionID, exitBundleRevoked, "", sweepClockFn())
+			rep.Entries = append(rep.Entries, entry)
+			continue
+		}
+		remaining := *budget - sweepClockFn().Sub(start)
+		if remaining <= 0 {
+			entry.Reason = "sweep budget exceeded: left in place"
+			rep.Entries = append(rep.Entries, entry)
+			continue
+		}
+		var verdict sweepVerification
+		var vErr error
+		vCode := exitGeneric
+		if rootErr == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), remaining)
+			verdict, vCode, vErr = sweepVerifyManagedFn(ctx, name, sc)
+			cancel()
+		} else {
+			vErr = rootErr
+		}
+		if vErr != nil && vCode < verify.ExitDigestMismatch {
+			if *budget-sweepClockFn().Sub(start) <= 0 {
+				entry.Reason = "sweep budget exceeded before offline fallback: left in place"
+				rep.Entries = append(rep.Entries, entry)
+				continue
+			}
+			var available bool
+			verdict, vCode, vErr, available = sweepVerifyOfflineFn(name, sc, pol)
+			if !available {
+				entry.Reason = "could not verify: no eligible offline metadata; left in place"
+				entry.Exit = vCode
+				rep.Entries = append(rep.Entries, entry)
 				continue
 			}
 		}
-
-		// Managed, but no SPEC-0188 trust roots. The online chain needs them;
-		// the offline/sidecar tiers (self/ER1 pull format) do NOT, so try
-		// those before giving up. Without this, a pure self/ER1 machine (no
-		// SPEC-0188 roots, the common case) would never verify or quarantine
-		// any pull-installed skill.
-		if rootErr != nil {
-			if !applyOfflineSweep(&rep, home, name, *sessionID, pol, *quarantine) {
-				rep.Unverified++
-				rep.Entries = append(rep.Entries, sweepEntry{Skill: name, State: "unverified",
-					Reason: "trust roots unavailable + no offline metadata: left in place"})
+		if vErr == nil && vCode == exitOK {
+			completeSweepVerification(&entry, verdict, manifest)
+			cacheCode := exitOK
+			if (entry.Scope == "online_trust_chain" || entry.Scope == "offline_trust_chain") && !entry.DigestVerified {
+				cacheCode = exitGeneric
 			}
-			continue
-		}
-
-		// Budget: a skill we cannot reach in time is unverified, never quarantined.
-		remaining := *budget - sweepClockFn().Sub(start)
-		if remaining <= 0 {
-			rep.Unverified++
-			rep.Entries = append(rep.Entries, sweepEntry{Skill: name, State: "unverified", Reason: "sweep budget exceeded (freshness unknown): left in place"})
-			continue
-		}
-
-		ctx, cancel := context.WithTimeout(context.Background(), remaining)
-		code, summary, vErr := sweepVerifyManagedFn(ctx, name, sc)
-		cancel()
-
-		switch {
-		case vErr == nil:
-			rep.Verified++
-			// Record a PASS so per-invocation hooks can allow offline (§8).
-			recordVerdict(home, name, *sessionID, exitOK, summary, sweepClockFn())
-			rep.Entries = append(rep.Entries, sweepEntry{Skill: name, State: "verified", Exit: 0, Reason: summary})
-		case code >= verify.ExitDigestMismatch: // ≥10 → a genuine §7 TRUST failure
-			reason := reasonForExit(code, vErr)
-			rep.Entries = append(rep.Entries, quarantineOrReport(home, name, *quarantine, reason, code, &rep))
-			// Evict any stale PASS so the hook can't allow it offline.
-			recordVerdict(home, name, *sessionID, code, "", sweepClockFn())
-		default: // <10 → the online chain could not decide (availability).
-			// Try the network-free path: stashed metadata / sidecar +
-			// content-binding. Catches a tampered/bad-sig skill even when the
-			// registry is down (only live revocation is unconfirmed).
-			if !applyOfflineSweep(&rep, home, name, *sessionID, pol, *quarantine) {
-				// No offline stash → leave the cache row in place; a prior PASS
-				// on unchanged bytes remains the offline-resilience path (§8).
-				rep.Unverified++
-				rep.Entries = append(rep.Entries, sweepEntry{Skill: name, State: "unverified", Exit: code,
-					Reason: "could not verify (registry unreachable; no offline stash): " + vErr.Error() + ": left in place"})
+			recordVerdict(home, name, *sessionID, cacheCode, entry.Reason, sweepClockFn())
+		} else if vCode >= verify.ExitDigestMismatch {
+			entry.Scope = verdict.scope
+			if entry.Scope == "" {
+				entry.Scope = "not_checked"
+			}
+			entry = sweepQuarantine(entry, home, *quarantine, reasonForExit(vCode, vErr), vCode)
+			recordVerdict(home, name, *sessionID, vCode, "", sweepClockFn())
+		} else {
+			entry.Exit = vCode
+			entry.Reason = "verification inconclusive: left in place"
+			if vErr != nil {
+				entry.Reason += ": " + vErr.Error()
 			}
 		}
+		rep.Entries = append(rep.Entries, entry)
 	}
-
-	// SPEC-0255 gate observability: emit one advisory audit event per swept skill
-	// (best-effort; appendGateEvent swallows all errors so it never affects the
-	// sweep result). online/cache_hit are hook-path signals: left false here.
 	for _, e := range rep.Entries {
-		appendGateEvent(home, gateEvent{
-			Source: "sweep", Skill: e.Skill, Decision: decisionForSweepState(e.State),
-			Reason: e.Reason, ExitCode: e.Exit, SessionID: *sessionID,
-		})
-	}
-
-	if *jsonOut {
-		emitSweepJSON(stdout, rep)
-	} else {
-		printSweepHuman(stdout, rep, *quarantine)
+		appendGateEvent(home, gateEvent{Source: "sweep", Skill: e.Skill, Decision: decisionForSweepState(e.State), Reason: e.Reason, ExitCode: e.Exit, SessionID: *sessionID})
 	}
 	return exitOK
 }
 
-// applyOfflineSweep runs the network-free verify ladder (offline-meta → sidecar
-// + content-binding) for one managed skill and records the outcome in rep.
-// Returns true if it produced a decision; false when there is no offline
-// metadata at all (caller then marks the skill unverified). Independent of
-// SPEC-0188 trust roots, so it serves the self/ER1 (sidecar) format.
-func applyOfflineSweep(rep *sweepReport, home, name, sessionID string, pol gatePolicy, doQuarantine bool) bool {
-	oc, oreason, ok := verifyManagedOfflineFn(name, pol, home)
-	if !ok {
-		return false
-	}
-	switch {
-	case oc == exitOK:
-		rep.Verified++
-		recordVerdict(home, name, sessionID, exitOK, "verified offline", sweepClockFn())
-		rep.Entries = append(rep.Entries, sweepEntry{Skill: name, State: "verified", Exit: 0,
-			Reason: "verified offline (no registry; revocation not confirmed)"})
-	case oc >= verify.ExitDigestMismatch:
-		rep.Entries = append(rep.Entries, quarantineOrReport(home, name, doQuarantine, "offline: "+oreason, oc, rep))
-		recordVerdict(home, name, sessionID, oc, "", sweepClockFn())
-	default:
-		rep.Unverified++
-		rep.Entries = append(rep.Entries, sweepEntry{Skill: name, State: "unverified", Exit: oc,
-			Reason: "offline verify inconclusive: left in place"})
-	}
-	return true
+func sweepVerifyManaged(ctx context.Context, name string, sc sweepCtx) (sweepVerification, int, error) {
+	res, err := install.VerifyInstalled(install.Opts{Name: name, Client: sc.client, TrustRoot: sc.root, HomeDir: sc.home, GovernanceMin: sc.govMin, Tenant: sc.tenant, Ctx: ctx})
+	return sweepVerification{result: res, scope: "online_trust_chain"}, verify.ExitCode(err), err
 }
 
-// quarantineOrReport moves the skill out when doQuarantine is set, else reports
-// it as a pending quarantine. It bumps rep.Quarantined and returns the entry.
-func quarantineOrReport(home, name string, doQuarantine bool, reason string, code int, rep *sweepReport) sweepEntry {
-	rep.Quarantined++
-	if !doQuarantine {
-		return sweepEntry{Skill: name, State: "quarantined", Exit: code,
-			Reason: reason + " (report-only; pass --quarantine to move it out)"}
+func sweepVerifyOffline(name string, sc sweepCtx, pol gatePolicy) (sweepVerification, int, error, bool) {
+	opts := install.Opts{Name: name, TrustRoot: sc.root, HomeDir: sc.home, GovernanceMin: sc.govMin, Tenant: sc.tenant, Ctx: context.Background()}
+	if opts.GovernanceMin == "" && sc.root == nil {
+		opts.GovernanceMin = pol.ManagedMinGovernance
 	}
-	dest, err := quarantineSkill(home, name, reason, code)
-	if err != nil {
-		return sweepEntry{Skill: name, State: "quarantined", Exit: code,
-			Reason: "FAILED to quarantine: " + err.Error() + " (" + reason + ")"}
+	if sc.root != nil {
+		res, err := install.VerifyInstalledOffline(opts)
+		if !errors.Is(err, install.ErrNoOfflineMeta) {
+			return sweepVerification{result: res, scope: "offline_trust_chain"}, verify.ExitCode(err), err, true
+		}
 	}
-	return sweepEntry{Skill: name, State: "quarantined", Exit: code, Reason: reason, QuarantinePath: dest}
+	// An explicitly selected HTTP registry must never fall back to a self/ER1 root.
+	if sc.registryURL != "" {
+		return sweepVerification{}, exitGeneric, errors.New("selected registry has no eligible offline metadata"), false
+	}
+	err := install.VerifyInstalledSidecar(opts)
+	if errors.Is(err, registry.ErrNoSidecar) {
+		return sweepVerification{}, exitGeneric, err, false
+	}
+	scope := "sidecar_legacy"
+	if _, stashErr := registry.ReadAttestationStash(filepath.Join(sc.home, ".claude", "skills", name)); stashErr == nil {
+		scope = "sidecar_reanchored"
+	}
+	return sweepVerification{scope: scope}, verify.ExitCode(err), err, true
 }
 
 // quarantineSkill moves ~/.claude/skills/<name>/ to
@@ -373,58 +324,18 @@ To restore (only after you trust it again): move this directory back to
 	// inside it would land in the shared target (e.g. gstack/browse). The note
 	// sits next to the moved item as <name>.<ts>.QUARANTINE.md.
 	// #nosec G306 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
-	_ = os.WriteFile(dest+".QUARANTINE.md", []byte(note), 0o644)
+	if err := os.WriteFile(dest+".QUARANTINE.md", []byte(note), 0o644); err != nil {
+		return dest, fmt.Errorf("skill moved but quarantine note could not be written: %w", err)
+	}
 	return dest, nil
-}
-
-// sweepVerifyManaged is the production verification of one managed skill.
-func sweepVerifyManaged(ctx context.Context, name string, sc sweepCtx) (int, string, error) {
-	res, err := install.VerifyInstalled(install.Opts{
-		Name:          name,
-		Client:        sc.client,
-		TrustRoot:     sc.root,
-		HomeDir:       sc.home,
-		GovernanceMin: sc.govMin,
-		Tenant:        sc.tenant,
-		Ctx:           ctx,
-	})
-	if err != nil {
-		return verify.ExitCode(err), "", err
-	}
-	return exitOK, res.ChainSummary, nil
-}
-
-// dirHasSkb reports whether dir contains a top-level *.skb (i.e. it was
-// installed by `skillctl install`).
-func dirHasSkb(dir string) bool {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return false
-	}
-	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".skb") {
-			return true
-		}
-	}
-	return false
-}
-
-func emitSweepJSON(w io.Writer, rep sweepReport) {
-	b, err := json.MarshalIndent(rep, "", "  ")
-	if err != nil {
-		fmt.Fprintf(w, `{"error":%q}`+"\n", err.Error())
-		return
-	}
-	fmt.Fprintln(w, string(b))
 }
 
 func printSweepHuman(w io.Writer, rep sweepReport, doQuarantine bool) {
 	if rep.RootsError != "" {
-		fmt.Fprintf(w, "⚠ trust roots unavailable: %s\n  → managed skills reported 'unverified' (not quarantined).\n", rep.RootsError)
+		fmt.Fprintf(w, "⚠ selected HTTP trust roots unavailable: %s\n  → inspect each skill's offline check scope.\n", rep.RootsError)
 	}
 	if rep.RevocationUnavailable != "" {
-		fmt.Fprintf(w, "⛔ revocation authority unavailable under managed trust roots + no fresh cache: %s\n  → managed skills FAIL CLOSED (WF-001 H-F1)%s.\n",
-			rep.RevocationUnavailable, map[bool]string{true: " (quarantined", false: ") report-only, pass --quarantine to move them out"}[doQuarantine])
+		fmt.Fprintf(w, "⛔ revocation authority unavailable under managed trust roots + no fresh cache: %s\n  → managed skills FAIL CLOSED (WF-001 H-F1); inspect each quarantine disposition.\n", rep.RevocationUnavailable)
 	}
 	for _, e := range rep.Entries {
 		var mark string
@@ -438,16 +349,15 @@ func printSweepHuman(w io.Writer, rep sweepReport, doQuarantine bool) {
 		default:
 			mark = "–"
 		}
-		line := fmt.Sprintf("  %s %-28s %s", mark, e.Skill, e.State)
+		if e.Status == "incomplete" {
+			mark = "?"
+		}
+		line := fmt.Sprintf("  %s %-28s %s [%s; %s]", mark, e.Skill, e.State, e.Status, e.Disposition)
 		if e.Reason != "" {
 			line += ": " + e.Reason
 		}
 		fmt.Fprintln(w, line)
 	}
-	verb := "would quarantine"
-	if doQuarantine {
-		verb = "quarantined"
-	}
-	fmt.Fprintf(w, "\nswept %d skill(s): %d verified · %d %s · %d unverified · %d skipped\n",
-		rep.Total, rep.Verified, rep.Quarantined, verb, rep.Unverified, rep.Skipped)
+	fmt.Fprintf(w, "\nswept %d skill(s): %d verified · %d invalid · %d actually quarantined · %d quarantine candidates · %d unverified · %d skipped\n",
+		rep.Total, rep.Verified, rep.Invalid, rep.Quarantined, rep.QuarantineCandidates, rep.Unverified, rep.Skipped)
 }

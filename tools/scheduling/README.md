@@ -2,13 +2,13 @@
 
 [Deutsch](README.de.md) | [English](README.md)
 
-`skillctl verify --all --quarantine` re-verifies every installed skill against
-the SPEC-0188 §7 trust chain **online** (so it catches server-side revocations)
-and moves any trust-failing managed skill out of `~/.claude/skills/` into the
-quarantine dir, refreshing the verdict cache. It already runs at **SessionStart**
-(the hook in `~/.claude/settings.json`). These sample units run it **on a timer**
-too, so long-lived / headless machines that rarely start a fresh Claude Code
-session still pick up revocations.
+`skillctl verify --all --quarantine` attempts the configured trust and revocation
+checks for the installed inventory. Depending on available evidence, entries use
+online, offline, sidecar or unmanaged-policy paths. The report identifies their scope;
+unconfirmed evidence prevents overall success. The command can move rejected managed
+skills into quarantine and updates the verdict cache. If a SessionStart hook is installed
+in `~/.claude/settings.json`, it can run this sweep. These sample units add a timer for
+long-lived or headless machines that rarely start a fresh Claude Code session.
 
 > **Caveat (offline-revocation):** a revocation posted server-side is only
 > enforced after the next **online** sweep/verify. The local timer closes that
@@ -23,6 +23,13 @@ skillctl verify --all --quarantine --json
 The sample files below are **inert until you install them**: review, edit the
 absolute `skillctl` path for your machine, then enable. Fail-closed: nothing
 auto-installs.
+
+The sweep now returns `1` for invalid, incomplete or skipped skills, even after a
+successful quarantine move; `0` means complete success or an explicitly empty inventory,
+and `2` means invalid arguments. Monitor the versioned JSON `ok`, `complete` and entries.
+`quarantined` counts actual moves, while `quarantine_candidates` also includes report-only
+and failed attempts. Offline checks may leave revocation unconfirmed. Timers and hooks
+must preserve and report nonzero outcomes rather than interpret them as successful verification.
 
 ---
 

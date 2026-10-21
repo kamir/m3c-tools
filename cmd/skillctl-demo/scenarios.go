@@ -132,13 +132,14 @@ func runS2A(d *Driver) {
 	d.exec(2, "blocked", hookEvent(demoSkillName), "verify-hook")
 	d.wait()
 
-	d.step("4 · SessionStart sweep quarantines it out of ~/.claude/skills/. (The sweep's own process code is 0 by design; the enforcing verdict is per-skill.)")
-	res := d.exec(0, "allowed", "", "verify", "--all", "--quarantine", "--json")
-	if state, code, ok := sweepVerdict(res.Stdout, demoSkillName); ok {
+	d.step("4 · SessionStart sweep quarantines it out of ~/.claude/skills/. The invalid aggregate exits 1; the per-skill digest-mismatch verdict is 10.")
+	res := d.exec(1, "blocked", "", "verify", "--all", "--quarantine", "--json")
+	if state, code, ok := sweepVerdict(res, demoSkillName); ok {
 		d.bus.Emit(Event{Kind: "verdict", Text: "sweep verdict for " + demoSkillName + ": state=" + state, Code: code, Expected: 10, Verdict: "blocked", OK: code == 10})
 		d.note("Per-skill trust verdict: " + state + " with digest-mismatch code " + itoa(code) + " → moved to quarantine so Claude Code cannot load it.")
 	} else {
-		d.note("Could not parse the sweep report entry for " + demoSkillName + ".")
+		d.bus.Emit(Event{Kind: "verdict", Text: "no confirmed quarantine for " + demoSkillName, Code: -1, Expected: 10, Verdict: "refused", OK: false})
+		d.note("Could not confirm an actual quarantine from the sweep report for " + demoSkillName + ".")
 	}
 }
 

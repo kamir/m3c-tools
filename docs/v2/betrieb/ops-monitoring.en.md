@@ -165,41 +165,40 @@ for this verb it means "not pinned".
 
 ### `skillctl verify --all --json`
 
-A report on a machine's skill inventory:
+The versioned inventory report is one JSON object, including for an empty inventory:
 
 ```json
 {
-  "skills_dir": "/…/.claude/skills",
+  "schema": "m3c.skillctl.sweep-result/v1",
+  "operation": "verify_all",
+  "ok": true,
+  "complete": true,
+  "exit_code": 0,
+  "skills_dir": "/example/.claude/skills",
   "total": 0,
   "verified": 0,
+  "invalid": 0,
   "quarantined": 0,
+  "quarantine_candidates": 0,
   "unverified": 0,
   "skipped": 0,
-  "entries": null
+  "entries": []
 }
 ```
 
-Monitor `quarantined > 0` (something failed) and `unverified > 0` (the run
-did not finish within its time budget, so nothing is known about these
-skills). `unverified` is the quieter and therefore more important number.
+Monitor `ok`, `complete` and the process exit, then inspect each entry's `status`,
+`checks`, `check_scope` and `revocation_source`. `invalid > 0` means a rejected skill;
+`unverified > 0` or `skipped > 0` means incomplete inventory verification.
+`quarantined` counts actual moves; `quarantine_candidates` also counts report-only and
+failed attempts. Check `disposition`, `quarantine_path` and `action_error` for the action.
+A zero-item report does not prove that a populated deployment is healthy.
 
-**Redirecting to `> bericht.json` does not produce valid JSON.** If there
-is nothing to check, the command writes a plaintext line **to stdout**
-before the JSON. Measured with stderr suppressed:
-
-```
-$ skillctl verify --all --json 2>/dev/null
-skillctl verify --all: no installed skills at /…/.claude/skills (nothing to sweep)
-{
-  "skills_dir": "/…/.claude/skills",
-  "total": 0,
-  …
-}
-```
-
-A consumer therefore starts at the first `{` line, for example using
-`sed -n '/^{/,$p'`. `gate-stats --json` and `auditlog status --json` do not
-have this behavior; both write only the document.
+Exit `0` means complete success or an explicitly empty inventory; `1` signals an invalid
+or incomplete inventory or an I/O/action error; `2` signals invalid arguments. Put
+`--json` first to include parsing failures. Consume stdout directly as JSON, including
+on failure; do not strip a human prefix. Preserve all failed entries. Offline or legacy
+checks and unresolved declared dependencies cannot produce overall success without the
+required evidence. See the [CLI manual](../referenz/manual-skillctl.md#verify-re-run-the-chain-on-an-installed-skill).
 
 ### `skillctl revoke feed`
 
@@ -382,9 +381,7 @@ out=${1:-/var/log/skillctl-health.json}
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-# JSON erst ab der ersten offenen Klammer: `verify --all --json` stellt bei
-# einem leeren Lauf eine Klartextzeile auf stdout davor.
-only_json() { sed -n '/^{/,$p' "$1"; }
+# JSON commands emit one object; preserve stdout and capture the process exit.
 
 skillctl auditlog status --json > "$tmp/auditlog.json" 2>/dev/null
 auditlog_exit=$?
@@ -393,7 +390,8 @@ skillctl pin status > /dev/null 2>&1
 pin_exit=$?
 
 skillctl gate-stats --since 24h --json > "$tmp/gate-stats.json" 2>/dev/null
-skillctl verify --all --json      > "$tmp/verify-all.json" 2>/dev/null
+skillctl verify --json --all      > "$tmp/verify-all.json" 2>/dev/null
+verify_all_exit=$?
 
 skillctl doctor > "$tmp/doctor.txt" 2>&1
 doctor_ready=$(grep -c '^READY:' "$tmp/doctor.txt" || true)
@@ -405,9 +403,10 @@ cat > "$out" <<JSON
   "auditlog_exit": $auditlog_exit,
   "pin_status_exit": $pin_exit,
   "doctor_ready": $doctor_ready,
-  "auditlog": $(only_json "$tmp/auditlog.json"),
-  "gate_stats": $(only_json "$tmp/gate-stats.json"),
-  "verify_all": $(only_json "$tmp/verify-all.json")
+  "verify_all_exit": $verify_all_exit,
+  "auditlog": $(cat "$tmp/auditlog.json"),
+  "gate_stats": $(cat "$tmp/gate-stats.json"),
+  "verify_all": $(cat "$tmp/verify-all.json")
 }
 JSON
 ```
@@ -415,9 +414,9 @@ JSON
 Exit codes are captured **immediately** after their commands. Reading them
 only in the output statement reads the exit code of that output statement.
 
-The script ran on 2026-09-07 against a fresh `$HOME` and wrote valid JSON:
-`auditlog_exit=0`, `pin_status_exit=2`, `doctor_ready=0`,
-`verify_all.total=0`.
+Validate this integration example against the deployed CLI version. The earlier
+2026-09-07 probe used the previous sweep contract and does not validate this updated script.
+A missing or truncated subprocess result is an integration error; do not treat it as an empty inventory.
 
 The four useful alarms derived from this:
 
@@ -425,8 +424,8 @@ The four useful alarms derived from this:
 |---|---|---|
 | Audit unavailable | `auditlog_exit != 0` | Evidence stops being generated from this point |
 | Gate not pinned | `pin_status_exit == 2` | The gate is only advisory |
-| Skill failed | `verify_all.quarantined > 0` | Something installed does not pass the chain |
-| Blind spot | `verify_all.unverified > 0` | The run did not finish; nothing is known |
+| Skill failed | `verify_all.invalid > 0` | Something installed does not pass the chain |
+| Blind spot | `verify_all.unverified > 0 || verify_all.skipped > 0 || verify_all_exit != 0` | The run did not finish; nothing is known |
 
 A fifth once `sync` is configured: `auditlog.outbox_pending` increases
 monotonically across several runs, indicating export is not getting through.

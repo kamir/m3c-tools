@@ -167,42 +167,41 @@ Verb heisst sie "nicht gepinnt".
 
 ### `skillctl verify --all --json`
 
-Der Flottenzustand einer Maschine, als Bericht:
+Der versionierte Inventarbericht ist genau ein JSON-Objekt, auch bei leerem Bestand:
 
 ```json
 {
-  "skills_dir": "/…/.claude/skills",
+  "schema": "m3c.skillctl.sweep-result/v1",
+  "operation": "verify_all",
+  "ok": true,
+  "complete": true,
+  "exit_code": 0,
+  "skills_dir": "/example/.claude/skills",
   "total": 0,
   "verified": 0,
+  "invalid": 0,
   "quarantined": 0,
+  "quarantine_candidates": 0,
   "unverified": 0,
   "skipped": 0,
-  "entries": null
+  "entries": []
 }
 ```
 
-Zu überwachen ist `quarantined > 0` (etwas ist durchgefallen) und
-`unverified > 0` (der Lauf hat es im Zeitbudget nicht geschafft, also weiss
-niemand etwas über diese Skills). `unverified` ist die stillere und deshalb
-wichtigere der beiden Zahlen.
+`ok`, `complete` und den Prozess-Exit überwachen; anschließend `status`, `checks`,
+`check_scope` und `revocation_source` je Eintrag prüfen. `invalid > 0` bezeichnet einen
+abgelehnten Skill; `unverified > 0` oder `skipped > 0` bedeutet unvollständige Inventarprüfung.
+`quarantined` zählt tatsächliche Verschiebungen; `quarantine_candidates` zählt auch nur
+gemeldete und fehlgeschlagene Versuche. `disposition`, `quarantine_path` und `action_error`
+beschreiben die Aktion. Ein leerer Bericht belegt nicht die Gesundheit einer befüllten Installation.
 
-**Ein Umleiten nach `> bericht.json` ergibt keine gültige JSON-Datei.** Gibt es
-nichts zu prüfen, schreibt das Kommando eine Klartextzeile **auf stdout**, vor
-das JSON. Gemessen mit unterdrücktem stderr:
-
-```
-$ skillctl verify --all --json 2>/dev/null
-skillctl verify --all: no installed skills at /…/.claude/skills (nothing to sweep)
-{
-  "skills_dir": "/…/.claude/skills",
-  "total": 0,
-  …
-}
-```
-
-Ein Auswerter schneidet deshalb ab der ersten `{`-Zeile, etwa mit
-`sed -n '/^{/,$p'`. `gate-stats --json` und `auditlog status --json` haben dieses
-Verhalten nicht; beide schreiben nur das Dokument.
+Exit `0` bedeutet vollständigen Erfolg oder ausdrücklich leeren Bestand; `1` meldet einen
+ungültigen oder unvollständig geprüften Bestand oder einen I/O-/Aktionsfehler; `2` ungültige
+Argumente. `--json` muss zuerst stehen, damit auch Parsingfehler erfasst werden. Stdout direkt
+als JSON lesen, auch bei Fehlern; keinen menschlichen Präfix abschneiden. Alle fehlerhaften
+Einträge erhalten. Offline-/Legacy-Prüfungen und nicht aufgelöste deklarierte Abhängigkeiten
+können ohne erforderliche Nachweise keinen Gesamterfolg liefern. Siehe
+[CLI-Handbuch](../referenz/manual-skillctl.de.md).
 
 ### `skillctl revoke feed`
 
@@ -391,9 +390,7 @@ out=${1:-/var/log/skillctl-health.json}
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-# JSON erst ab der ersten offenen Klammer: `verify --all --json` stellt bei
-# einem leeren Lauf eine Klartextzeile auf stdout davor.
-only_json() { sed -n '/^{/,$p' "$1"; }
+# JSON commands emit one object; preserve stdout and capture the process exit.
 
 skillctl auditlog status --json > "$tmp/auditlog.json" 2>/dev/null
 auditlog_exit=$?
@@ -402,7 +399,8 @@ skillctl pin status > /dev/null 2>&1
 pin_exit=$?
 
 skillctl gate-stats --since 24h --json > "$tmp/gate-stats.json" 2>/dev/null
-skillctl verify --all --json      > "$tmp/verify-all.json" 2>/dev/null
+skillctl verify --json --all      > "$tmp/verify-all.json" 2>/dev/null
+verify_all_exit=$?
 
 skillctl doctor > "$tmp/doctor.txt" 2>&1
 doctor_ready=$(grep -c '^READY:' "$tmp/doctor.txt" || true)
@@ -414,9 +412,10 @@ cat > "$out" <<JSON
   "auditlog_exit": $auditlog_exit,
   "pin_status_exit": $pin_exit,
   "doctor_ready": $doctor_ready,
-  "auditlog": $(only_json "$tmp/auditlog.json"),
-  "gate_stats": $(only_json "$tmp/gate-stats.json"),
-  "verify_all": $(only_json "$tmp/verify-all.json")
+  "verify_all_exit": $verify_all_exit,
+  "auditlog": $(cat "$tmp/auditlog.json"),
+  "gate_stats": $(cat "$tmp/gate-stats.json"),
+  "verify_all": $(cat "$tmp/verify-all.json")
 }
 JSON
 ```
@@ -434,8 +433,8 @@ Die vier Alarme, die sich daraus lohnen:
 |---|---|---|
 | Audit tot | `auditlog_exit != 0` | ab hier entstehen keine Nachweise mehr |
 | Tor nicht verankert | `pin_status_exit == 2` | das Tor ist nur noch eine Empfehlung |
-| Skill durchgefallen | `verify_all.quarantined > 0` | etwas Installiertes besteht die Kette nicht |
-| Blinder Fleck | `verify_all.unverified > 0` | der Lauf hat es nicht geschafft, niemand weiss etwas |
+| Skill durchgefallen | `verify_all.invalid > 0` | etwas Installiertes besteht die Kette nicht |
+| Blinder Fleck | `verify_all.unverified > 0 || verify_all.skipped > 0 || verify_all_exit != 0` | der Lauf hat es nicht geschafft, niemand weiss etwas |
 
 Ein fünfter, sobald `sync` eingerichtet ist: `auditlog.outbox_pending` wächst
 über mehrere Läufe monoton, also kommt die Ausleitung nicht durch.

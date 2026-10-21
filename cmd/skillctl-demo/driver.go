@@ -171,26 +171,49 @@ func jsonField(stdout, field string) string {
 	return ""
 }
 
-// sweepVerdict extracts the per-skill trust verdict for one skill from a
-// `verify --all --json` report: its state and numeric exit code. The sweep's own
-// PROCESS exit is 0 by design; the enforcing verdict lives in the entry.
-func sweepVerdict(stdout, skill string) (state string, code int, found bool) {
-	var rep struct {
-		Entries []struct {
-			Skill string `json:"skill"`
-			State string `json:"state"`
-			Exit  int    `json:"exit"`
-		} `json:"entries"`
-	}
-	if err := json.Unmarshal([]byte(stdout), &rep); err != nil {
+// sweepVerdict accepts an actual quarantine from the versioned sweep report.
+// A nonzero process exit describes the invalid aggregate; the entry retains the trust code.
+func sweepVerdict(result RunResult, skill string) (state string, code int, found bool) {
+	if result.Err != nil || result.ExitCode != 1 {
 		return "", 0, false
 	}
-	for _, e := range rep.Entries {
-		if e.Skill == skill {
-			return e.State, e.Exit, true
-		}
+	var rep struct {
+		Schema    string `json:"schema"`
+		Operation string `json:"operation"`
+		OK        *bool  `json:"ok"`
+		Complete  *bool  `json:"complete"`
+		ExitCode  *int   `json:"exit_code"`
+		Entries   []struct {
+			Skill          string `json:"skill"`
+			State          string `json:"state"`
+			Status         string `json:"status"`
+			Disposition    string `json:"disposition"`
+			Complete       *bool  `json:"complete"`
+			Exit           *int   `json:"exit"`
+			QuarantinePath string `json:"quarantine_path"`
+		} `json:"entries"`
 	}
-	return "", 0, false
+	if err := json.Unmarshal([]byte(result.Stdout), &rep); err != nil {
+		return "", 0, false
+	}
+	if rep.Schema != "m3c.skillctl.sweep-result/v1" || rep.Operation != "verify_all" || rep.OK == nil || *rep.OK || rep.Complete == nil || rep.ExitCode == nil || *rep.ExitCode != result.ExitCode {
+		return "", 0, false
+	}
+	matches := 0
+	for _, entry := range rep.Entries {
+		if entry.Skill != skill {
+			continue
+		}
+		matches++
+		if entry.State != "quarantined" || entry.Status != "invalid" || entry.Disposition != "quarantined" || entry.Complete == nil || !*entry.Complete || entry.Exit == nil || *entry.Exit < 10 || entry.QuarantinePath == "" {
+			return "", 0, false
+		}
+		state, code = entry.State, *entry.Exit
+	}
+	if matches != 1 {
+		return "", 0, false
+	}
+	return state, code, true
 }
 
 func hookEvent(skill string) string {

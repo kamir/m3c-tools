@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kamir/m3c-tools/pkg/skillbundle"
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
 )
 
@@ -29,7 +30,7 @@ func mkSkill(t *testing.T, home, name string, withSkb bool) string {
 		t.Fatal(err)
 	}
 	if withSkb {
-		if err := os.WriteFile(filepath.Join(dir, name+".skb"), []byte("blob"), 0o644); err != nil {
+		if _, err := skillbundle.Pack(dir, filepath.Join(dir, name+".skb"), skillbundle.PackOptions{Manifest: skillbundle.BundleManifest{Name: name, Version: "1.0.0"}}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -39,6 +40,9 @@ func mkSkill(t *testing.T, home, name string, withSkb bool) string {
 func stubRootsOK(t *testing.T) {
 	t.Helper()
 	orig := loadRootsFn
+	oldRevoked := sweepRevokedFn
+	sweepRevokedFn = func(string) (map[string]struct{}, bool, error) { return map[string]struct{}{}, true, nil }
+	t.Cleanup(func() { sweepRevokedFn = oldRevoked })
 	loadRootsFn = func(string) (*verify.TrustRoots, *verify.TrustRoot, error) {
 		return &verify.TrustRoots{}, &verify.TrustRoot{RegistryURL: "http://test"}, nil
 	}
@@ -48,8 +52,9 @@ func stubRootsOK(t *testing.T) {
 func stubVerify(t *testing.T, code int, summary string, err error) {
 	t.Helper()
 	orig := sweepVerifyManagedFn
-	sweepVerifyManagedFn = func(context.Context, string, sweepCtx) (int, string, error) {
-		return code, summary, err
+	sweepVerifyManagedFn = func(_ context.Context, name string, sc sweepCtx) (sweepVerification, int, error) {
+		digest, _, _ := inspectSweepBundle(filepath.Join(sc.home, ".claude", "skills", name, name+".skb"))
+		return sweepVerification{result: &verify.VerifyResult{Digest: digest, ChainSummary: summary}, scope: "online_trust_chain"}, code, err
 	}
 	t.Cleanup(func() { sweepVerifyManagedFn = orig })
 }
@@ -57,6 +62,7 @@ func stubVerify(t *testing.T, code int, summary string, err error) {
 func runSweep(t *testing.T, home string, args ...string) (int, string) {
 	t.Helper()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	var out, errb bytes.Buffer
 	code := runVerify(append([]string{"--all"}, args...), &out, &errb)
 	return code, out.String() + errb.String()
@@ -92,7 +98,7 @@ func TestSweep_UnmanagedSkipped_NotMoved(t *testing.T) {
 	mkSkill(t, home, "browse", false) // no .skb → unmanaged
 	stubRootsOK(t)
 	code, out := runSweep(t, home)
-	if code != exitOK {
+	if code != exitGeneric {
 		t.Fatalf("exit=%d", code)
 	}
 	if !skillExists(home, "browse") {
@@ -109,7 +115,7 @@ func TestSweep_UnmanagedPolicyDeny_Quarantined(t *testing.T) {
 	stubRootsOK(t)
 	t.Setenv("SKILLCTL_GATE_UNMANAGED", "deny")
 	code, _ := runSweep(t, home, "--quarantine")
-	if code != exitOK {
+	if code != exitGeneric {
 		t.Fatalf("exit=%d", code)
 	}
 	if skillExists(home, "rando") {
@@ -127,7 +133,7 @@ func TestSweep_ManagedBadSig_Quarantined_WithNote(t *testing.T) {
 	stubRootsOK(t)
 	stubVerify(t, 11, "", verify.ErrAuthorSigInvalid) // exit 11 ≥ 10 → trust failure
 	code, _ := runSweep(t, home, "--quarantine")
-	if code != exitOK {
+	if code != exitGeneric {
 		t.Fatalf("exit=%d", code)
 	}
 	if skillExists(home, "evil") {
@@ -152,7 +158,7 @@ func TestSweep_ManagedBadSig_ReportOnly_WithoutQuarantineFlag(t *testing.T) {
 	stubRootsOK(t)
 	stubVerify(t, 11, "", verify.ErrAuthorSigInvalid)
 	code, out := runSweep(t, home) // no --quarantine
-	if code != exitOK {
+	if code != exitGeneric {
 		t.Fatalf("exit=%d", code)
 	}
 	if !skillExists(home, "evil") {
@@ -170,7 +176,7 @@ func TestSweep_AvailabilityFailure_NotQuarantined(t *testing.T) {
 	// exit 1 (< 10) + network error → availability, must NOT quarantine.
 	stubVerify(t, exitGeneric, "", errors.New("dial tcp 127.0.0.1: connection refused"))
 	code, out := runSweep(t, home, "--quarantine")
-	if code != exitOK {
+	if code != exitGeneric {
 		t.Fatalf("exit=%d", code)
 	}
 	if !skillExists(home, "good") {
@@ -190,7 +196,7 @@ func TestSweep_RootsUnavailable_ManagedUnverified_NotMoved(t *testing.T) {
 	}
 	t.Cleanup(func() { loadRootsFn = orig })
 	code, out := runSweep(t, home, "--quarantine")
-	if code != exitOK {
+	if code != exitGeneric {
 		t.Fatalf("exit=%d", code)
 	}
 	if !skillExists(home, "good") {
@@ -217,9 +223,16 @@ func TestSweep_Verified_PassThrough(t *testing.T) {
 
 func stubOffline(t *testing.T, code int, reason string, available bool) {
 	t.Helper()
-	orig := verifyManagedOfflineFn
-	verifyManagedOfflineFn = func(string, gatePolicy, string) (int, string, bool) { return code, reason, available }
-	t.Cleanup(func() { verifyManagedOfflineFn = orig })
+	orig := sweepVerifyOfflineFn
+	sweepVerifyOfflineFn = func(name string, sc sweepCtx, _ gatePolicy) (sweepVerification, int, error, bool) {
+		digest, _, _ := inspectSweepBundle(filepath.Join(sc.home, ".claude", "skills", name, name+".skb"))
+		var err error
+		if code != 0 {
+			err = errors.New(reason)
+		}
+		return sweepVerification{result: &verify.VerifyResult{Digest: digest, ChainSummary: reason}, scope: "offline_trust_chain"}, code, err, available
+	}
+	t.Cleanup(func() { sweepVerifyOfflineFn = orig })
 }
 
 func TestSweep_OnlineDown_OfflineCatchesBadSig_Quarantined(t *testing.T) {
@@ -231,7 +244,7 @@ func TestSweep_OnlineDown_OfflineCatchesBadSig_Quarantined(t *testing.T) {
 	stubVerify(t, exitGeneric, "", errors.New("connection refused")) // online availability fail
 	stubOffline(t, 11, "author signature invalid", true)             // offline trust fail
 	code, _ := runSweep(t, home, "--quarantine")
-	if code != exitOK {
+	if code != exitGeneric {
 		t.Fatalf("exit=%d", code)
 	}
 	if skillExists(home, "evil") {
@@ -272,8 +285,9 @@ func TestSweep_SymlinkedSkillIsSeen(t *testing.T) {
 	}
 	stubRootsOK(t)
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	var out bytes.Buffer
-	if code := runVerify([]string{"--all", "--json"}, &out, &out); code != exitOK {
+	if code := runVerify([]string{"--all", "--json"}, &out, &out); code != exitGeneric {
 		t.Fatalf("exit=%d", code)
 	}
 	var rep sweepReport
@@ -298,9 +312,10 @@ func TestSweep_JSONReport(t *testing.T) {
 	stubRootsOK(t)
 	stubVerify(t, exitOK, "ok", nil)
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	var out bytes.Buffer
 	code := runVerify([]string{"--all", "--json"}, &out, &out)
-	if code != exitOK {
+	if code != exitGeneric {
 		t.Fatalf("exit=%d", code)
 	}
 	var rep sweepReport
