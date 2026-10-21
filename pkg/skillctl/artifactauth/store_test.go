@@ -57,7 +57,16 @@ func TestStoreOnPlatformWithoutAStore(t *testing.T) {
 	if HasProtectedStore() {
 		t.Skipf("%s has a protected store; this case is for the others", runtime.GOOS)
 	}
-	err := Store("gitlab", TierWrite, "h", "s")
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	// Only the injected helper is used while explicit native controls are clear.
+	t.Setenv("M3C_TOKEN_STORE", "")
+	t.Setenv("M3C_TEST_KEYCHAIN", "")
+	err := storeWithNative("gitlab", TierWrite, "h", "s", func(string, string, string) error {
+		t.Fatal("unsupported platform reached native store")
+		return nil
+	})
 	if err == nil || !strings.Contains(err.Error(), "M3C_GITLAB_TOKEN") {
 		t.Errorf("the refusal must name the env var, got %v", err)
 	}
