@@ -89,6 +89,9 @@ jobs:
       - name: Linux trust and parity failure contracts
         run: python3 scripts/windows-trust-parity.test.py
 
+      - name: Release smoke artifact and failure contracts
+        run: python3 scripts/skillctl-smoke.test.py
+
       - name: Hosted runner selection, timeouts and concurrency
         run: python3 scripts/ci-matrix.py --check
 

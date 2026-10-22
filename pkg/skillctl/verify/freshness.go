@@ -38,8 +38,8 @@ const defaultCacheTTL = 12 * time.Hour
 // must never trust an unbounded-age revocation snapshot: past this ceiling a
 // high-risk invocation of a since-revoked digest fails closed.
 const (
-	managedDefaultMaxStaleness    = 48 * time.Hour
-	managedDefaultMaxStalenessStr = "48h"
+	managedDefaultMaxStaleness    = 24 * time.Hour
+	managedDefaultMaxStalenessStr = "24h"
 )
 
 // maxFutureClockSkew is how far a snapshot's issued_at may sit in the FUTURE
@@ -88,12 +88,9 @@ type FreshnessPolicy struct {
 	// than this triggers the fail-policy.
 	MaxStaleness time.Duration
 
-	// Managed marks this policy as belonging to an enterprise-MANAGED trust root
-	// (TrustRoot.IsManaged, FR-0090 IS-T5). A managed policy NEVER has "no ceiling":
-	// if MaxStaleness is 0, EvaluateFreshness applies the fail-closed managed default
-	// (48h) instead of trusting the snapshot at any age. This is belt-and-suspenders
-	// to the loader, which already defaults max_staleness to 48h for a managed root,
-	// so even a hand-constructed managed policy cannot dodge the ceiling.
+	// Managed marks a locally configured enterprise trust root (TrustRoot.IsManaged).
+	// Its effective ceiling is at most 24h, including hand-constructed policies.
+	// Non-managed roots retain their separate configured or unbounded policy.
 	Managed bool
 
 	// CacheTTL is the local revocation-cache lifetime (default 12h).
@@ -131,7 +128,8 @@ func (p FreshnessPolicy) PolicyFor(risk ActionRisk) FailPolicy {
 // into a resolved FreshnessPolicy. Called by validate() (so a bad value is
 // refused at Load) AND by the consumers (so they read the same resolved policy).
 //
-// Defaults: max_staleness empty → 0 (no ceiling); cache_ttl empty → 12h;
+// Defaults: max_staleness empty → 0 for non-managed roots, 24h for managed
+// roots; cache_ttl empty → 12h;
 // fail_policy empty → closed. A negative duration, an unparseable duration, an
 // unknown fail_policy, or a per-risk override that tries to make HIGH-risk fail
 // OPEN is rejected.
@@ -160,10 +158,18 @@ func (t *TrustRoot) Freshness() (FreshnessPolicy, error) {
 	p.FailPolicy = fp
 
 	// FR-0090 IS-T5: a managed (enterprise) root's freshness contract always has a
-	// ceiling. The loader already defaults max_staleness to 48h for such a root, so
+	// ceiling. The loader already defaults max_staleness to 24h for such a root, so
 	// p.MaxStaleness is non-zero here in practice; carrying the flag lets
 	// EvaluateFreshness fail closed even on a hand-constructed managed policy.
 	p.Managed = t.IsManaged()
+	if p.Managed {
+		if p.MaxStaleness == 0 {
+			p.MaxStaleness = managedDefaultMaxStaleness
+		}
+		if p.MaxStaleness > managedDefaultMaxStaleness {
+			return FreshnessPolicy{}, fmt.Errorf("max_staleness: managed ceiling must not exceed %s", managedDefaultMaxStalenessStr)
+		}
+	}
 
 	if len(t.FailPolicyByRisk) > 0 {
 		p.byRisk = make(map[ActionRisk]FailPolicy, len(t.FailPolicyByRisk))
@@ -351,12 +357,11 @@ type FreshnessDecision struct {
 // what the list claims.
 func EvaluateFreshness(epoch int, issuedAt string, policy FreshnessPolicy, risk ActionRisk, now time.Time) (FreshnessDecision, error) {
 	// FR-0090 IS-T5: a MANAGED (enterprise) policy never has "no ceiling". If
-	// max_staleness is unset (0) on a managed root, apply the fail-closed managed
-	// default (48h). The trust-roots loader already stamps 48h for a managed root, so
-	// this only bites a hand-constructed managed policy. The "no ceiling" allow below
-	// is thereby reachable ONLY for non-managed roots.
+	// max_staleness is unset or exceeds the managed maximum, apply 24h. The loader
+	// validates this boundary too; this also bounds hand-constructed policies.
+	// The "no ceiling" allow below is reachable only for non-managed roots.
 	effectiveMax := policy.MaxStaleness
-	if effectiveMax == 0 && policy.Managed {
+	if policy.Managed && (effectiveMax <= 0 || effectiveMax > managedDefaultMaxStaleness) {
 		effectiveMax = managedDefaultMaxStaleness
 	}
 	dec := FreshnessDecision{
@@ -381,7 +386,7 @@ func EvaluateFreshness(epoch int, issuedAt string, policy FreshnessPolicy, risk 
 
 	// No ceiling configured → freshness is not enforced (pre-SPEC-0279 default).
 	// Reachable ONLY for non-managed roots: a managed root's effectiveMax is forced
-	// to the 48h fail-closed default above (FR-0090 IS-T5).
+	// to the 24h fail-closed default above (FR-0090 IS-T5).
 	if effectiveMax == 0 {
 		dec.FailPolicy = policy.PolicyFor(risk)
 		dec.Allowed = true

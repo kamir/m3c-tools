@@ -13,7 +13,12 @@
 # gate (.github/workflows/skillctl-smoke-matrix.yml), which runs it on macOS
 # arm64/amd64 + Linux amd64/arm64 (Windows is covered by a parallel matrix leg).
 #
-# Where the assets come from (checked in order, per asset):
+# Required mode is the default: missing cosign/bundle and wrong version fail.
+# SMOKE_REQUIRED=0 explicitly selects a manual integrity-only compatibility run.
+# SMOKE_STAGED_REQUIRED=1 forbids download fallback for same-run release assets.
+# SMOKE_TARGET explicitly selects darwin/arm64, darwin/amd64, linux/amd64 or linux/arm64.
+# Selecting darwin/amd64 on Apple silicon exercises Rosetta, not native Intel.
+# Where optional/manual assets come from (checked in order, per asset):
 #   1. SMOKE_ASSET_DIR   a locally-staged dir holding the release assets. The H9
 #                        release gate stages the SAME-RUN build artifacts here
 #                        (the exact bytes the release attaches) via
@@ -32,9 +37,18 @@ TAG="${1:-$(git tag --list 'skillctl/v*' --sort=-v:refname 2>/dev/null | head -1
 VER="${TAG#skillctl/}"          # v0.4.0
 VER_NUM="${VER#v}"              # 0.4.0
 
+REQUIRED="${SMOKE_REQUIRED:-1}"
+STAGED_REQUIRED="${SMOKE_STAGED_REQUIRED:-0}"
+case "$REQUIRED:$STAGED_REQUIRED" in 0:0|0:1|1:0|1:1) ;; *) echo "invalid smoke mode" >&2; exit 2 ;; esac
+
 os=$(uname -s | tr '[:upper:]' '[:lower:]')
 arch=$(uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
-ASSET="skillctl-${os}-${arch}"
+TARGET="${SMOKE_TARGET:-${os}/${arch}}"
+case "$TARGET" in
+  darwin/arm64|darwin/amd64|linux/amd64|linux/arm64) ;;
+  *) echo "unsupported SMOKE_TARGET: $TARGET" >&2; exit 2 ;;
+esac
+ASSET="skillctl-${TARGET/\//-}"
 BASE="https://github.com/${REPO}/releases/download/${TAG}"
 
 GREEN='\033[0;32m'; RED='\033[0;31m'; YEL='\033[0;33m'; NC='\033[0m'
@@ -51,6 +65,9 @@ dl() {
   local asset="$1"
   if [ -n "${SMOKE_ASSET_DIR:-}" ] && [ -f "${SMOKE_ASSET_DIR}/${asset}" ]; then
     cp "${SMOKE_ASSET_DIR}/${asset}" .
+  elif [ "$STAGED_REQUIRED" = "1" ]; then
+    echo "required staged asset absent: $asset" >&2
+    return 1
   elif [ -n "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ] && command -v gh >/dev/null 2>&1; then
     GH_TOKEN="${GH_TOKEN:-${GITHUB_TOKEN:-}}" gh release download "$TAG" \
       --repo "$REPO" --pattern "$asset" --dir . --clobber
@@ -62,6 +79,11 @@ dl() {
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 cd "$WORK"
+# These controls suppress native credential operations in the lifecycle. They do
+# not isolate arbitrary skill execution or prove native credential integration.
+mkdir -p "$WORK/home"
+export HOME="$WORK/home" USERPROFILE="$WORK/home"
+export M3C_TOKEN_STORE=file M3C_TEST_KEYCHAIN=0 M3C_ER1_KEYCHAIN=off
 
 echo "=== skillctl smoke: ${TAG} (${ASSET}) ==="
 
@@ -71,32 +93,53 @@ if ! dl "$ASSET" || ! dl SHA256SUMS; then
   fail "could not download ${ASSET} / SHA256SUMS from ${TAG} (is the release published or drafted?)"
   exit 1
 fi
-dl SHA256SUMS.cosign.bundle 2>/dev/null || true
+if ! dl SHA256SUMS.cosign.bundle; then
+  if [ "$REQUIRED" = "1" ]; then
+    fail "required cosign bundle missing"
+    exit 1
+  fi
+fi
 pass "downloaded ${ASSET} + SHA256SUMS"
 
 # ── 2. Verify (integrity): the binary's digest must be in the signed SHA256SUMS ─
 echo "2. Verify (SHA-256 against SHA256SUMS)"
-sumtool() { command -v sha256sum >/dev/null 2>&1 && sha256sum "$@" || shasum -a 256 "$@"; }
-want=$(grep " ${ASSET}\$" SHA256SUMS | awk '{print $1}' || true)
+sumtool() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$@"
+  else
+    shasum -a 256 "$@"
+  fi
+}
+want=$(awk -v asset="$ASSET" '$2 == asset && NF == 2 {count++; digest=$1} END {if (count == 1) print digest}' SHA256SUMS)
+if [[ ! "$want" =~ ^[[:xdigit:]]{64}$ ]]; then
+  fail "missing, duplicate or invalid SHA256SUMS entry for $ASSET"
+  exit 1
+fi
 got=$(sumtool "${ASSET}" | awk '{print $1}')
 if [ -n "$want" ] && [ "$want" = "$got" ]; then
   pass "SHA-256 matches the signed SHA256SUMS"
 else
   fail "SHA-256 mismatch (want=${want:-<absent>} got=${got})"
+  exit 1
 fi
 
 # ── 3. Verify (provenance): cosign (keyless OIDC) when available ─────────────
 echo "3. Verify (cosign provenance)"
 if command -v cosign >/dev/null 2>&1 && [ -f SHA256SUMS.cosign.bundle ]; then
   if cosign verify-blob SHA256SUMS --bundle SHA256SUMS.cosign.bundle \
-       --certificate-identity-regexp "^https://github.com/${REPO}/\.github/workflows/skillctl-release\.yml@refs/tags/skillctl/v" \
+       --certificate-identity "https://github.com/${REPO}/.github/workflows/skillctl-release.yml@refs/tags/${TAG}" \
        --certificate-oidc-issuer "https://token.actions.githubusercontent.com" >/dev/null 2>&1; then
     pass "cosign provenance verified (keyless OIDC)"
   else
     fail "cosign verify-blob FAILED for SHA256SUMS"
+    exit 1
   fi
 else
-  warn "cosign not available: skipped provenance check (SHA-256 above is the integrity anchor)"
+  if [ "$REQUIRED" = "1" ]; then
+    fail "required cosign verifier or bundle missing"
+    exit 1
+  fi
+  warn "MANUAL OPTIONAL MODE: provenance not checked; no release acceptance"
 fi
 
 # ── 4. Execute: the shipped binary runs, end to end, offline ─────────────────
@@ -104,9 +147,19 @@ echo "4. Execute (offline lifecycle on the shipped binary)"
 chmod +x "${ASSET}"
 BIN="./${ASSET}"
 if out=$("$BIN" version 2>&1); then
-  if echo "$out" | grep -q "$VER_NUM"; then pass "version reports ${VER_NUM}"; else warn "version output does not mention ${VER_NUM}: ${out}"; fi
+  case "$out" in
+    "$TAG"|"$VER"|"$VER_NUM") pass "version reports ${VER_NUM}" ;;
+    *)
+      if [ "$REQUIRED" = "1" ]; then
+        fail "version does not exactly match $TAG"
+        exit 1
+      fi
+      warn "MANUAL OPTIONAL MODE: version does not match $TAG"
+      ;;
+  esac
 else
   fail "\`skillctl version\` did not run"
+  exit 1
 fi
 
 mkdir -p smoke-skill
@@ -134,17 +187,17 @@ fi
 echo "4b. Execute (trust-freeze capture → approve → verify → diff, offline)"
 TFHOME="${WORK}/tf-home"
 mkdir -p "$TFHOME"
-if HOME="$TFHOME" "$BIN" trust-freeze doctor --output "${WORK}/tf-cap" >/dev/null 2>&1 \
-   && HOME="$TFHOME" "$BIN" trust-freeze capture --profile walking-skeleton \
+if HOME="$TFHOME" USERPROFILE="$TFHOME" "$BIN" trust-freeze doctor --output "${WORK}/tf-cap" >/dev/null 2>&1 \
+   && HOME="$TFHOME" USERPROFILE="$TFHOME" "$BIN" trust-freeze capture --profile walking-skeleton \
         --output "${WORK}/tf-cap" --actor release-smoke >/dev/null 2>&1 \
-   && HOME="$TFHOME" "$BIN" keygen --out "${WORK}/tfkey" >/dev/null 2>&1 \
-   && HOME="$TFHOME" "$BIN" trust-freeze baseline approve --capture "${WORK}/tf-cap" \
+   && HOME="$TFHOME" USERPROFILE="$TFHOME" "$BIN" keygen --out "${WORK}/tfkey" >/dev/null 2>&1 \
+   && HOME="$TFHOME" USERPROFILE="$TFHOME" "$BIN" trust-freeze baseline approve --capture "${WORK}/tf-cap" \
         --output "${WORK}/tf-base" --reviewer release-smoke --change-id SMOKE \
         --reason "release smoke test" --key "${WORK}/tfkey.priv" \
         --self-approval allow >/dev/null 2>&1 \
-   && HOME="$TFHOME" "$BIN" trust-freeze verify --bundle "${WORK}/tf-base" \
+   && HOME="$TFHOME" USERPROFILE="$TFHOME" "$BIN" trust-freeze verify --bundle "${WORK}/tf-base" \
         --trusted-key "${WORK}/tfkey.pub" >/dev/null 2>&1 \
-   && HOME="$TFHOME" "$BIN" trust-freeze diff --baseline "${WORK}/tf-base" \
+   && HOME="$TFHOME" USERPROFILE="$TFHOME" "$BIN" trust-freeze diff --baseline "${WORK}/tf-base" \
         --current "${WORK}/tf-cap" --trusted-key "${WORK}/tfkey.pub" >/dev/null 2>&1; then
   pass "trust-freeze capture → approve → verify → diff (offline) succeeded"
 else
@@ -162,7 +215,11 @@ fi
 
 echo "─────────────────────────────"
 if [ "$FAILED" -eq 0 ]; then
-  echo -e "${GREEN}SMOKE PASS${NC}: ${TAG} (the published build downloads, verifies and runs."
+  if [ "$REQUIRED" = "1" ]; then
+    echo -e "${GREEN}SMOKE PASS${NC}: ${TAG} (${TARGET}, required checks passed)"
+  else
+    echo -e "${YEL}MANUAL OPTIONAL SMOKE COMPLETE${NC}: no release acceptance"
+  fi
 else
   echo -e "${RED}SMOKE FAIL${NC}: ${TAG}) the published build is broken; roll it back (see /release-skillctl Phase 6)."
   exit 1

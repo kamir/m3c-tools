@@ -27,6 +27,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"crypto/ed25519"
 	"crypto/sha256"
@@ -230,7 +231,8 @@ type TrustRoot struct {
 	// RevocationList.issued_at) before the fail-policy acts. A Go duration string
 	// (e.g. "24h"). Empty = no staleness ceiling (the snapshot is trusted at any
 	// age: the pre-SPEC-0279 behaviour, kept so existing files don't change
-	// meaning). When set, validate() rejects a non-parseable or negative value.
+	// meaning) on non-managed roots. Managed roots default to 24h and reject
+	// larger ceilings. When set, validate rejects a non-parseable or negative value.
 	MaxStaleness string `yaml:"max_staleness,omitempty"`
 
 	// CacheTTL is the local revocation-cache lifetime (SPEC-0279 §3). A Go
@@ -347,7 +349,7 @@ func (t *TrustRoot) ResolveOfflinePolicy() (statemachine.OfflinePolicy, error) {
 // IsManaged reports whether this trust root is enterprise-MANAGED, i.e. it carries
 // an offline_policy with enterprise: true (the same gate that enables the `locked`
 // state, SPEC-0317). A managed root gets the FR-0090 IS-T5 fail-closed defaults
-// (max_staleness = 48h, require_signed_governance ON) that the shipped self/unmanaged
+// (max_staleness = 24h, require_signed_governance ON) that the shipped self/unmanaged
 // host does not, and its freshness contract therefore always has a staleness ceiling.
 func (t *TrustRoot) IsManaged() bool {
 	return t != nil && t.OfflinePolicy != nil && t.OfflinePolicy.Enterprise
@@ -360,8 +362,8 @@ func (t *TrustRoot) IsManaged() bool {
 // should require signed governance wherever it CAN enforce it. Non-managed roots are
 // untouched. The shipped self/unmanaged behaviour is preserved.
 //
-//   - max_staleness → 48h UNCONDITIONALLY for a managed root. This never depends on
-//     other fields and never fails validate, so the freshness ceiling always applies.
+//   - max_staleness defaults to 24h when unset or zero. Shorter configured values
+//     remain; validate rejects managed values above 24h and invalid durations.
 //
 //   - require_signed_governance → ON, but ONLY when the managed root PINS REVIEWERS.
 //     The invariant require_signed_governance⇒non-empty reviewers (validate) means the
@@ -370,7 +372,7 @@ func (t *TrustRoot) IsManaged() bool {
 //     reading. A managed root that pins NO reviewers uses `enterprise` purely for the
 //     SPEC-0317 offline state machine (the `locked` state) and has no key to verify a
 //     governance signature against. Forcing the flag there would only brick Load, so
-//     it is left off (the 48h staleness ceiling still applies).
+//     it is left off (the 24h staleness ceiling still applies).
 //
 // NOTE (flagged for the challenge gate): require_signed_governance is a bool, so
 // "unset" is indistinguishable from an explicit `false`. On a reviewer-pinned managed
@@ -391,7 +393,9 @@ func (t *TrustRoots) applyManagedDefaults() {
 		if !t.Roots[i].IsManaged() {
 			continue
 		}
-		if strings.TrimSpace(t.Roots[i].MaxStaleness) == "" {
+		value := strings.TrimSpace(t.Roots[i].MaxStaleness)
+		duration, err := time.ParseDuration(value)
+		if value == "" || (err == nil && duration == 0) {
 			t.Roots[i].MaxStaleness = managedDefaultMaxStalenessStr
 		}
 		if !t.Roots[i].RequireSignedGovernance && len(t.Roots[i].Reviewers) > 0 {
