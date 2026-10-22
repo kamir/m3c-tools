@@ -27,11 +27,14 @@ func baseOpts() options {
 	}
 }
 
-// allRequiredPass returns a gate-result set where every REQUIRED gate passes and
+// allRequiredPass returns a gate-result set where every engineering REQUIRED gate passes and
 // the sole advisory gate (threat-model-delta) is skipped.
 func allRequiredPass() []gateInput {
 	var gs []gateInput
 	for _, m := range registry {
+		if m.id == customerGateID {
+			continue
+		}
 		st := "pass"
 		if !m.required {
 			st = "skip"
@@ -41,7 +44,7 @@ func allRequiredPass() []gateInput {
 	return gs
 }
 
-func TestRecompute_AllRequiredPass_IsReady(t *testing.T) {
+func TestRecompute_EngineeringPass_CustomerUnconfirmed(t *testing.T) {
 	o := baseOpts()
 	o.gates = allRequiredPass()
 
@@ -52,19 +55,18 @@ func TestRecompute_AllRequiredPass_IsReady(t *testing.T) {
 	if err := validate(b); err != nil {
 		t.Fatalf("validate: %v", err)
 	}
-	if !b.Summary.EnterpriseReady {
-		t.Fatalf("enterprise_ready = false, want true when every required gate passes")
+	if b.Summary.EnterpriseReady {
+		t.Fatal("engineering success must not establish customer acceptance")
 	}
 	if b.Summary.RequiredFailed != 0 {
 		t.Fatalf("required_failed = %d, want 0", b.Summary.RequiredFailed)
 	}
-	if b.Summary.RequiredPassed != b.Summary.RequiredTotal {
+	if b.Summary.RequiredPassed != 13 || b.Summary.RequiredTotal != 14 {
 		t.Fatalf("required_passed %d != required_total %d", b.Summary.RequiredPassed, b.Summary.RequiredTotal)
 	}
-	// Sanity: policy G currently has 13 required gates
-	// (two-party-acceptance seit 2026-09-10, SPEC-0406).
-	if b.Summary.RequiredTotal != 13 {
-		t.Fatalf("required_total = %d, want 13 (gate-set G)", b.Summary.RequiredTotal)
+	// Thirteen engineering gates retain their results; customer acceptance is the 14th.
+	if b.Summary.RequiredTotal != 14 {
+		t.Fatalf("required_total = %d, want 14 (gate-set G)", b.Summary.RequiredTotal)
 	}
 }
 
@@ -362,5 +364,226 @@ func TestValidate_AcceptsCallerEvidenceWithFixedPolicy(t *testing.T) {
 func TestValidate_NilBundle(t *testing.T) {
 	if err := validate(nil); err == nil {
 		t.Fatal("nil bundle was accepted")
+	}
+}
+
+func readinessTestHome(t *testing.T) string {
+	t.Helper()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("M3C_TOKEN_STORE", "file")
+	t.Setenv("M3C_TEST_KEYCHAIN", "0")
+	return home
+}
+
+func TestCustomerAcceptanceReservedInputs(t *testing.T) {
+	readinessTestHome(t)
+	for _, status := range []string{"pass", "success", "SUCCESS", "fail", "skip", ""} {
+		t.Run(status, func(t *testing.T) {
+			o := baseOpts()
+			o.gates = append(allRequiredPass(), gateInput{ID: " " + customerGateID + " ", Status: status, Evidence: "https://synthetic.invalid/acceptance", Note: "claimed approval"})
+			if _, err := buildBundle(o); err == nil || !strings.Contains(err.Error(), "reserved") {
+				t.Fatalf("caller supplied reserved customer acceptance: %v", err)
+			}
+		})
+	}
+}
+
+func TestCustomerAcceptanceCLIAndGatesFileCannotAuthorize(t *testing.T) {
+	for _, mode := range []string{"flag-pass", "flag-success", "file-pass", "file-success"} {
+		t.Run(mode, func(t *testing.T) {
+			home := readinessTestHome(t)
+			o := baseOpts()
+			out := home + "/evidence.json"
+			args := []string{"-commit", o.commit, "-tag", o.tag, "-repo", o.repo, "-artifact", "synthetic=" + strings.Repeat("a", 64), "-out", out, "-schema", "../../docs/security/release-evidence.schema.json"}
+			status := "pass"
+			if strings.HasSuffix(mode, "success") {
+				status = "success"
+			}
+			if strings.HasPrefix(mode, "flag") {
+				args = append(args, "-gate", customerGateID+"="+status)
+			} else {
+				path := home + "/gates.json"
+				data, err := json.Marshal([]gateInput{{ID: customerGateID, Status: status}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(path, data, 0o600); err != nil {
+					t.Fatal(err)
+				}
+				args = append(args, "-gates-file", path)
+			}
+			if code := run(args); code == 0 {
+				t.Fatal("reserved caller gate succeeded through CLI")
+			}
+			if _, err := os.Stat(out); !os.IsNotExist(err) {
+				t.Fatal("rejected reserved gate published evidence")
+			}
+		})
+	}
+}
+
+func TestCustomerAcceptanceStrictValidationRejectsForgery(t *testing.T) {
+	readinessTestHome(t)
+	for _, tc := range []struct {
+		name   string
+		mutate func(*Bundle)
+	}{
+		{"missing-customer", func(b *Bundle) {
+			for i, g := range b.Gates {
+				if g.ID == customerGateID {
+					b.Gates = append(b.Gates[:i], b.Gates[i+1:]...)
+					return
+				}
+			}
+		}},
+		{"pass", func(b *Bundle) {
+			for i := range b.Gates {
+				if b.Gates[i].ID == customerGateID {
+					b.Gates[i].Status = "pass"
+				}
+			}
+		}},
+		{"not-required", func(b *Bundle) {
+			for i := range b.Gates {
+				if b.Gates[i].ID == customerGateID {
+					b.Gates[i].Required = false
+				}
+			}
+		}},
+		{"forged-evidence", func(b *Bundle) {
+			for i := range b.Gates {
+				if b.Gates[i].ID == customerGateID {
+					b.Gates[i].EvidenceRef = "https://synthetic.invalid/issuer"
+				}
+			}
+		}},
+		{"forged-note", func(b *Bundle) {
+			for i := range b.Gates {
+				if b.Gates[i].ID == customerGateID {
+					b.Gates[i].Note = "accepted"
+				}
+			}
+		}},
+		{"forged-verifiability", func(b *Bundle) {
+			for i := range b.Gates {
+				if b.Gates[i].ID == customerGateID {
+					b.Gates[i].Verifiability = "trust-ci"
+				}
+			}
+		}},
+		{"old-policy", func(b *Bundle) { b.Policy.ID = "trust-binder/policy@v0" }},
+		{"forged-rule", func(b *Bundle) { b.Policy.Rule = "engineering-only" }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			o := baseOpts()
+			o.gates = allRequiredPass()
+			b, err := buildBundle(o)
+			if err != nil {
+				t.Fatal(err)
+			}
+			tc.mutate(b)
+			b.Summary = computeSummary(b.Gates)
+			if err := validate(b); err == nil {
+				t.Fatal("forged customer policy accepted with recomputed summary")
+			}
+		})
+	}
+}
+
+func TestCustomerAcceptanceSyntheticSummaryIsNotAuthorization(t *testing.T) {
+	readinessTestHome(t)
+	o := baseOpts()
+	o.gates = allRequiredPass()
+	b, err := buildBundle(o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range b.Gates {
+		if b.Gates[i].ID == customerGateID {
+			b.Gates[i].Status = "pass"
+		}
+	}
+	b.Summary = computeSummary(b.Gates)
+	if !b.Summary.EnterpriseReady || b.Summary.RequiredTotal != 14 || b.Summary.RequiredPassed != 14 {
+		t.Fatalf("synthetic all-pass recomputation wrong: %+v", b.Summary)
+	}
+	if err := validate(b); err == nil {
+		t.Fatal("synthetic summary was mistaken for trusted acceptance")
+	}
+	if computeSummary(nil).EnterpriseReady {
+		t.Fatal("empty gate set is not readiness")
+	}
+}
+
+func TestCustomerAcceptanceOutputAndStatementRemainUnconfirmed(t *testing.T) {
+	home := readinessTestHome(t)
+	o := baseOpts()
+	args := []string{"-commit", o.commit, "-tag", o.tag, "-repo", o.repo, "-artifact", "synthetic=" + strings.Repeat("a", 64), "-out", home + "/bundle.json", "-intoto", home + "/statement.json", "-schema", "../../docs/security/release-evidence.schema.json"}
+	for _, g := range allRequiredPass() {
+		args = append(args, "-gate", g.ID+"="+g.Status)
+	}
+	if code := run(args); code != 0 {
+		t.Fatalf("engineering evidence assembly failed: %d", code)
+	}
+	var b Bundle
+	data, err := os.ReadFile(home + "/bundle.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &b); err != nil {
+		t.Fatal(err)
+	}
+	if b.SchemaVersion != "0.1.0" || b.Policy.ID != policyID || b.Summary.RequiredPassed != 13 || b.Summary.RequiredTotal != 14 || b.Summary.EnterpriseReady {
+		t.Fatalf("incorrect readiness output: %+v", b.Summary)
+	}
+	for _, g := range b.Gates {
+		if g.ID == customerGateID && (g.Status != "skip" || g.EvidenceRef != "" || g.Note != customerGateNote) {
+			t.Fatalf("fabricated customer evidence: %+v", g)
+		}
+	}
+	var statement Statement
+	data, err = os.ReadFile(home + "/statement.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &statement); err != nil {
+		t.Fatal(err)
+	}
+	if statement.Predicate == nil || statement.Predicate.Summary.EnterpriseReady {
+		t.Fatal("in-toto wrapper claims readiness")
+	}
+}
+
+func TestCustomerAcceptanceSchemaContract(t *testing.T) {
+	readinessTestHome(t)
+	path := "../../docs/security/release-evidence.schema.json"
+	if err := crossCheckSchema(path); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var schema map[string]any
+	if err := json.Unmarshal(data, &schema); err != nil {
+		t.Fatal(err)
+	}
+	props := schema["properties"].(map[string]any)
+	policy := props["policy"].(map[string]any)["properties"].(map[string]any)
+	if policy["rule"].(map[string]any)["const"] != policyRule {
+		t.Fatal("schema policy rule drift")
+	}
+	if policy["id"].(map[string]any)["const"] != policyID {
+		t.Fatal("schema policy version drift")
+	}
+	summary := props["summary"].(map[string]any)["properties"].(map[string]any)
+	if summary["enterprise_ready"].(map[string]any)["const"] != false {
+		t.Fatal("schema permits readiness without trusted producer")
+	}
+	gates := props["gates"].(map[string]any)
+	if gates["minItems"] != float64(len(registry)) || gates["minContains"] != float64(1) || gates["maxContains"] != float64(1) {
+		t.Fatal("schema can omit or duplicate reserved gate")
 	}
 }
