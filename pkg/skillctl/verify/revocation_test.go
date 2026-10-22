@@ -102,3 +102,46 @@ func TestRevocationList_InvalidDigestRefused(t *testing.T) {
 		t.Fatal("expected error for malformed digest")
 	}
 }
+
+func TestRevocationListRegistryBinding(t *testing.T) {
+	key := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{7}, ed25519.SeedSize))
+	const registry = "https://reg.example/api/skills"
+	for _, tc := range []struct {
+		name, rootURL, listURL string
+		allowed                bool
+	}{
+		{"same", registry, registry, true},
+		{"canonical-trimming", " " + registry + "/ ", registry + "/", true},
+		{"foreign-path", registry, registry + "/foreign", false},
+		{"foreign-host", registry, "https://foreign.invalid/api/skills", false},
+		{"foreign-scheme", registry, "http://reg.example/api/skills", false},
+		{"dot-path-not-equivalent", registry, "https://reg.example/api/skills/../skills", false},
+		{"empty-root", "", registry, false},
+		{"empty-list", registry, "", false},
+		{"both-empty", "", "", false},
+		{"both-blank", " / ", " / ", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := revocationRoot(t, key.Public().(ed25519.PublicKey))
+			root.RegistryURL = tc.rootURL
+			list, err := NewSignedRevocationList(tc.listURL, "2026-10-23T12:00:00Z", 7, []string{digestOf("synthetic-target")}, key)
+			if err != nil {
+				t.Fatal(err)
+			}
+			set, err := VerifyRevocationList(list, root, 5)
+			if tc.allowed {
+				if err != nil || len(set) != 1 {
+					t.Fatalf("same-registry signed set refused: %v", err)
+				}
+				return
+			}
+			if set != nil || !errors.Is(err, ErrRegistryNotTrusted) {
+				t.Fatalf("foreign or empty identity accepted: %v", err)
+			}
+			want := "revocation list: registry does not match pinned root: " + ErrRegistryNotTrusted.Error()
+			if err.Error() != want {
+				t.Fatal("registry mismatch diagnostic must not reflect input URLs")
+			}
+		})
+	}
+}

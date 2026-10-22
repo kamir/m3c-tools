@@ -16,7 +16,8 @@ package verify
 // revocation list (and vice-versa). Entries are opaque deny tokens: a digest
 // ("sha256:<hex>"), an agent ("agent:<id>"), or an identity ("id:<who>"); the
 // channel does not validate the token SCHEME (a compromise list must be able to
-// name ANY principal), only that the list is signed by a pinned registry key.
+// name ANY principal). The list must name the selected registry and be signed
+// by its pinned registry key.
 // The consumers consult this list FIRST, before staleness or risk are even
 // considered.
 
@@ -129,8 +130,8 @@ func NewSignedEmergencyDenyList(registryURL, issuedAt string, epoch int, tokens 
 	}, nil
 }
 
-// VerifyEmergencyDenyList checks the list's signature against an active registry
-// key in root and enforces the rollback floor. Fail-closed (mirrors
+// VerifyEmergencyDenyList binds the list to root's registry, verifies its signature
+// against an active root key, and enforces the rollback floor. Fail-closed (mirrors
 // VerifyRevocationList): a signature matching no active key → ErrRegistryNotTrusted;
 // an epoch below minEpoch → ErrRegistryNotTrusted. Returns the normalized denied
 // token set (lowercased) on success.
@@ -145,6 +146,12 @@ func VerifyEmergencyDenyList(list *EmergencyDenyList, root *TrustRoot, minEpoch 
 	}
 	if root == nil {
 		return nil, errors.New("emergency deny-list: nil trust root")
+	}
+	// A shared registry key does not authorize another registry's emergency set.
+	registry := strings.TrimRight(strings.TrimSpace(root.RegistryURL), "/")
+	listRegistry := strings.TrimRight(strings.TrimSpace(list.RegistryURL), "/")
+	if registry == "" || listRegistry == "" || registry != listRegistry {
+		return nil, fmt.Errorf("emergency deny-list: registry does not match pinned root: %w", ErrRegistryNotTrusted)
 	}
 	canon, err := CanonicalEmergencyDenyBytes(list.RegistryURL, list.IssuedAt, list.Epoch, list.DeniedTokens)
 	if err != nil {
