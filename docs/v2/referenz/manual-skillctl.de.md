@@ -63,12 +63,14 @@ Befehls zeigt dessen Aufruf mit `--help`.
 | **Registry** | Speicherort zugelassener Bundles und ihrer Governance-Ereignisse; persönliche ER1-Registry `self` oder HTTP-Registry. Sie dient der *Verteilung und dem Audit* und liegt **nicht** im kryptografischen Prüfpfad. |
 | **Admit / attest** | *Admit* veröffentlicht ein Bundle in einer Registry. *Attest* veröffentlicht ein signiertes Governance-Urteil über einen zugelassenen Digest. Attestierungen, nicht die Absicht des Autors, sind für Governance verbindlich. |
 | **Governance-Stufe (green/yellow/red)** | Das Urteil einer Attestierung. Install/verify erzwingen ein einstellbares Minimum, standardmäßig green. Die *Absicht* des Autors ist nur ein Hinweis und wird vom Verifier ignoriert. |
-| **Widerruf und Aktualität** | Eine signierte, offline überprüfbare Widerrufsliste. Die Aktualitätsregeln (SPEC-0279) verweigern im Fehlerfall: Überalterte, zurückgesetzte oder gefälschte Listen werden zurückgewiesen. Ein signierter Prüfpunkt kann die Aktualitätsfrist erneuern; eine signierte Notfall-Sperrliste sperrt einen benannten Digest sofort. |
+| **Widerruf und Aktualität** | Eine signierte, offline überprüfbare Widerrufsliste. Aufrufwege mit Aktualitätsprüfung lehnen ungültige Signaturen und zurückgesetzte Stände ab; überalterte Snapshots folgen der Risikoregel der Aktion. Ein signierter Prüfpunkt kann die Aktualitätsfrist erneuern; eine signierte Notfall-Sperrliste sperrt einen benannten Digest. |
 | **AgentID** | Ein vom Eigentümer signiertes *Mandat*, das einer bestimmten Agenteninstanz die Verwendung dieser Skills für diese Absichten erlaubt. Die Prüfung erfolgt **offline** gegen fest hinterlegte Eigentümer-/Genehmigerschlüssel, ohne Autorität im Prüfpfad. |
 | **Transparenz-Log (translog)** | Lokales RFC-6962-Merkle-Log (SPEC-0278, „L1“). Macht widersprüchliche Logansichten und das Zurückhalten von Einträgen **erkennbar** und erzeugt offline prüfbare Inklusionsbelege. Es sperrt keine Installationen; L2 (BFT-Ledger) und L3 (öffentliche Verankerung) sind zurückgestellt. |
 | **Verweigernde Prüfung bei Fehlern** | `verify-hook` ist ein Claude-Code-Hook `PreToolUse(Skill)`. Er prüft die Vertrauenskette vor jeder Skill-Ausführung und gibt allow/deny aus. Kann er nicht lesen oder prüfen, **verweigert** er die Aktion: fail-closed. |
 
 ---
+
+Für lokal konfigurierte verwaltete Roots (`offline_policy.enterprise: true`) beträgt der Standard für `max_staleness` 24 Stunden; größere konfigurierte Werte werden abgelehnt, kürzere bleiben gültig. Das begrenzt den bestehenden Aktualitätsprüfer, nicht jeden Befehl: Fail-open für geringes Risiko bleibt erhalten, HTTP-Installation und neue Aufnahme/Attestierung besitzen noch keine verpflichtende gemeinsame Aktualitätsprüfung, und lokale Installation hängt von ihren Prüfoptionen ab. Diese Einstellung ist weder Organisations-Enrollment noch eine vollständige Enterprise-Abnahme.
 
 ## Vertrauensanker und Registries: welche Datei wann?
 

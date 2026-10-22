@@ -59,12 +59,14 @@ transparency log. Run any command with `--help` for its flags.
 | **Registry** | Where admitted bundles and their governance events live; it can be `self` ER1 registry (personal) or an HTTP registry. The registry is a *distribution + audit* surface. It is **not** in the cryptographic verification path. |
 | **Admit / attest** | *Admit* publishes a bundle to a registry. *Attest* posts a signed governance verdict on an admitted digest. Attestations, not author intent, are what bind governance. |
 | **Governance level (green/yellow/red)** | The verdict carried by an attestation. Install/verify enforce a configurable minimum (default green). Author *intent* is advisory; the verifier ignores it. |
-| **Revocation + freshness** | A signed, offline-verifiable revocation list. Freshness contracts (SPEC-0279) fail **closed**: a stale, rolled-back, or forged revocation list is rejected rather than silently trusted. A signed checkpoint can reset the staleness clock; a signed emergency deny-list denies a named digest immediately. |
+| **Revocation + freshness** | A signed, offline-verifiable revocation list. Callers that enforce freshness reject invalid signatures and rollback; stale snapshots follow the action risk policy. A signed checkpoint can reset the staleness clock; a signed emergency deny-list denies a named digest. |
 | **AgentID** | An owner-signed *mandate* stating that a specific agent instance may use these skills for these intents. It verifies **offline** against pinned owner/approver keys: no authority in the path. |
 | **Transparency log (translog)** | A local RFC-6962 Merkle log (SPEC-0278, "L1"). It makes equivocation and withholding **detectable**, and emits offline inclusion receipts. It does not gate installs; L2 (BFT ledger) and L3 (public anchoring) are deferred. |
 | **The fail-closed gate** | `verify-hook` is a Claude Code `PreToolUse(Skill)` hook. It verifies the trust chain before any skill runs and emits allow/deny. If it cannot read or verify, it **denies**: fail-closed. |
 
 ---
+
+For locally configured managed roots (`offline_policy.enterprise: true`), `max_staleness` defaults to 24 hours; larger configured values are rejected and shorter values remain valid. This bounds the existing freshness evaluator, not every command: low-risk fail-open behavior remains, HTTP installation and new admission/attestation do not yet have a mandatory common freshness gate, and local installation depends on its verification options. This setting is not organization enrollment or a complete Enterprise acceptance claim.
 
 ## Trust roots & registries: which file, when
 

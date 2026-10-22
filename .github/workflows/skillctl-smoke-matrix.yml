@@ -1,8 +1,8 @@
 name: skillctl Tier-1 Platform Smoke (matrix)
 
-# H9: the HARD Tier-1 platform smoke gate. Runs the full
-#   install → verify → execute → uninstall
-# lifecycle against the artifact a skillctl release actually publishes, on ALL 5
+# H9: the platform binary smoke gate, with platform-specific coverage below.
+# Unix runs checksum authentication and an offline CLI lifecycle; Windows runs
+# checksum integrity, version and removal. It selects artifacts for all five
 # Tier-1 platforms (decision in force: platform Tier-1 = all 5 built targets, a
 # hard gate). Reusable: skillctl-release.yml calls this AFTER the (draft) release
 # job; a failure of ANY leg fails this workflow, turns the release run RED, and,
@@ -10,19 +10,18 @@ name: skillctl Tier-1 Platform Smoke (matrix)
 # the enforcement) that the operator must NOT promote the draft. Also runnable on
 # its own via workflow_dispatch against an already-published tag.
 #
-# The 5 GitHub-hosted runners (os/arch = the Tier-1 targets):
+# Configured runners and artifact targets, not customer OS acceptance:
 #   macos-14         darwin/arm64   (Apple silicon)
-#   macos-13         darwin/amd64   (Intel mac)
+#   macos-14         darwin/amd64   (Rosetta on Apple silicon, not native Intel)
 #   ubuntu-latest    linux/amd64
 #   ubuntu-24.04-arm linux/arm64
 #   windows-latest   windows/amd64
 #
-# Asset source (least privilege): each leg STAGES the same-run build artifacts
+# Asset source (least privilege): release calls stage mandatory same-run build artifacts
 # (skillctl-dist = the 5 binaries + SHA256SUMS; skillctl-cosign-bundle = the
 # cosign bundle) via actions/download-artifact: the EXACT bytes the release job
 # attaches. This keeps the gate on contents:read and never has to read a draft
-# release. When run standalone (workflow_dispatch, no run artifacts), the staging
-# steps no-op and the script/leg falls back to fetching the published release via
+# release. Standalone workflow_dispatch explicitly downloads a published tag via
 # authenticated `gh`.
 #
 # macOS/Linux legs run scripts/skillctl-smoke.sh <tag> (SHA-256 + cosign verify →
@@ -69,33 +68,32 @@ jobs:
       fail-fast: false # one failing platform must not mask the others
       matrix:
         include:
-          - { name: macos-arm64,   os: macos-14 }
+          - { name: macos-arm64,   os: macos-14, target: darwin/arm64 }
           # macos-13 war der letzte gehostete Intel-Pool und ist 2026 stillgelegt:
           # ein Job mit totem Label laeuft nie an (Run 34476478698 stand 40 Minuten
           # mit runner: null, waehrend alle anderen Beine fuhren). Das amd64-Binary
           # wird deshalb auf macos-14 unter Rosetta 2 geraucht: es beweist weiterhin,
           # dass das darwin-amd64-Artefakt startet und antwortet; was es NICHT mehr
           # beweist, ist natives Intel-Verhalten, und das steht hiermit da.
-          - { name: macos-amd64,   os: macos-14 }
-          - { name: linux-amd64,   os: ubuntu-latest }
-          - { name: linux-arm64,   os: ubuntu-24.04-arm }
-          - { name: windows-amd64, os: windows-latest }
+          - { name: macos-amd64,   os: macos-14, target: darwin/amd64 }
+          - { name: linux-amd64,   os: ubuntu-latest, target: linux/amd64 }
+          - { name: linux-arm64,   os: ubuntu-24.04-arm, target: linux/arm64 }
+          - { name: windows-amd64, os: windows-latest, target: windows/amd64 }
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       # Stage the same-run build artifacts (the bytes the release attaches). These
-      # no-op when run standalone (no such artifacts in the run); the smoke leg
-      # then falls back to fetching the published release via `gh`.
+      # are mandatory for release calls. Standalone dispatch explicitly downloads
+      # published assets instead; it does not claim same-run candidate evidence.
       - name: Stage binaries + SHA256SUMS (skillctl-dist)
-        continue-on-error: true
+        if: github.event_name != 'workflow_dispatch'
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: skillctl-dist
           path: ${{ runner.temp }}/skillctl-assets
 
       - name: Stage cosign bundle (skillctl-cosign-bundle)
-        if: runner.os != 'Windows'
-        continue-on-error: true
+        if: runner.os != 'Windows' && github.event_name != 'workflow_dispatch'
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: skillctl-cosign-bundle
@@ -113,6 +111,9 @@ jobs:
         shell: bash
         env:
           SMOKE_TAG: ${{ inputs.tag }}
+          SMOKE_TARGET: ${{ matrix.target }}
+          SMOKE_REQUIRED: "1"
+          SMOKE_STAGED_REQUIRED: ${{ github.event_name != 'workflow_dispatch' && '1' || '0' }}
           REPO: ${{ github.repository }}
           SMOKE_ASSET_DIR: ${{ runner.temp }}/skillctl-assets
           GH_TOKEN: ${{ github.token }} # standalone fallback: read a published release
@@ -125,6 +126,9 @@ jobs:
         shell: pwsh
         env:
           SMOKE_TAG: ${{ inputs.tag }}
+          SMOKE_TARGET: ${{ matrix.target }}
+          SMOKE_REQUIRED: "1"
+          SMOKE_STAGED_REQUIRED: ${{ github.event_name != 'workflow_dispatch' && '1' || '0' }}
           REPO: ${{ github.repository }}
           SMOKE_ASSET_DIR: ${{ runner.temp }}/skillctl-assets
           GH_TOKEN: ${{ github.token }}
@@ -151,6 +155,7 @@ jobs:
             Copy-Item $stagedSums $sums -Force
             Write-Host "   staged from the same-run build artifact"
           } else {
+            if ($env:SMOKE_STAGED_REQUIRED -eq '1') { Write-Error 'required same-run binary/checksums absent'; exit 1 }
             gh release download "$tag" --repo "$env:REPO" --pattern $asset --pattern 'SHA256SUMS' --dir $work --clobber
             Write-Host "   downloaded from the published release"
           }
