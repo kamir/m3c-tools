@@ -162,7 +162,7 @@ class WorkflowContracts(unittest.TestCase):
                 self.assertNotIn("-run", args)
                 self.assertEqual(
                     [arg for arg in args if arg.startswith("./")],
-                    ["./pkg/skillctl/...", "./cmd/skillctl/...", "./evaluation/..."],
+                    ["./pkg/skillctl/...", "./pkg/skillbundle/...", "./cmd/skillctl/...", "./evaluation/..."],
                 )
 
     def test_failure_contracts_are_wired_in_required_pin_guard(self):
