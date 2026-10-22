@@ -39,15 +39,17 @@ import (
 )
 
 const (
-	toolName      = "release-evidence"
-	toolVersion   = "0.1.0"
-	schemaVersion = "0.1.0"
-	predicateType = "https://m3c-tools.dev/attestations/release-evidence/v0"
-	intotoType    = "https://in-toto.io/Statement/v1"
-	policyID      = "trust-binder/policy@v0"
-	policyRule    = "enterprise_ready = every REQUIRED gate (set G) has status==pass; " +
+	toolName         = "release-evidence"
+	toolVersion      = "0.1.0"
+	schemaVersion    = "0.1.0"
+	predicateType    = "https://m3c-tools.dev/attestations/release-evidence/v0"
+	intotoType       = "https://in-toto.io/Statement/v1"
+	policyID         = "trust-binder/policy@v1"
+	customerGateID   = "customer-acceptance"
+	customerGateNote = "trusted customer-acceptance producer is not implemented; acceptance remains unconfirmed"
+	policyRule       = "enterprise_ready = every REQUIRED gate (set G) has status==pass; " +
 		"a required gate that is fail OR skip => not ready. Advisory gates (required:false) " +
-		"never block. The required set is fixed by policy, not by the caller. A strict " +
+		"never block. Customer acceptance is reserved and cannot be supplied by callers; its trusted producer is not implemented. The required set is fixed by policy, not by the caller. A strict " +
 		"verifier RECOMPUTES this from `gates` under its own policy rather than trusting the bool."
 )
 
@@ -66,7 +68,7 @@ type gateMeta struct {
 // registry is the mandatory gate-set G (H10d). Order is presentational and
 // mirrors the H10p prototype. The `required` column IS policy G:
 //
-//	13 required (the now-real gates) + threat-model-delta advisory.
+//	13 required engineering gates + required customer acceptance + one advisory.
 //	two-party-acceptance kam am 2026-09-10 dazu: das SPEC-0406-Tor meldete
 //	sich beim ersten Release-Lauf in die Evidenz, stand aber nicht in G;
 //	der Binder hat den Release zu Recht verweigert (Run 34491670456).
@@ -87,6 +89,7 @@ var registry = []gateMeta{
 	{"cosign-signature", "cosign sign-blob SHA256SUMS (keyless OIDC)", "signature", true, "re-verify", "attestation"},
 	{"platform-smoke", "Per-platform runtime smoke of the signed binary", "smoke", true, "trust-ci", "ci-log"},
 	{"two-party-acceptance", "SPEC-0406 acceptance rehearsal (macOS + Windows twins)", "test", true, "trust-ci", "ci-log"},
+	{customerGateID, "Customer acceptance", "test", true, "re-verify", "attestation"},
 	{"threat-model-delta", "Threat-model / security-triad delta", "threat-model", false, "reference", "external"},
 }
 
@@ -372,6 +375,9 @@ func buildBundle(o options) (*Bundle, error) {
 	supplied := make(map[string]gateInput, len(o.gates))
 	for _, g := range o.gates {
 		id := strings.TrimSpace(g.ID)
+		if id == customerGateID {
+			return nil, errors.New("customer-acceptance is reserved; trusted producer is not implemented")
+		}
 		st, err := normalizeStatus(g.Status)
 		if err != nil {
 			return nil, fmt.Errorf("gate %q: %w", id, err)
@@ -393,7 +399,9 @@ func buildBundle(o options) (*Bundle, error) {
 			ID: m.id, Name: m.name, Kind: m.kind, Required: m.required,
 			EvidenceType: m.evidenceType, Verifiability: m.verifiability,
 		}
-		if in, ok := supplied[m.id]; ok {
+		if m.id == customerGateID {
+			g.Status, g.Note = "skip", customerGateNote
+		} else if in, ok := supplied[m.id]; ok {
 			g.Status = in.Status
 			g.EvidenceRef = strings.TrimSpace(in.Evidence)
 			g.Note = strings.TrimSpace(in.Note)
@@ -434,6 +442,8 @@ func buildBundle(o options) (*Bundle, error) {
 // points at the assembling run.
 func defaultEvidence(m gateMeta, base string, o options) string {
 	switch m.id {
+	case customerGateID:
+		return ""
 	case "sbom":
 		return base + "/" + o.sbomName
 	case "slsa-provenance":
@@ -487,7 +497,7 @@ func computeSummary(gates []Gate) Summary {
 	}
 	// enterprise_ready: no required failure AND every required gate passed (a
 	// required skip lands in neither passed nor failed, so it fails this test).
-	s.EnterpriseReady = s.RequiredFailed == 0 && s.RequiredPassed == s.RequiredTotal
+	s.EnterpriseReady = s.RequiredTotal > 0 && s.RequiredFailed == 0 && s.RequiredPassed == s.RequiredTotal
 	s.Caveats = caveats
 	return s
 }
@@ -501,6 +511,9 @@ func validate(b *Bundle) error {
 	}
 	if b.Policy == nil || b.Policy.ID != policyID {
 		return fmt.Errorf("policy.id must be %q", policyID)
+	}
+	if b.Policy.Rule != policyRule {
+		return errors.New("policy.rule does not match current policy")
 	}
 	if !reSemver.MatchString(b.SchemaVersion) {
 		return fmt.Errorf("schema_version %q is not semver", b.SchemaVersion)
@@ -554,6 +567,9 @@ func validate(b *Bundle) error {
 		if g.Name != m.name || g.Kind != m.kind || g.Required != m.required ||
 			g.EvidenceType != m.evidenceType || g.Verifiability != m.verifiability {
 			return fmt.Errorf("gate %q metadata does not match policy %q", g.ID, policyID)
+		}
+		if g.ID == customerGateID && (g.Status != "skip" || g.Note != customerGateNote || g.EvidenceRef != "") {
+			return errors.New("customer-acceptance must remain unconfirmed; trusted producer is not implemented")
 		}
 		if !validStat[g.Status] {
 			return fmt.Errorf("gate %q: status %q must be pass|fail|skip", g.ID, g.Status)

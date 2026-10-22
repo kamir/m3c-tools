@@ -34,7 +34,7 @@ See also: [Service Index](service-index.md) (what stays running) ·
 | **exitaudit** | `cmd/exitaudit/` | `make build-gates` | Blocking gate: every exit code cited in the manual and in [CLI-VERBS](v2/referenz/CLI-VERBS.md) against `pkg/skillctl/exitcode`, plus the `pull` gate read as code. Reports how many verb rows it could NOT compare. |
 | **verbaudit** | `cmd/verbaudit/` | `make build-gates` | Blocking gate: the dispatched `skillctl` verbs against the allocation table [CLI-VERBS](v2/referenz/CLI-VERBS.md) (FR-0113). |
 | **structural** | `cmd/structural/` | `make build-gates` | Inventories the decisions in the trust path and states the MC/DC obligation each one carries. Produces the obligation, not a coverage measurement. |
-| **release-evidence** | `cmd/release-evidence/` | `make build-gates` | Assembles the Release Evidence Bundle (the "Trust Binder"): an index that ties a set of release artifacts to a commit and a mandatory gate-set. |
+| **release-evidence** | `cmd/release-evidence/` | `make build-gates` | Assembles the Release Evidence Bundle (the "Trust Binder"): an index that ties release artifacts to a commit and mandatory gates. Policy `trust-binder/policy@v1` also requires customer acceptance; its evidence producer is unavailable, so this tool emits `enterprise_ready: false`. Caller-supplied customer-acceptance results are rejected. |
 
 > The four `poc-*` binaries are **validated reference implementations**, not
 > production code (see `CLAUDE.md`). The last four rows are the repository's own

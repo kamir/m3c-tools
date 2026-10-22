@@ -5,7 +5,7 @@
   "description": "Machine-readable proof that a set of release artifacts came from commit X AND passed gate-set G at time T. One instance per release tag. Designed to be signed as a detached cosign blob AND/OR wrapped as an in-toto predicate tied to the existing SLSA provenance.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "subject", "produced_at", "gates", "summary"],
+  "required": ["schema_version", "subject", "produced_at", "policy", "gates", "summary"],
   "properties": {
     "schema_version": {
       "type": "string",
@@ -67,19 +67,40 @@
       "type": "object",
       "description": "The ruleset that decides which gates are required and what enterprise_ready means. A verifier re-evaluates enterprise_ready against a named policy rather than trusting the stored bool.",
       "additionalProperties": false,
-      "required": ["id"],
+      "required": ["id", "rule"],
       "properties": {
-        "id": { "type": "string", "description": "Policy identifier, e.g. trust-binder/policy@v0-prototype." },
-        "rule": { "type": "string", "description": "Human-readable decision rule for enterprise_ready." }
+        "id": { "type": "string", "const": "trust-binder/policy@v1", "description": "Exact versioned readiness policy; earlier engineering-only policies are distinct." },
+        "rule": { "type": "string", "const": "enterprise_ready = every REQUIRED gate (set G) has status==pass; a required gate that is fail OR skip => not ready. Advisory gates (required:false) never block. Customer acceptance is reserved and cannot be supplied by callers; its trusted producer is not implemented. The required set is fixed by policy, not by the caller. A strict verifier RECOMPUTES this from `gates` under its own policy rather than trusting the bool.", "description": "Fixed decision rule for policy v1." }
       }
     },
     "gates": {
       "type": "array",
       "description": "Gate-set G. Order is presentational; identity is `id`.",
+      "minItems": 15,
+      "maxItems": 15,
+      "contains": { "type": "object", "properties": { "id": { "const": "customer-acceptance" } }, "required": ["id"] },
+      "minContains": 1,
+      "maxContains": 1,
       "items": {
         "type": "object",
         "additionalProperties": false,
         "required": ["id", "name", "status", "required", "kind"],
+        "allOf": [{
+          "if": { "properties": { "id": { "const": "customer-acceptance" } }, "required": ["id"] },
+          "then": {
+            "required": ["note", "evidence_type", "verifiability"],
+            "properties": {
+              "name": { "const": "Customer acceptance" },
+              "kind": { "const": "test" },
+              "status": { "const": "skip" },
+              "required": { "const": true },
+              "evidence_ref": { "maxLength": 0 },
+              "note": { "const": "trusted customer-acceptance producer is not implemented; acceptance remains unconfirmed" },
+              "evidence_type": { "const": "attestation" },
+              "verifiability": { "const": "re-verify" }
+            }
+          }
+        }],
         "properties": {
           "id": {
             "type": "string",
@@ -88,7 +109,7 @@
               "unit-tests", "race", "e2e", "lint", "gosec-sast",
               "govulncheck-cve", "gitleaks-secret", "sbom", "docaudit",
               "slsa-provenance", "cosign-signature", "platform-smoke",
-              "two-party-acceptance", "threat-model-delta"
+              "two-party-acceptance", "customer-acceptance", "threat-model-delta"
             ]
           },
           "name": { "type": "string", "description": "Human label; SHOULD match the CI job name so a consumer can find it in the run." },
@@ -146,12 +167,13 @@
         "skipped": { "type": "integer", "minimum": 0 },
         "enterprise_ready": {
           "type": "boolean",
-          "description": "Convenience bool = (required_failed == 0 AND every required gate status==pass) under `policy`. A strict verifier RECOMPUTES this from `gates` + its own policy rather than trusting the stored value."
+          "const": false,
+          "description": "False under policy v1 while the trusted customer-acceptance producer is unimplemented; engineering success alone is insufficient."
         },
         "caveats": {
           "type": "array",
           "items": { "type": "string" },
-          "description": "Gates that a stricter enterprise policy would demand but are currently required:false (e.g. gosec, threat-model-delta)."
+          "description": "Advisory gates not counted toward required readiness."
         }
       }
     }

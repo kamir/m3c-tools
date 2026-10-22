@@ -34,7 +34,7 @@ Siehe auch: [Dienste](service-index.de.md), die dauerhaft laufen, und
 | **exitaudit** | `cmd/exitaudit/` | `make build-gates` | Sperrende Prüfung aller Exit-Codes im Handbuch und [CLI-VERBS](v2/referenz/CLI-VERBS.de.md) gegen `pkg/skillctl/exitcode` sowie des als Code gelesenen `pull`-Gates. Meldet nicht vergleichbare Verbzeilen. |
 | **verbaudit** | `cmd/verbaudit/` | `make build-gates` | Sperrende Prüfung der dispatchten skillctl-Verben gegen die Zuordnung in [CLI-VERBS](v2/referenz/CLI-VERBS.de.md), FR-0113. |
 | **structural** | `cmd/structural/` | `make build-gates` | Erfasst Entscheidungen im Vertrauenspfad und ihre MC/DC-Prüfpflicht. Liefert die Pflicht, keine Coverage-Messung. |
-| **release-evidence** | `cmd/release-evidence/` | `make build-gates` | Erstellt das Release Evidence Bundle („Trust Binder“), dessen Index Release-Artefakte an Commit und verpflichtenden Prüfsatz bindet. |
+| **release-evidence** | `cmd/release-evidence/` | `make build-gates` | Erstellt das Release Evidence Bundle („Trust Binder“), dessen Index Release-Artefakte an Commit und verpflichtende Gates bindet. Policy `trust-binder/policy@v1` verlangt auch die Kundenabnahme; deren Nachweisproduzent fehlt noch, daher gibt dieses Tool `enterprise_ready: false` aus. Vom Aufrufer übergebene Ergebnisse zur Kundenabnahme werden abgewiesen. |
 
 > Die vier `poc-*`-Programme sind geprüfte Referenzimplementierungen statt Produktionscode;
 > siehe `CLAUDE.md`. Die letzten vier Zeilen beschreiben eigene Prüf- und Messwerkzeuge
