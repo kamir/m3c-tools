@@ -118,8 +118,8 @@ func NewSignedRevocationList(registryURL, issuedAt string, epoch int, digests []
 	}, nil
 }
 
-// VerifyRevocationList checks the list's signature against an active registry
-// key in root and returns the set of revoked digests (lowercased). Fail-closed:
+// VerifyRevocationList binds the list to root's registry, verifies its signature
+// against an active root key, and returns revoked digests (lowercased). Fail-closed:
 // a list whose signature matches no active key returns ErrRegistryNotTrusted.
 // An attacker cannot drop a revocation by stripping its signature, nor forge
 // one to block a healthy bundle.
@@ -132,6 +132,12 @@ func VerifyRevocationList(list *RevocationList, root *TrustRoot, minEpoch int) (
 	}
 	if root == nil {
 		return nil, errors.New("revocation list: nil trust root")
+	}
+	// A shared registry key does not authorize another registry's revocation set.
+	registry := strings.TrimRight(strings.TrimSpace(root.RegistryURL), "/")
+	listRegistry := strings.TrimRight(strings.TrimSpace(list.RegistryURL), "/")
+	if registry == "" || listRegistry == "" || registry != listRegistry {
+		return nil, fmt.Errorf("revocation list: registry does not match pinned root: %w", ErrRegistryNotTrusted)
 	}
 	canon, err := CanonicalRevocationBytes(list.RegistryURL, list.IssuedAt, list.Epoch, list.RevokedDigests)
 	if err != nil {

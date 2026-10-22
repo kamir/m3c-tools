@@ -68,6 +68,8 @@ transparency log. Run any command with `--help` for its flags.
 
 For locally configured managed roots (`offline_policy.enterprise: true`), `max_staleness` defaults to 24 hours; larger configured values are rejected and shorter values remain valid. This bounds the existing freshness evaluator, not every command: low-risk fail-open behavior remains, HTTP installation and new admission/attestation do not yet have a mandatory common freshness gate, and local installation depends on its verification options. This setting is not organization enrollment or a complete Enterprise acceptance claim.
 
+Bundle and AgentID revocation lists and emergency deny-lists must identify the same non-empty registry as the selected pinned trust root, including its registry path. Outer whitespace and trailing slashes follow the signing format's normalization. A correctly signed list for another registry is rejected even when both registries use the same key. This binding does not enroll an organization or make list selection mandatory in every command.
+
 ## Trust roots & registries: which file, when
 
 skillctl has **two** trust-roots files, one per registry model. Using the wrong one is the

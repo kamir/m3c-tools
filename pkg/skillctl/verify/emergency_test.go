@@ -155,3 +155,64 @@ func writeJSON(t *testing.T, path string, v any) {
 		t.Fatal(err)
 	}
 }
+
+func TestEmergencyDenyListRegistryBinding(t *testing.T) {
+	public, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const registry = "https://reg.example/api/skills"
+	for _, tc := range []struct {
+		name, rootURL, listURL string
+		allowed                bool
+	}{
+		{"same", registry, registry, true},
+		{"canonical-trimming", " " + registry + "/ ", registry + "/", true},
+		{"foreign-path", registry, registry + "/foreign", false},
+		{"foreign-host", registry, "https://foreign.invalid/api/skills", false},
+		{"foreign-scheme", registry, "http://reg.example/api/skills", false},
+		{"empty-root", "", registry, false},
+		{"empty-list", registry, "", false},
+		{"both-empty", "", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := revocationRoot(t, public)
+			root.RegistryURL = tc.rootURL
+			root.MinRevocationEpoch = 5
+			list, err := NewSignedEmergencyDenyList(tc.listURL, "2026-10-23T12:00:00Z", 7, []string{"agent:synthetic"}, private)
+			if err != nil {
+				t.Fatal(err)
+			}
+			set, err := VerifyEmergencyDenyList(list, root, 5)
+			if tc.allowed {
+				if err != nil || len(set) != 1 {
+					t.Fatalf("same-registry emergency set refused: %v", err)
+				}
+			} else {
+				if set != nil || !errors.Is(err, ErrRegistryNotTrusted) {
+					t.Fatalf("foreign or empty registry emergency set accepted: %v", err)
+				}
+				want := "emergency deny-list: registry does not match pinned root: " + ErrRegistryNotTrusted.Error()
+				if err.Error() != want {
+					t.Fatal("registry mismatch diagnostic must not reflect input URLs")
+				}
+			}
+			data, err := json.Marshal(list)
+			if err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(t.TempDir(), "emergency-deny.json")
+			if err := os.WriteFile(path, data, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			loaded, loadErr := LoadVerifiedEmergencyDenyList(path, root)
+			if tc.allowed {
+				if loadErr != nil || len(loaded) != 1 {
+					t.Fatalf("same-registry loader failed: %v", loadErr)
+				}
+			} else if loaded != nil || !errors.Is(loadErr, ErrRegistryNotTrusted) {
+				t.Fatalf("loader bypassed registry binding: %v", loadErr)
+			}
+		})
+	}
+}

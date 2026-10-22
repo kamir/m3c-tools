@@ -72,6 +72,8 @@ Befehls zeigt dessen Aufruf mit `--help`.
 
 Für lokal konfigurierte verwaltete Roots (`offline_policy.enterprise: true`) beträgt der Standard für `max_staleness` 24 Stunden; größere konfigurierte Werte werden abgelehnt, kürzere bleiben gültig. Das begrenzt den bestehenden Aktualitätsprüfer, nicht jeden Befehl: Fail-open für geringes Risiko bleibt erhalten, HTTP-Installation und neue Aufnahme/Attestierung besitzen noch keine verpflichtende gemeinsame Aktualitätsprüfung, und lokale Installation hängt von ihren Prüfoptionen ab. Diese Einstellung ist weder Organisations-Enrollment noch eine vollständige Enterprise-Abnahme.
 
+Bundle- und AgentID-Widerrufslisten sowie Notfall-Sperrlisten müssen dieselbe nicht leere Registry wie der ausgewählte fest hinterlegte Vertrauensanker benennen, einschließlich Registry-Pfad. Äußere Leerzeichen und abschließende Schrägstriche folgen der Normalisierung des Signaturformats. Eine korrekt signierte Liste einer anderen Registry wird auch dann abgewiesen, wenn beide Registries denselben Schlüssel verwenden. Diese Bindung führt kein Organisations-Enrollment ein und macht die Listenauswahl nicht in jedem Befehl verpflichtend.
+
 ## Vertrauensanker und Registries: welche Datei wann?
 
 skillctl hat **zwei** Vertrauensanker-Dateien, eine je Registry-Modell. Die falsche

@@ -125,9 +125,17 @@ func TestMutationFreshnessRegistryKeyReuse(t *testing.T) {
 				t.Fatal(err)
 			}
 			opts.Revocations = list
-			// The existing primitive authenticates this shared-key signature.
-			if _, err := VerifyRevocationList(list, opts.Root, 5); err != nil {
+			// A valid shared-key signature does not authorize a foreign registry.
+			canonical, err := CanonicalRevocationBytes(list.RegistryURL, list.IssuedAt, list.Epoch, list.RevokedDigests)
+			if err != nil {
 				t.Fatal(err)
+			}
+			signature, err := decodeSignatureB64(list.SignatureB64)
+			if err != nil || !ed25519.Verify(key.Public().(ed25519.PublicKey), canonical, signature) {
+				t.Fatal("fixture does not carry a valid shared-key signature")
+			}
+			if _, err := VerifyRevocationList(list, opts.Root, 5); !errors.Is(err, ErrRegistryNotTrusted) {
+				t.Fatalf("foreign registry accepted by revocation verifier: %v", err)
 			}
 			dec, err := EvaluateMutationFreshness(opts)
 			if dec.Allowed || !errors.Is(err, ErrRegistryNotTrusted) || dec.Reason != "registry_mismatch" {

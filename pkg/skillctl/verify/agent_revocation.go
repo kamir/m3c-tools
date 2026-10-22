@@ -130,8 +130,8 @@ func NewSignedAgentRevocationList(registryURL, issuedAt string, epoch int, agent
 	}, nil
 }
 
-// VerifyAgentRevocationList checks the list's signature against an active
-// registry key in root and returns the set of revoked agent ids (lowercased).
+// VerifyAgentRevocationList binds the list to root's registry and verifies its
+// signature against an active root key, returning revoked agent ids (lowercased).
 // Fail-closed (mirrors VerifyRevocationList): a list whose signature matches no
 // active key returns ErrRegistryNotTrusted; a list whose epoch is below the
 // pinned floor is refused even if its signature is valid (rollback protection).
@@ -141,6 +141,12 @@ func VerifyAgentRevocationList(list *AgentRevocationList, root *TrustRoot, minEp
 	}
 	if root == nil {
 		return nil, errors.New("agent revocation list: nil trust root")
+	}
+	// A shared registry key does not authorize another registry's revoked agents.
+	registry := strings.TrimRight(strings.TrimSpace(root.RegistryURL), "/")
+	listRegistry := strings.TrimRight(strings.TrimSpace(list.RegistryURL), "/")
+	if registry == "" || listRegistry == "" || registry != listRegistry {
+		return nil, fmt.Errorf("agent revocation list: registry does not match pinned root: %w", ErrRegistryNotTrusted)
 	}
 	canon, err := CanonicalAgentRevocationBytes(list.RegistryURL, list.IssuedAt, list.Epoch, list.RevokedAgents)
 	if err != nil {
