@@ -2054,8 +2054,36 @@ backend is refused loudly with exit `40` (`audit_backend_config`); the pre-SPEC-
 endpoint-only configuration is never mapped silently onto a backend (REQ-5.1a).
 With neither set, `sync` stays local-only and exits `0` as before.
 
+The independent `$ER1_DEVICE_TOKEN_ORIGIN` is mandatory for a real sync.
+It must already be known for the selected credential, contain no API path,
+query or fragment, and match the endpoint scheme, canonical host and effective
+port. Do not derive it from a newly selected endpoint. Missing or mismatched
+pins fail before reading the environment Bearer or the persisted token, opening
+the outbox or sending evidence. Help, invalid arguments, default-off and unknown
+backend selection also precede those reads.
+
+An explicit nonempty `$ER1_DEVICE_TOKEN` wins. An invalid selected value does
+not fall back to storage. Otherwise, after binding, sync reads the existing
+OS-keychain/file backend without migration, Save or Clear operations. This does
+not rewrite environment variables or add issuer, audience or tenant metadata;
+other commands retain their existing autoload behavior. Values are captured
+for this sync invocation, without claiming that the exported ingest-client
+fields are immutable. HTTPS remains mandatory even with `--insecure`. Automated store tests use
+in-memory providers; they do not establish native-store acceptance on customer
+operating systems.
+
+The supplied HTTP client now uses the existing credential redirect policy:
+cross-origin 302/303 may follow only as a GET without credentials or body;
+cross-origin redirects preserving an evidence body are refused. Same-origin
+redirect behavior is retained. Signed durable acknowledgements remain a
+separate requirement for marking rows synced. Network/read failures expose a
+constant diagnostic, including in persisted backoff records; remote URL and
+error text are not retained. Existing transient retry behavior is unchanged:
+`--once` may return `0` while evidence remains pending for retry. That exit is
+not proof of a durable remote acknowledgement.
+
 ```bash
-skillctl sync --once --backend er1 --endpoint https://ingest.example.com --ingest-pubkey ingest.pub
+ER1_DEVICE_TOKEN_ORIGIN=https://ingest.example.com skillctl sync --once --backend er1 --endpoint https://ingest.example.com --ingest-pubkey ingest.pub
 ```
 
 Exit: `0` ok · `1` drain or transport error · `2` usage · `29` the ingest rejected the batch (auth or validation, a 4xx) · `40` audit-backend selection refused (SPEC-0455 REQ-5.1a).

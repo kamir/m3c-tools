@@ -89,10 +89,11 @@ func (fileStore) Save(token *DeviceToken) error {
 // Load reads and decrypts the device token from disk.
 // Returns nil, nil if no token file exists.
 func (fileStore) Load(deviceID, userID string) (*DeviceToken, error) {
-	path, err := tokenPath()
+	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, err
 	}
+	path := filepath.Join(home, ".m3c-tools", "device-token.enc")
 
 	data, err := os.ReadFile(path)
 	if err != nil {

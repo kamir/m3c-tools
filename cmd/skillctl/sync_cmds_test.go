@@ -25,6 +25,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 	"github.com/kamir/m3c-tools/pkg/skillctl/outbox"
 	"github.com/kamir/m3c-tools/pkg/skillgate"
 )
@@ -139,6 +140,7 @@ func contractDouble(t *testing.T, ingest ed25519.PrivateKey, logID string, mode 
 		}
 	}))
 	t.Cleanup(srv.Close)
+	t.Setenv("ER1_DEVICE_TOKEN_ORIGIN", srv.URL)
 	return srv
 }
 
@@ -147,6 +149,7 @@ func syncHarness(t *testing.T, priv ed25519.PrivateKey, keyID string) (home stri
 	t.Helper()
 	home = t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	t.Setenv("ER1_DEVICE_TOKEN", "test-token")
 	pub := priv.Public().(ed25519.PublicKey)
 	orig := syncResolveDevicePub
@@ -343,14 +346,14 @@ func TestSync_EgressDefaultOff(t *testing.T) {
 }
 
 func TestSync_InsecureRejectedForNonLoopback(t *testing.T) {
-	_, err := buildIngestClient("https://ingest.example.com", "", "L", true, io.Discard)
+	_, err := buildIngestClient("https://ingest.example.com", "", "L", true, io.Discard, syncTestCredential("https://ingest.example.com"))
 	if err == nil {
 		t.Fatal("--insecure against a non-loopback endpoint must be rejected")
 	}
 }
 
 func TestSync_RejectsNonHTTPSEndpoint(t *testing.T) {
-	_, err := buildIngestClient("http://ingest.example.com", "", "L", false, io.Discard)
+	_, err := buildIngestClient("http://ingest.example.com", "", "L", false, io.Discard, syncTestCredential("https://ingest.example.com"))
 	if err == nil {
 		t.Fatal("non-https endpoint must be rejected (HTTPS-only)")
 	}
@@ -360,7 +363,7 @@ func TestSync_RejectsNonHTTPSEndpoint(t *testing.T) {
 // gated G402 site: with insecure=false (the default) the built client must NOT
 // skip certificate verification.
 func TestSync_DefaultVerifiesTLS(t *testing.T) {
-	c, err := buildIngestClient("https://ingest.example.com", "", "L", false, io.Discard)
+	c, err := buildIngestClient("https://ingest.example.com", "", "L", false, io.Discard, syncTestCredential("https://ingest.example.com"))
 	if err != nil {
 		t.Fatalf("buildIngestClient (default, secure): unexpected error: %v", err)
 	}
@@ -410,4 +413,8 @@ func TestSync_TamperedRowNotShipped(t *testing.T) {
 	if ev, _, _ := s.Get("inv:0000000000050:aa"); ev.SyncStatus != 0 {
 		t.Fatalf("divergent row must stay unsynced: %+v", ev)
 	}
+}
+
+func syncTestCredential(origin string) httpsafe.DeferredSecret {
+	return httpsafe.DeferredSecret{Binding: httpsafe.CredentialBinding{Version: 1, Kind: httpsafe.CredentialDeviceBearer, Origin: origin, Source: "synthetic-test"}, Read: func() ([]byte, error) { return []byte("synthetic-sync-key"), nil }}
 }
