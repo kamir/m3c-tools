@@ -16,6 +16,9 @@ import server
 def api_configuration(monkeypatch):
     monkeypatch.setattr(server, "API_URL", "https://registry.example")
     monkeypatch.setattr(server, "API_KEY", "synthetic-test-credential")
+    monkeypatch.setattr(server, "API_KEY_ORIGIN", ("https", "registry.example", 443))
+    monkeypatch.setattr(server, "API_CONFIG_ERROR", "")
+    monkeypatch.setattr(server, "ALLOW_LOOPBACK_HTTP", False)
     monkeypatch.setenv("M3C_USER_ID", "alice")
 
 
@@ -30,8 +33,7 @@ def test_equivalent_origins_receive_credentials(url):
 
 @pytest.mark.parametrize("url", [
     "https://other.example/path", "https://registry.example:8443/path",
-    "https://registry.example:0/path",
-    "http://localhost:8080/path", "https://registry.example.evil.example/path",
+    "https://localhost:8080/path", "https://registry.example.evil.example/path",
 ])
 def test_other_origins_do_not_receive_local_credentials(url):
     assert server._api_credentials(url, "alice") == {}
@@ -43,6 +45,7 @@ def test_other_origins_do_not_receive_local_credentials(url):
     "https://registry.example:invalid/path", "https://registry.example:65536/path",
     "//registry.example/path",
     "https://registry.example/\npath", " https://registry.example/path",
+    "https://registry.example:0/path",
 ])
 def test_invalid_or_insecure_api_url_is_rejected(url):
     with pytest.raises(ValueError):
@@ -54,6 +57,8 @@ def test_invalid_or_insecure_api_url_is_rejected(url):
 ])
 def test_loopback_development_api_is_supported(url, monkeypatch):
     monkeypatch.setattr(server, "API_URL", url)
+    monkeypatch.setattr(server, "ALLOW_LOOPBACK_HTTP", True)
+    monkeypatch.setattr(server, "API_KEY_ORIGIN", server._api_origin(url))
     assert server._api_credentials(url + "/api", "alice")["X-API-KEY"]
 
 

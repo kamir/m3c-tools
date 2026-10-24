@@ -8,7 +8,6 @@ Transport: stdio (standard for Claude Code)
 Registration: ~/.claude/mcp.json
 """
 import asyncio
-import ipaddress
 import json
 import logging
 import os
@@ -23,6 +22,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
+
+from api_connection import parse_api_base, resolve_api_connection
 
 logger = logging.getLogger("skill-server")
 
@@ -70,17 +71,27 @@ USAGE_DB = os.environ.get(
     "SKILL_USAGE_DB",
     str(Path.home() / ".m3c-tools" / "skill-usage.db"),
 )
-API_URL = os.environ.get("M3C_API_URL", "https://onboarding.guide")
-API_KEY = os.environ.get("M3C_API_KEY", "")
+def _read_legacy_api_key() -> str:
+    """Read only the legacy API-key field, after independent origin validation."""
+    def unique_object(pairs):
+        fields = {}
+        for name, value in pairs:
+            if name in fields:
+                raise ValueError("ambiguous legacy session JSON")
+            fields[name] = value
+        return fields
 
-# Try loading API key from session file
-if not API_KEY:
     session_path = Path.home() / ".m3c-tools" / "er1_session.json"
-    try:
-        with open(session_path) as f:
-            API_KEY = json.load(f).get("api_key", "")
-    except Exception:
-        pass
+    with open(session_path) as stream:
+        return json.load(stream, object_pairs_hook=unique_object).get("api_key", "")
+
+
+_api_connection = resolve_api_connection(os.environ.get, _read_legacy_api_key)
+API_URL = _api_connection.base_url
+API_KEY = _api_connection.key
+API_KEY_ORIGIN = _api_connection.origin
+API_CONFIG_ERROR = _api_connection.error
+ALLOW_LOOPBACK_HTTP = _api_connection.allow_loopback_http
 
 # ── Server ─────────────────────────────────────────────────────────────
 
@@ -485,7 +496,7 @@ async def skill_usage(skill_name: str) -> str:
     if isinstance(data, str):
         # Fallback: save locally
         _save_usage_local(event)
-        return "Recorded locally (aims-core unreachable). Sync later with `skillctl sync-usage`."
+        return f"Recorded locally. {data} Sync later with `skillctl sync-usage`."
 
     new_mastery = data.get("new_mastery", "?")
     return f"Usage recorded for '{skill_name}'. Current mastery: {new_mastery}"
@@ -546,24 +557,8 @@ def _open_graph_db() -> sqlite3.Connection | None:
 
 
 def _api_origin(url: str) -> tuple[str, str, int]:
-    """Validate API transport and return its scheme, host and effective port."""
-    if any(ord(char) <= 32 or ord(char) == 127 for char in url):
-        raise ValueError("API URL must not contain whitespace or control characters")
-    parsed = urllib.parse.urlsplit(url)
-    host = parsed.hostname
-    if not host or parsed.username is not None or parsed.password is not None or parsed.fragment:
-        raise ValueError("API URL requires a host and must not contain credentials or fragments")
-    loopback = host.lower() == "localhost"
-    try:
-        loopback = loopback or ipaddress.ip_address(host).is_loopback
-    except ValueError:
-        pass
-    if parsed.scheme != "https" and not (parsed.scheme == "http" and loopback):
-        raise ValueError("API URL requires HTTPS (HTTP is allowed only for loopback development)")
-    port = parsed.port
-    if port is None:
-        port = 443 if parsed.scheme == "https" else 80
-    return parsed.scheme, host.lower(), port
+    """Validate request transport without rejecting legitimate query parameters."""
+    return parse_api_base(url, ALLOW_LOOPBACK_HTTP, request=True)[1]
 
 
 class _SameOriginRedirectHandler(urllib.request.HTTPRedirectHandler):
@@ -579,53 +574,70 @@ class _SameOriginRedirectHandler(urllib.request.HTTPRedirectHandler):
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def _open_api_request(req: urllib.request.Request, timeout: int):
+def _open_api_request(req: urllib.request.Request, timeout: int, *, allow_anonymous: bool = False):
     """Apply the same transport and redirect policy to every API request."""
-    _api_origin(req.full_url)
+    origin = _api_origin(req.full_url)
+    credential_headers = {"authorization", "proxy-authorization", "cookie", "x-api-key", "x-user-id", "x-context-id", "x-device-id"}
+    carries_credentials = any(name.lower() in credential_headers for name, _ in req.header_items())
+    anonymous_get = allow_anonymous and req.get_method() == "GET" and not carries_credentials and req.data is None
+    if API_CONFIG_ERROR and not anonymous_get:
+        raise ValueError(API_CONFIG_ERROR)
+    if origin != API_KEY_ORIGIN and (carries_credentials or req.data is not None):
+        raise ValueError("Unbound API request blocked")
     return urllib.request.build_opener(_SameOriginRedirectHandler()).open(req, timeout=timeout)
 
 
-def _api_credentials(url: str, user_id: str) -> dict[str, str]:
-    """Bind local credentials to the configured API origin only."""
+def _api_credentials(url: str, user_id: str, *, require_bound: bool = False) -> dict[str, str]:
+    """Use the independent bootstrap pin, never the mutable configured target."""
     origin = _api_origin(url)
-    if API_KEY and origin == _api_origin(API_URL):
+    if API_CONFIG_ERROR:
+        if require_bound:
+            raise ValueError(API_CONFIG_ERROR)
+        return {}
+    if require_bound and origin != API_KEY_ORIGIN:
+        raise ValueError("Unbound API target blocked")
+    if API_KEY and origin == API_KEY_ORIGIN:
         return {"X-API-KEY": API_KEY, "X-User-ID": user_id}
     return {}
 
 
 async def _api_get(path: str) -> dict | str:
     """GET from aims-core API. Returns parsed JSON or error string."""
+    if API_CONFIG_ERROR:
+        return API_CONFIG_ERROR
     if not API_KEY:
-        return "No API key configured. Set M3C_API_KEY or authenticate via skillctl."
+        return "API key unavailable; explicitly configure an API key and its independent origin pin."
     try:
-        url = f"{API_URL}{path}"
-        req = urllib.request.Request(url, headers=_api_credentials(url, os.environ.get("USER", "unknown")))
+        url = f"{API_URL.rstrip('/')}{path}"
+        req = urllib.request.Request(url, headers=_api_credentials(url, os.environ.get("USER", "unknown"), require_bound=True))
         with _open_api_request(req, timeout=10) as resp:
             return json.loads(resp.read())
     except urllib.error.HTTPError as e:
-        return f"API error: HTTP {e.code}: {e.read().decode()[:200]}"
-    except Exception as e:
-        return f"API unreachable: {e}"
+        return f"API error: HTTP {e.code}"
+    except Exception:
+        return "API request failed; check the configured origin and connectivity."
 
 
 async def _api_post(path: str, body: dict) -> dict | str:
     """POST to aims-core API. Returns parsed JSON or error string."""
+    if API_CONFIG_ERROR:
+        return API_CONFIG_ERROR
     if not API_KEY:
-        return "No API key configured. Set M3C_API_KEY or authenticate via skillctl."
+        return "API key unavailable; explicitly configure an API key and its independent origin pin."
     try:
-        url = f"{API_URL}{path}"
+        url = f"{API_URL.rstrip('/')}{path}"
         data = json.dumps(body).encode()
         req = urllib.request.Request(
             url, data=data, method="POST",
-            headers=_api_credentials(url, os.environ.get("USER", "unknown")),
+            headers=_api_credentials(url, os.environ.get("USER", "unknown"), require_bound=True),
         )
         req.add_header("Content-Type", "application/json")
         with _open_api_request(req, timeout=15) as resp:
             return json.loads(resp.read())
     except urllib.error.HTTPError as e:
-        return f"API error: HTTP {e.code}: {e.read().decode()[:200]}"
-    except Exception as e:
-        return f"API unreachable: {e}"
+        return f"API error: HTTP {e.code}"
+    except Exception:
+        return "API request failed; check the configured origin and connectivity."
 
 
 def _save_usage_local(event: dict):
@@ -1637,9 +1649,9 @@ async def skill_data_source_query(
     url = f"{base}/api/skills/data-sources/{encoded_id}"
     headers = {"Accept": "application/json"}
     try:
-        headers.update(_api_credentials(url, os.environ.get("M3C_USER_ID", "")))
+        headers.update(_api_credentials(url, os.environ.get("M3C_USER_ID", ""), require_bound=not registry_url))
         req = urllib.request.Request(url, headers=headers)
-        with _open_api_request(req, timeout=timeout) as r:
+        with _open_api_request(req, timeout=timeout, allow_anonymous=bool(registry_url)) as r:
             doc = json.loads(r.read().decode())
     except urllib.error.HTTPError as e:
         if e.code == 404:
@@ -1647,11 +1659,15 @@ async def skill_data_source_query(
                     "stderr": f"data_source not registered: {data_source_id}",
                     "remediation": "Register it via POST /api/skills/data-sources (admin)."}
         return {"ok": False, "exit_code": 1, "error_class": "http_error",
-                "stderr": f"HTTP {e.code} {e.reason}",
+                "stderr": f"HTTP {e.code}",
                 "remediation": "Check registry URL + API key."}
-    except Exception as exc:
+    except ValueError:
+        return {"ok": False, "exit_code": 1, "error_class": "configuration",
+                "stderr": API_CONFIG_ERROR or "Invalid API transport or origin; HTTPS required unless loopback HTTP is explicitly enabled.",
+                "remediation": "Check independent API origin assignment and transport."}
+    except Exception:
         return {"ok": False, "exit_code": 1, "error_class": "network",
-                "stderr": str(exc), "remediation": "Check connectivity."}
+                "stderr": "API request failed.", "remediation": "Check connectivity."}
 
     state = "n/a"
     if bundle_digest:

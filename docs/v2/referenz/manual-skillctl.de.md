@@ -2839,6 +2839,21 @@ Entwicklungs-HTTP nur für localhost oder eine numerische Loopbackadresse; die
 Origin muss weiterhin passen. Fehlgeschlagene Requests erzeugen einen Exitcode
 ungleich null; es gibt keine automatische Wiederholung.
 
+Der MCP-Server verlangt separat `$M3C_API_KEY_ORIGIN`, bevor er
+`$M3C_API_KEY` oder den alten Sitzungsschlüssel liest. Sein Ziel ist
+`$M3C_API_URL` oder `https://onboarding.guide`; nur
+`$M3C_ALLOW_LOOPBACK_HTTP=1` aktiviert Loopback-HTTP. Beim Kopieren oder Starten
+des Servers muss `api_connection.py` neben `mcp-skill-server/server.py` bleiben.
+Ungültige API-Konfiguration lässt lokale MCP-Tools verfügbar und blockiert
+standardmäßige oder credential-tragende API-Anfragen mit einer Diagnose. Eine
+explizite HTTPS-`registry_url` bei `skill_data_source_query` erlaubt weiterhin
+einen anonymen GET ohne lokale Credentials; Transport- und Redirectprüfungen
+bleiben verbindlich. Die lokale Origin-Zuordnung
+beweist weder Ausstellung noch Mandantenberechtigung. Eine reine
+Kontext-Sitzung wird nicht dadurch repariert, dass man einen API-Key aus dem
+Gerätelogin annimmt. Der eigenständige Usage-Hook und Replay sind nicht an
+diesen MCP-Bootstrap angeschlossen.
+
 **`runbook publish <runbook.html>`**: Onboarding-Runbook im THOH-Katalog
 veröffentlichen (SPEC-0272/0275).
 
