@@ -52,6 +52,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 	"github.com/kamir/m3c-tools/pkg/skillctl/auditexport"
 	"github.com/kamir/m3c-tools/pkg/skillctl/device"
 	"github.com/kamir/m3c-tools/pkg/skillctl/exitcode"
@@ -99,6 +100,10 @@ var syncResolveDevicePub = func(home, keyID string) (ed25519.PublicKey, bool) {
 // --- entry point --------------------------------------------------------------
 
 func runSync(args []string, stdout, stderr io.Writer) int {
+	return runSyncWithReaders(args, stdout, stderr, os.Getenv, readSyncStoredBearer)
+}
+
+func runSyncWithReaders(args []string, stdout, stderr io.Writer, getenv func(string) string, readStored httpsafe.SecretReader) int {
 	fs := flag.NewFlagSet("sync", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	var (
@@ -113,27 +118,32 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 		insecure = fs.Bool("insecure", false, "Skip TLS verification (loopback endpoints only).")
 	)
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return syncExitOK
+		}
+		return syncExitUsage
+	}
+	if fs.NArg() != 0 {
+		fmt.Fprintln(stderr, "skillctl sync: unexpected positional arguments")
 		return syncExitUsage
 	}
 	if *once == *daemon {
 		fmt.Fprintln(stderr, "skillctl sync: choose exactly one of --once or --daemon")
 		return syncExitUsage
 	}
+	if *daemon && *interval <= 0 {
+		fmt.Fprintln(stderr, "skillctl sync: --interval must be positive for daemon mode")
+		return syncExitUsage
+	}
 	if *batch <= 0 {
 		*batch = syncDefaultBatch
-	}
-
-	home, err := userHome()
-	if err != nil {
-		fmt.Fprintf(stderr, "skillctl sync: resolve home: %v\n", err)
-		return syncExitError
 	}
 
 	// R-9.1 egress gate: default-OFF. Endpoint may also come from the
 	// environment so a daemon unit need not repeat it on the command line.
 	ep := strings.TrimSpace(*endpoint)
 	if ep == "" {
-		ep = strings.TrimSpace(os.Getenv("M3C_INGEST_ENDPOINT"))
+		ep = strings.TrimSpace(getenv("M3C_INGEST_ENDPOINT"))
 	}
 
 	// SPEC-0455 REQ-5.1 (decisions D1/D8): the backend selector. The flag
@@ -141,7 +151,7 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 	// There is NO default backend: enabling egress means naming one.
 	be := strings.TrimSpace(*backendN)
 	if be == "" {
-		be = strings.TrimSpace(os.Getenv("SKILLCTL_AUDIT_BACKEND"))
+		be = strings.TrimSpace(getenv("SKILLCTL_AUDIT_BACKEND"))
 	}
 
 	if be == "" && ep == "" {
@@ -162,7 +172,18 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 		return syncExitBackendConfig
 	}
 
-	client, err := buildIngestClient(ep, *pubkey, *logID, *insecure, stderr)
+	known := false
+	for _, name := range auditexport.Names() {
+		if be == name {
+			known = true
+		}
+	}
+	if !known {
+		fmt.Fprintf(stderr, "skillctl sync: unknown audit export backend %q (known: %s) (%s)\n", be, strings.Join(auditexport.Names(), ", "), exitcode.SyncAuditBackendConfig.Label)
+		return syncExitBackendConfig
+	}
+	selected := syncBearerSource(getenv, readStored)
+	client, err := buildIngestClient(ep, *pubkey, *logID, *insecure, stderr, selected)
 	if err != nil {
 		fmt.Fprintf(stderr, "skillctl sync: %v\n", err)
 		return syncExitError
@@ -176,6 +197,11 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 		return syncExitBackendConfig
 	}
 
+	home, err := userHome()
+	if err != nil {
+		fmt.Fprintln(stderr, "skillctl sync: home unavailable")
+		return syncExitError
+	}
 	store, err := outbox.Open(home)
 	if err != nil {
 		fmt.Fprintf(stderr, "skillctl sync: open outbox: %v\n", err)
@@ -192,15 +218,16 @@ func runSync(args []string, stdout, stderr io.Writer) int {
 }
 
 // buildIngestClient assembles the IngestClient and its HTTP transport. HTTPS is
-// enforced by IngestClient.PostBatch; here we gate InsecureSkipVerify to
+// validated before reading a credential; here we gate InsecureSkipVerify to
 // loopback so a prod endpoint can never inherit it (R-5.2).
-func buildIngestClient(endpoint, pubkeyPath, logID string, insecure bool, stderr io.Writer) (*outbox.IngestClient, error) {
-	u, err := url.Parse(endpoint)
+func buildIngestClient(endpoint, pubkeyPath, logID string, insecure bool, stderr io.Writer, selected httpsafe.DeferredSecret) (*outbox.IngestClient, error) {
+	base, err := httpsafe.ParseAPIBase(endpoint, false)
 	if err != nil {
-		return nil, fmt.Errorf("parse endpoint: %w", err)
+		return nil, err
 	}
-	if u.Scheme != "https" {
-		return nil, fmt.Errorf("endpoint must be https, got %q", u.Scheme)
+	u, err := url.Parse(base.URL)
+	if err != nil {
+		return nil, httpsafe.ErrInvalidAPIBase
 	}
 
 	transport := &http.Transport{}
@@ -222,12 +249,20 @@ func buildIngestClient(endpoint, pubkeyPath, logID string, insecure bool, stderr
 		fmt.Fprintln(stderr, "[skillctl sync] no --ingest-pubkey: durable-seq acks cannot be verified; rows will NOT be marked synced")
 	}
 
+	resolved, err := httpsafe.ResolveCredential(base.URL, false, selected)
+	if err != nil {
+		return nil, err
+	}
+	token := strings.TrimSpace(string(resolved.Secret))
+	if token == "" || strings.ContainsAny(token, "\r\n\x00") {
+		return nil, errors.New("invalid sync bearer format")
+	}
 	return &outbox.IngestClient{
-		Endpoint:    endpoint,
-		Token:       strings.TrimSpace(os.Getenv("ER1_DEVICE_TOKEN")),
+		Endpoint:    resolved.Base.URL,
+		Token:       token,
 		LogID:       logID,
 		PubKey:      pub,
-		Client:      &http.Client{Timeout: 15 * time.Second, Transport: transport},
+		Client:      &http.Client{Timeout: 15 * time.Second, Transport: transport, CheckRedirect: httpsafe.NoCredentialRedirect},
 		ClientEpoch: syncNow().Unix(),
 	}, nil
 }

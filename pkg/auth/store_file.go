@@ -11,12 +11,13 @@ import (
 	"path/filepath"
 )
 
-// fileStore persists the token as a host-bound AES-256-GCM blob under
-// ~/.m3c-tools/device-token.enc. It is the fallback for hosts without a usable
-// OS keychain. The encryption key is derived from device + user material, so
-// the file cannot be decrypted on a different machine, but note this is
-// host-binding, not true secrecy against a same-user process (which can
-// re-derive the key). The keychain backend is preferred for that reason.
+// fileStore persists an AES-256-GCM blob under ~/.m3c-tools/device-token.enc
+// as a fallback for hosts without a usable OS keychain. Its key is derived only
+// from nonsecret device/user identifiers, with no independent secret entropy.
+// A copied blob can be decrypted on another machine when those identifiers
+// are known. A same-user process can obtain the blob and re-derive its key;
+// this format does not provide secrecy against that process. Treat copies and
+// backups as credential-bearing data. The OS keychain is the preferred backend.
 type fileStore struct{}
 
 func newFileStore() TokenStore { return fileStore{} }
@@ -89,10 +90,11 @@ func (fileStore) Save(token *DeviceToken) error {
 // Load reads and decrypts the device token from disk.
 // Returns nil, nil if no token file exists.
 func (fileStore) Load(deviceID, userID string) (*DeviceToken, error) {
-	path, err := tokenPath()
+	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, err
 	}
+	path := filepath.Join(home, ".m3c-tools", "device-token.enc")
 
 	data, err := os.ReadFile(path)
 	if err != nil {

@@ -2247,8 +2247,45 @@ reine Endpunktkonfiguration vor SPEC-0455 wird niemals stillschweigend einem
 Backend zugeordnet (REQ-5.1a). Ohne beide Einstellungen bleibt `sync` wie bisher
 lokal und endet mit `0`.
 
+Für einen echten Sync ist die unabhängige `$ER1_DEVICE_TOKEN_ORIGIN`
+verpflichtend. Sie muss für das gewählte Credential bereits bekannt sein,
+darf keinen API-Pfad, Query oder Fragment enthalten und muss zu Schema,
+kanonischem Host und effektivem Port des Endpunkts passen. Leiten Sie sie
+nicht aus einem neu gewählten Endpunkt ab. Fehlende oder abweichende Pins
+scheitern vor dem Lesen des Umgebungs-Bearers oder gespeicherten Tokens,
+Öffnen der Outbox oder Senden von Nachweisen. Hilfe, ungültige Argumente,
+Default-off und unbekannte Backend-Auswahl liegen ebenfalls vor diesen Reads.
+
+Ein expliziter nichtleerer `$ER1_DEVICE_TOKEN` gewinnt. Ein ungültiger gewählter
+Wert fällt nicht auf den Store zurück. Andernfalls liest Sync nach der Bindung
+das vorhandene OS-Keychain-/Datei-Backend ohne Migration, Save oder Clear.
+Dies schreibt weder Umgebungsvariablen um noch ergänzt es Aussteller-,
+Audience- oder Mandantenmetadaten; andere Befehle behalten ihr bestehendes
+Autoload-Verhalten. Werte werden für diesen Sync-Aufruf festgehalten, ohne
+die exportierten Ingest-Client-Felder als unveränderlich zu bezeichnen.
+HTTPS bleibt auch mit `--insecure` verpflichtend. Automatisierte Storetests
+verwenden In-Memory-Provider; sie belegen keine Abnahme des nativen Stores auf
+Kundenbetriebssystemen.
+Der alte Datei-Fallback leitet seinen Verschlüsselungsschlüssel nur aus
+nichtgeheimen Geräte-/Nutzerkennungen ab, ohne unabhängige geheime Entropie.
+Ein kopierter Blob kann bei bekannten Kennungen auf einem anderen Rechner
+entschlüsselt werden; behandeln Sie Kopien und Backups als credentialhaltige
+Daten.
+
+Der übergebene HTTP-Client nutzt nun die bestehende Credential-Redirectpolicy:
+Origin-übergreifende 302/303 dürfen nur als GET ohne Credentials oder Body
+folgen; Redirects mit erhaltenem Nachweisbody an eine fremde Origin werden
+abgelehnt. Das Redirectverhalten innerhalb derselben Origin bleibt erhalten.
+Signierte dauerhafte Bestätigungen bleiben eine getrennte Voraussetzung, um
+Datensätze als synchronisiert zu markieren. Netzwerk-/Lesefehler zeigen auch
+in gespeicherten Backoff-Einträgen eine konstante Diagnose; entfernte URLs
+und Fehlertexte werden nicht übernommen. Das bestehende Verhalten bei
+transienten Fehlern bleibt erhalten: `--once` kann mit `0` enden, während
+Nachweise zur Wiederholung ausstehen. Dieser Exit beweist keine dauerhafte
+entfernte Bestätigung.
+
 ```bash
-skillctl sync --once --backend er1 --endpoint https://ingest.example.com --ingest-pubkey ingest.pub
+ER1_DEVICE_TOKEN_ORIGIN=https://ingest.example.com skillctl sync --once --backend er1 --endpoint https://ingest.example.com --ingest-pubkey ingest.pub
 ```
 
 Exit: `0` erfolgreich · `1` Übertragungs-/Transportfehler · `2` Aufruffehler ·

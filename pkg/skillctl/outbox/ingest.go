@@ -25,6 +25,7 @@ import (
 	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -138,7 +139,7 @@ func (c *IngestClient) eventsURL() (string, error) {
 func (c *IngestClient) PostBatch(ctx context.Context, records [][]byte) (*IngestResponse, int, error) {
 	target, err := c.eventsURL()
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, errors.New("outbox: invalid ingest endpoint")
 	}
 	raws := make([]json.RawMessage, 0, len(records))
 	for _, r := range records {
@@ -146,12 +147,12 @@ func (c *IngestClient) PostBatch(ctx context.Context, records [][]byte) (*Ingest
 	}
 	body, err := json.Marshal(IngestBatch{Records: raws, ClientEpoch: c.ClientEpoch})
 	if err != nil {
-		return nil, 0, fmt.Errorf("outbox: marshal ingest batch: %w", err)
+		return nil, 0, errors.New("outbox: invalid ingest batch")
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, bytes.NewReader(body))
 	if err != nil {
-		return nil, 0, fmt.Errorf("outbox: build ingest request: %w", err)
+		return nil, 0, errors.New("outbox: could not build ingest request")
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "m3c-skillctl-sync/1.0")
@@ -165,7 +166,7 @@ func (c *IngestClient) PostBatch(ctx context.Context, records [][]byte) (*Ingest
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, 0, fmt.Errorf("outbox: post ingest batch: %w", err)
+		return nil, 0, safeIngestIOError(err)
 	}
 	defer func() {
 		_, _ = io.Copy(io.Discard, resp.Body)
@@ -177,7 +178,7 @@ func (c *IngestClient) PostBatch(ctx context.Context, records [][]byte) (*Ingest
 	}
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
-		return nil, resp.StatusCode, fmt.Errorf("outbox: read ingest response: %w", err)
+		return nil, resp.StatusCode, safeIngestIOError(err)
 	}
 	var out IngestResponse
 	if len(bytes.TrimSpace(respBody)) > 0 {
@@ -187,6 +188,17 @@ func (c *IngestClient) PostBatch(ctx context.Context, records [][]byte) (*Ingest
 		}
 	}
 	return &out, resp.StatusCode, nil
+}
+
+// Preserve only trusted context sentinels, never remote URL/body/error text.
+func safeIngestIOError(err error) error {
+	if errors.Is(err, context.Canceled) {
+		return fmt.Errorf("outbox: ingest I/O failed: %w", context.Canceled)
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Errorf("outbox: ingest I/O failed: %w", context.DeadlineExceeded)
+	}
+	return errors.New("outbox: ingest I/O failed")
 }
 
 // VerifyAck reports whether ack carries a valid signed durable-seq for this
