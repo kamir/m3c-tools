@@ -26,14 +26,14 @@ import (
 	"github.com/kamir/m3c-tools/pkg/er1login"
 )
 
-// networkCommands are the subcommands that talk to ER1 and therefore need a
-// device token. Only these trigger autoloadDeviceToken, so offline commands
-// (version, keygen, sign, verify-sig, trust, …) never touch the OS keychain.
+// networkCommands is the legacy eager ER1 device-token autoload allowlist.
+// Membership triggers the startup bootstrap before command parsing. Attest uses
+// its separately bound registry credentials; sync resolves its credential after
+// validation.
 var networkCommands = map[string]bool{
 	"publish":   true,
 	"pull":      true,
 	"registry":  true,
-	"attest":    true,
 	"revoke":    true,
 	"awareness": true,
 	"session":   true,
