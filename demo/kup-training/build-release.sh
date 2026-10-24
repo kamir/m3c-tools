@@ -178,7 +178,7 @@ Verify checksums against \`SHA256SUMS\` before running.
 
 - Author-side \`propose\` (SPEC-0194) is drafted, not in the dispatcher yet: use \`pack\` + \`sign\` + the registry HTTP endpoint manually until it lands.
 - \`audit\` Phase 2 (full verdict UX with cleanup) is in flight. Phase 1 surface (scan + per-skill verdict) is what's wired today.
-- SPEC-0201 \`import-public\`/\`-list\`/\`-policy lint\` and SPEC-0202 \`run\`/\`invoke-replay\` are documented but not in this binary cut.
+- SPEC-0201 \`import-public\`/\`-list\`/\`-policy lint\` and SPEC-0202 \`run\` are not in this binary cut.
 
 ## Verifying the release
 

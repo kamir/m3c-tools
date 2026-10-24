@@ -152,8 +152,6 @@ G304	cmd/skillctl/propose_cmds.go	skillMD := filepath.Join(skillDir, "SKILL.md")
 G304	cmd/skillctl/publish_cmds.go	// computes it, but we need the bytes anyway for the inline body). skb, err := os.ReadFile(skbPath) if err != nil {
 G304	cmd/skillctl/publish_cmds.go	} skb, err := os.ReadFile(bundlePath) if err != nil {
 G304	cmd/skillctl/publish_manifest.go	} f, err := os.Open(path) if err != nil {
-G304	cmd/skillctl/replay_cmds.go	for _, p := range candidates { data, err := os.ReadFile(p) if err != nil {
-G304	cmd/skillctl/replay_cmds.go	} data, err := os.ReadFile(path) if err != nil {
 G304	cmd/skillctl/revoked_cache.go	func loadInstalledSidecar(home, name string) (registry.ProvenanceSidecar, bool) { b, err := os.ReadFile(filepath.Join(home, ".claude", "skills", name, registry.ProvenanceSidecarName)) if err != nil {
 G304	cmd/skillctl/revoked_cache.go	} b, err := os.ReadFile(p) if err != nil {
 G304	cmd/skillctl/runbook_cmds.go	html, err := os.ReadFile(htmlPath) if err != nil {

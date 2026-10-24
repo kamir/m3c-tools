@@ -2596,11 +2596,31 @@ projects.
 
 | Flag | Purpose |
 |------|---------|
-| `--target <url>` | Target to import into. |
-| `--api-key <key>` | API key for the target. |
+| `--target <url>` | Required target, including any API path prefix. |
+| `--api-key <key>` | Explicit API key; takes precedence over an ambient Bearer token. |
+| `--api-key-origin <origin>` | Independent API-key origin assignment; overrides `$M3C_API_KEY_ORIGIN`. |
+| `--allow-loopback-http` | Explicit development HTTP for localhost or a numeric loopback address only. |
 | `--user-id <id>` | Attribute the imported inventory to this user id. |
 | `--input <scan.json>` / `--path <dir>` / `--recursive` / `--include-home` | What to import. |
-| `--dry-run` | Print what would be imported; do not POST. |
+| `--dry-run` | Validate target and inventory and print a preview; no secret, store or HTTP access. |
+
+A real import selects `--api-key` first. Otherwise it selects
+`$ER1_DEVICE_TOKEN`, then `$M3C_API_KEY`, then the legacy session `api_key`.
+The selected Bearer token requires its own `$ER1_DEVICE_TOKEN_ORIGIN`; an
+API-key origin never authorizes a Bearer. Every selected API key requires
+`--api-key-origin` or `$M3C_API_KEY_ORIGIN`. The origin must be known independently
+of the new target, contain no API path/query/fragment, and match its scheme,
+canonical host and effective port. Missing or mismatched pins fail without
+falling back to another source; the session key is read only after that check.
+Context-only sessions contain no API key, and ambiguous duplicate API-key fields
+are rejected. Source assignment is local operator provenance, not verified
+issuer or tenant authority; `--user-id` remains request attribution.
+
+The client snapshots target and credential for health and import, retaining its
+redirect guard. HTTP errors show status only; a successful response message
+containing the selected key in cleartext is rejected. This checks the displayed
+message, not arbitrary credentials or additional encodings. Import does not
+load native device-token stores; other clients and native autoload are separate.
 
 **`menubar`**: launch the macOS menu-bar skill monitor (interactive, long-running).
 
@@ -2637,7 +2657,7 @@ configuration diagnostic. An explicit HTTPS `registry_url` on
 credentials; it cannot bypass transport or redirect checks. This local
 origin assignment proves no issuer or tenant authority, and a context-only
 session cannot be repaired by assuming that device login issued an API key.
-The independent usage hook and Replay are not wired to this MCP bootstrap.
+The independent usage hook is not wired to this MCP bootstrap.
 
 The standalone PostToolUse usage hook has its own bootstrap using the same
 canonical `api_connection.py`. From the repository root, copy both files into

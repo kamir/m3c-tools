@@ -38,6 +38,11 @@ import (
 // test and the operator see the same string).
 const advisoryUntilPinnedMsg = "advisory-only until SPEC-0247 P1.3 pinned"
 
+const (
+	ansiRed   = "\x1b[31m"
+	ansiReset = "\x1b[0m"
+)
+
 // --- test seams -------------------------------------------------------------
 
 // sessionBaselineNow is the injectable clock. The statemachine is a pure
