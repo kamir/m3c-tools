@@ -2,8 +2,6 @@ package auth
 
 import (
 	"errors"
-	"os"
-	"path/filepath"
 	"testing"
 )
 
@@ -26,55 +24,34 @@ func (s *readOnlyProbeStore) Clear() error            { panic("read-only Clear")
 func (s *readOnlyProbeStore) Has() bool               { panic("read-only Has") }
 
 func TestPersistedBearerReadOnlyNoMigration(t *testing.T) {
-	hard := errors.New("synthetic unavailable cause")
 	for _, tc := range []struct {
-		name                    string
-		primary, fallback       *DeviceToken
-		primaryErr, fallbackErr error
-		want                    string
-		wantFallback            bool
-		wantErr                 error
-		deny                    bool
+		name  string
+		token *DeviceToken
+		err   error
+		want  string
+		deny  bool
 	}{
-		{name: "primary", primary: &DeviceToken{Token: "synthetic-primary"}, want: "synthetic-primary"},
-		{name: "empty primary uses file without migration", fallback: &DeviceToken{Token: "synthetic-file"}, want: "synthetic-file", wantFallback: true},
-		{name: "unavailable primary uses file", primaryErr: ErrUnavailable, fallback: &DeviceToken{Token: "synthetic-file"}, want: "synthetic-file", wantFallback: true},
-		{name: "hard primary no fallback", primaryErr: hard, fallback: &DeviceToken{Token: "synthetic-file"}, deny: true, wantErr: hard},
-		{name: "file error preserved", fallbackErr: hard, wantFallback: true, deny: true, wantErr: hard},
-		{name: "missing", wantFallback: true, deny: true},
-		{name: "expired primary no fallback", primary: &DeviceToken{Token: "synthetic-expired", ExpiresAt: "2000-01-01T00:00:00Z"}, fallback: &DeviceToken{Token: "synthetic-file"}, deny: true},
-		{name: "invalid expiry", primary: &DeviceToken{Token: "synthetic-expired", ExpiresAt: "not-a-time"}, deny: true},
-		{name: "empty selected", primary: &DeviceToken{}, deny: true},
-		{name: "blank selected", primary: &DeviceToken{Token: " \t"}, deny: true},
-		{name: "header injection selected", primary: &DeviceToken{Token: "synthetic\r\nheader"}, deny: true},
-		{name: "trim once", primary: &DeviceToken{Token: " \tsynthetic-key \t"}, want: "synthetic-key"},
+		{name: "native", token: &DeviceToken{Token: "synthetic-native"}, want: "synthetic-native"},
+		{name: "unavailable", err: ErrUnavailable, deny: true},
+		{name: "unsupported", err: ErrStorePolicy, deny: true},
+		{name: "missing", deny: true},
+		{name: "expired", token: &DeviceToken{Token: "synthetic", ExpiresAt: "2000-01-01T00:00:00Z"}, deny: true},
+		{name: "invalid expiry", token: &DeviceToken{Token: "synthetic", ExpiresAt: "invalid"}, deny: true},
+		{name: "empty", token: &DeviceToken{}, deny: true},
+		{name: "blank", token: &DeviceToken{Token: " \t"}, deny: true},
+		{name: "header injection", token: &DeviceToken{Token: "synthetic\r\nheader"}, deny: true},
+		{name: "null injection", token: &DeviceToken{Token: "synthetic\x00tail"}, deny: true},
+		{name: "trim once", token: &DeviceToken{Token: " \tsynthetic \t"}, want: "synthetic"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			p := &readOnlyProbeStore{token: tc.primary, err: tc.primaryErr}
-			f := &readOnlyProbeStore{token: tc.fallback, err: tc.fallbackErr}
-			got, err := persistedBearerReadOnly(p, f, "synthetic-device", "synthetic-user")
-			if (err != nil) != tc.deny || got != tc.want {
-				t.Fatalf("value/denial mismatch (error=%v)", err)
+			probe := &readOnlyProbeStore{token: tc.token, err: tc.err}
+			got, err := persistedBearerReadOnly(probe, "synthetic-device", "synthetic-user")
+			if (err != nil) != tc.deny || got != tc.want || probe.calls != 1 {
+				t.Fatal("read-only native result mismatch")
 			}
-			if tc.wantErr != nil && !errors.Is(err, tc.wantErr) {
-				t.Fatal("lost error identity")
-			}
-			if p.calls != 1 || (f.calls == 1) != tc.wantFallback {
-				t.Fatalf("load counts primary=%d fallback=%d", p.calls, f.calls)
+			if tc.err != nil && !errors.Is(err, tc.err) {
+				t.Fatal("classified error identity lost")
 			}
 		})
-	}
-}
-
-func TestReadOnlyMissingFileDoesNotCreateDirectory(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	value, err := (fileStore{}).Load("synthetic-device", "synthetic-user")
-	if err != nil || value != nil {
-		t.Fatal("missing file did not remain absent")
-	}
-	if _, err := os.Stat(filepath.Join(home, ".m3c-tools")); !os.IsNotExist(err) {
-		t.Fatal("read-only missing file created directory")
 	}
 }

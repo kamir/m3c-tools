@@ -245,6 +245,11 @@ resolution remains available. Native management returns a clear disabled error;
 this does not implement a new file credential backend. With neither switch set,
 normal platform behavior is retained. `M3C_ER1_KEYCHAIN` is not a global backend policy.
 
+The shared ER1 device-token store separately rejects `M3C_TOKEN_STORE=file`;
+it never uses or migrates the old `device-token.enc` file. Its native-store
+failures do not enable file persistence. This does not change artifactauth
+lookup order or establish policy compliance for every credential family.
+
 ## Lookup order
 
 If `skillctl` finds nothing, it continues anonymously. This is deliberate:

@@ -168,7 +168,6 @@ G304	cmd/skillctl/verify_bundle_cmds.go	func loadBundleMetaSidecar(path string) 
 G304	cmd/skillctl/verify_hook_cmds.go	path := filepath.Join(home, ".claude", "skillctl", "gate-policy.yaml") if data, err := os.ReadFile(path); err == nil { var loaded gatePolicy
 G304	cmd/skillctl/verify_hook_cmds.go	} b, err := os.ReadFile(path) if err != nil {
 G304	evaluation/cmd/results-md/main.go	f, err := os.Open(csvPath) if err != nil {
-G304	pkg/auth/store_file.go	data, err := os.ReadFile(path) if err != nil {
 G304	pkg/config/preferences.go	data, err := os.ReadFile(legacy) if err != nil {
 G304	pkg/config/profile.go	func ParseEnvFile(path string) (*Profile, error) { data, err := os.ReadFile(path) if err != nil {
 G304	pkg/config/profile.go	path := pm.activeProfilePath() f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600) if err != nil {

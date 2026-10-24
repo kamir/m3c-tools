@@ -2,9 +2,8 @@
 //
 // At rest the token is kept in the operating-system keychain (macOS Keychain,
 // Linux Secret Service, Windows Credential Manager) via a TokenStore backend.
-// When no keychain is available (headless Linux, CI, a locked keyring) it falls
-// back to a host-bound encrypted file under ~/.m3c-tools/. See store.go for the
-// backend selection and migration logic.
+// An unavailable native store fails closed. Externally supplied tokens are
+// resolved by callers; no automatic file fallback or migration is provided.
 package auth
 
 import (
