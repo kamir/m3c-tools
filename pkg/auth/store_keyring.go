@@ -1,10 +1,12 @@
 package auth
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 
 	keyring "github.com/zalando/go-keyring"
@@ -58,6 +60,14 @@ func saveKeyringToken(t *DeviceToken, set func(string, string, string) error) er
 	blob, err := json.Marshal(t)
 	if err != nil {
 		return ErrInvalidToken
+	}
+	// go-keyring v0.2.8 starts security -i before enforcing its 4096-byte
+	// stdin-command limit. Reject oversized serialized data before dispatch to
+	// avoid that adapter's early-return path without Close/Wait. The fixed
+	// identifiers and base64 alphabet need no extra shellescape quoting.
+	const darwinCommandPrefix = "add-generic-password -U -s " + keyringService + " -a " + keyringAccount + " -w go-keyring-base64:"
+	if runtime.GOOS == "darwin" && len(darwinCommandPrefix)+base64.StdEncoding.EncodedLen(len(blob))+1 > 4096 {
+		return nativeStoreError(keyring.ErrSetDataTooBig)
 	}
 	if err := set(keyringService, keyringAccount, string(blob)); err != nil {
 		return nativeStoreError(err)

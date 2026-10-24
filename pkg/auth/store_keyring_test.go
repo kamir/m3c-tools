@@ -1,10 +1,12 @@
 package auth
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -86,5 +88,37 @@ func TestExternalBearerWorksWithUnsupportedNativeSelection(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(os.Getenv("HOME"), ".m3c-tools")); !os.IsNotExist(err) {
 		t.Fatal("external credential created persistence")
+	}
+}
+
+// Pinned v0.2.8 uses a 75-byte fixed command envelope for our native item;
+// serialized JSON sizes 3015 and 3016 straddle its 4096-byte command limit.
+func TestNativeDarwinPayloadPreflight(t *testing.T) {
+	empty, err := json.Marshal(&DeviceToken{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name     string
+		token    *DeviceToken
+		oversize bool
+	}{
+		{"small", &DeviceToken{Token: "synthetic"}, false},
+		{"last accepted byte", &DeviceToken{Token: strings.Repeat("x", 3015-len(empty))}, false},
+		{"first refused byte", &DeviceToken{Token: strings.Repeat("x", 3016-len(empty))}, true},
+		{"unicode metadata", &DeviceToken{Token: "synthetic", UserName: strings.Repeat("ä", 2048)}, true},
+		{"escaped metadata", &DeviceToken{Token: "synthetic", UserName: strings.Repeat("<", 1024)}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			err := saveKeyringToken(tc.token, func(string, string, string) error { calls++; return nil })
+			if runtime.GOOS == "darwin" && tc.oversize {
+				if calls != 0 || !errors.Is(err, ErrUnavailable) || !errors.Is(err, keyring.ErrSetDataTooBig) {
+					t.Fatal("oversize native dispatch was not refused before provider access")
+				}
+			} else if calls != 1 || err != nil {
+				t.Fatal("valid payload or other platform dispatch changed")
+			}
+		})
 	}
 }
