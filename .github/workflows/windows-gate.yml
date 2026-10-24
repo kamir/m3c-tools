@@ -320,16 +320,22 @@ jobs:
       - name: "Smoke: skillctl help (trust CLI runs on Windows)"
         run: |
           $out = & "build\skillctl-windows-amd64.exe" --help 2>&1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Write-Host $out
+          if (-not ($out -match "skillctl")) {
+            Write-Error "skillctl help output is missing"
+            exit 1
+          }
           Write-Host "PASS: skillctl binary executes on Windows"
         shell: pwsh
 
-      - name: "Smoke: init.cfg generation"
+      - name: "Smoke: fresh m3c-tools build and CLI help"
         run: |
           # Build a fresh binary for this smoke test
           go build -o build\m3c-tools-test.exe .\cmd\m3c-tools
-          # Verify the binary reports version info or has help
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $out = & "build\m3c-tools-test.exe" help 2>&1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (-not ($out -match "m3c-tools")) {
             Write-Error "Binary does not appear to be m3c-tools"
             exit 1

@@ -533,6 +533,7 @@ func TestAppBundleExecPermissions(t *testing.T) {
 // TestAppBundleInfoPlistLSUIElement verifies the .app bundle's
 // Info.plist has LSUIElement set to true (agent app, no dock icon).
 func TestAppBundleInfoPlistLSUIElement(t *testing.T) {
+	requireAppBundlePrerequisites(t)
 	repoRoot := findRepoRootE2E(t)
 	buildDir := t.TempDir()
 
@@ -540,9 +541,7 @@ func TestAppBundleInfoPlistLSUIElement(t *testing.T) {
 	cmd := exec.Command("make", "build-app", "BUILD_DIR="+buildDir)
 	cmd.Dir = repoRoot
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=1")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Skipf("make build-app failed (missing deps?): %v\n%s", err, out)
-	}
+	requireBuild(t, cmd)
 
 	plistPath := filepath.Join(buildDir, "M3C-Tools.app", "Contents", "Info.plist")
 	data, err := os.ReadFile(plistPath)
@@ -605,13 +604,12 @@ func findRepoRootE2E(t *testing.T) string {
 // buildAndFindExec builds the CLI binary and returns the path to it.
 func buildAndFindExec(t *testing.T, repoRoot string) string {
 	t.Helper()
+	requireAppBundlePrerequisites(t)
 
 	cmd := exec.Command("make", "build")
 	cmd.Dir = repoRoot
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=1")
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Skipf("make build failed (missing deps?): %v\n%s", err, out)
-	}
+	requireBuild(t, cmd)
 
 	execPath := filepath.Join(repoRoot, "build", "m3c-tools")
 	if _, err := os.Stat(execPath); err != nil {
