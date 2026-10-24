@@ -2626,6 +2626,19 @@ HTTPS is required by default. `--allow-loopback-http` permits explicit developme
 HTTP only to localhost or a numeric loopback address; the origin must still match.
 Failed requests produce a nonzero exit status; there is no automatic retry.
 
+The MCP server separately requires `$M3C_API_KEY_ORIGIN` before it reads
+`$M3C_API_KEY` or the legacy session key. Its target is `$M3C_API_URL` or
+`https://onboarding.guide`; only `$M3C_ALLOW_LOOPBACK_HTTP=1` enables loopback
+HTTP. Keep `api_connection.py` beside `mcp-skill-server/server.py` when copying
+or launching the server. Invalid API configuration leaves local MCP tools
+available and blocks default or credential-bearing API requests with a
+configuration diagnostic. An explicit HTTPS `registry_url` on
+`skill_data_source_query` can still perform an anonymous GET without local
+credentials; it cannot bypass transport or redirect checks. This local
+origin assignment proves no issuer or tenant authority, and a context-only
+session cannot be repaired by assuming that device login issued an API key.
+The independent usage hook and Replay are not wired to this MCP bootstrap.
+
 **`runbook publish <runbook.html>`**: publish an onboarding runbook into the THOH catalog
 (SPEC-0272/0275).
 
