@@ -17,10 +17,3 @@ skillctl:--force            # documented-as-absent: "there is no --force"
 # surfaced only via the help-advanced block (awareness_cmds.go); the extractor
 # cannot see it as an fs.* registration, but it IS documented under advanced.
 skillctl:--allow-overwrite  # hidden advanced flag, documented in the advanced section
-
-# `skillctl invoke-replay` (replay_cmds.go) is NOT dispatched from main.go. The
-# command is unreachable, so documenting its flags would document a command
-# users cannot run. Same class as the `run` / `import-public` commands removed
-# in PR #117; these two exemptions retire when replay_cmds.go does.
-skillctl:--api-key-from     # unwired command `invoke-replay`, pending removal
-skillctl:--token-id         # unwired command `invoke-replay`, pending removal

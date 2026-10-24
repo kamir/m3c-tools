@@ -179,8 +179,8 @@
     {
       "de": "docs/v2/referenz/manual-skillctl.de.md",
       "en": "docs/v2/referenz/manual-skillctl.md",
-      "de_sha256": "2f97993793079aa1ff5e556d9f76083340625a1b44520b353561551467a80c9b",
-      "en_sha256": "36c0cf4fc8ac471a2c68891332a143c4199f7fc8851e93d546088576f93f8fb8"
+      "de_sha256": "68c59ea73ae73fb4b79b2a478c228d3445be91d5491e8d00076555539180ea83",
+      "en_sha256": "55405b49d0b585c13187a7c2aec49e42fd61bd9fe75093657e2641e0a11f9a2e"
     },
     {
       "de": "docs/v2/sicherheit/audit-spur.de.md",
@@ -191,8 +191,8 @@
     {
       "de": "docs/v2/sicherheit/ueberblick.de.md",
       "en": "docs/v2/sicherheit/ueberblick.en.md",
-      "de_sha256": "e54dd86b867815d6156aeb3bc71d14ec95d90058cd5ac0b92707402e1f300733",
-      "en_sha256": "029766f97ceb93bbd8b64f917b45f37ceb7085e954b1c1ded4e329fd2f205ff7"
+      "de_sha256": "dd69c9d07d3c94b92856fda9f189403638c129cabff595cc848b7fe02f2524ca",
+      "en_sha256": "953789f0e6fa8ae40090dc4cd75be9506dcaf877954d8af7b98cb8958f7c7c8a"
     },
     {
       "de": "README.de.md",
@@ -233,8 +233,8 @@
     {
       "de": "CODESTYLE.de.md",
       "en": "CODESTYLE.md",
-      "de_sha256": "62327c3823c5007f016984473713e36c2cc5c5cddf5e5b250bd7660d28423fbc",
-      "en_sha256": "6461a73bfd97d0c3d67ed962351f22b81318854659c709136b19039eedfdc480"
+      "de_sha256": "a29918dd7732a1dbbe59e1e66912e5ef7f1daa4ef30a9337ed3709e092ded8b3",
+      "en_sha256": "f55b4d0cec07aa7c547ed6a24ffc4a9dcb2327f3ca7b3245911a8a7261180bbc"
     },
     {
       "de": "demo/kup-training/README.de.md",

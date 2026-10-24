@@ -5,7 +5,7 @@ name: gosec (SAST)
 # MECHANISM: gosec runs over the whole module, emits SARIF, and uploads it to
 # GitHub Code Scanning. Code Scanning fingerprints each result and does the
 # new-vs-baseline diff NATIVELY: the first upload establishes the baseline (the
-# pre-existing findings recorded in docs/security/gosec-baseline.sarif), and
+# pre-existing findings retained in Code Scanning history), and
 # every later run surfaces only findings that are NEW relative to that history.
 # The gosec step itself uses `-no-fail`, so this job is ALWAYS green on the
 # existing backlog: it never blocks a build on its own.

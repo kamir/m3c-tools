@@ -349,10 +349,9 @@ same as visible: every verb was registered while 33 were invisible.
 
 `docs/docaudit-ignore.txt`, fail-closed: a flag belongs there only **with a
 written reason**, and an entry may be scoped to one CLI (`skillctl:--force`).
-The legitimate categories so far are: documented-as-absent (the manual states a
-flag deliberately does *not* exist), a hidden advanced flag parsed outside the
-standard FlagSet, and the flags of a command that is not dispatched at all
-(`invoke-replay`): those retire when the dead code does.
+The current categories are documented-as-absent (the manual states a flag
+deliberately does *not* exist) and a hidden advanced flag parsed outside the
+standard FlagSet. Exemptions for removed code must be removed with that code.
 
 An exemption is never the right fix for "the extractor cannot see it". If the
 gate is blind to a real idiom, teach the extractor and add a test.

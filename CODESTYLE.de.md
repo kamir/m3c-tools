@@ -354,9 +354,9 @@ Registriert bedeutet nicht sichtbar: Alle Verben waren registriert, während 33 
 
 `docs/docaudit-ignore.txt` arbeitet fail-closed. Ein Flag gehört nur mit
 **schriftlicher Begründung** hinein. Ein Eintrag kann auf eine CLI begrenzt werden,
-etwa `skillctl:--force`. Bisher zulässige Kategorien: ausdrücklich als nicht vorhanden
-dokumentierte Flags, verborgene erweiterte Flags außerhalb des normalen FlagSet und
-Flags nie dispatchter Kommandos wie `invoke-replay`. Letztere entfallen mit dem toten Code.
+etwa `skillctl:--force`. Aktuelle Kategorien sind ausdrücklich als nicht vorhanden
+dokumentierte Flags und verborgene erweiterte Flags außerhalb des normalen FlagSet.
+Ausnahmen für entfernten Code müssen mit diesem Code entfernt werden.
 
 "Der Extraktor erkennt es nicht" ist kein Ausnahmegrund. Erkennt die Prüfung ein
 echtes Muster nicht, den Extraktor erweitern und einen Test ergänzen.

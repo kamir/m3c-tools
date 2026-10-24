@@ -57,6 +57,9 @@ func TestSessionBaseline_AdvisoryBannerWhenNotPinned(t *testing.T) {
 	if !strings.Contains(out.String(), advisoryUntilPinnedMsg) {
 		t.Fatalf("expected advisory banner %q in output:\n%s", advisoryUntilPinnedMsg, out.String())
 	}
+	if !strings.Contains(out.String(), "\x1b[31m  [!] "+advisoryUntilPinnedMsg) || !strings.Contains(out.String(), "Run `skillctl pin install`.\x1b[0m\n") {
+		t.Fatalf("advisory banner lost its red/reset escape bytes: %q", out.String())
+	}
 	if !strings.Contains(out.String(), "online") {
 		t.Fatalf("expected the online state in output:\n%s", out.String())
 	}
