@@ -601,6 +601,35 @@ def _api_credentials(url: str, user_id: str, *, require_bound: bool = False) -> 
     return {}
 
 
+_UNSAFE_API_RESPONSE = "API response blocked: loaded credential reflected in decoded JSON."
+
+
+class _UnsafeAPIResponse(ValueError):
+    """A decoded response contains the currently loaded API key in cleartext."""
+
+
+def _checked_api_response(payload):
+    """Reject the whole response on a known-key substring; do not mutate JSON.
+
+    This checks decoded string values and object keys only, not arbitrary
+    credentials or additional encodings. With no loaded key, nothing matches.
+    """
+    if not API_KEY:
+        return payload
+    pending = [payload]
+    while pending:
+        value = pending.pop()
+        if isinstance(value, str):
+            if API_KEY in value:
+                raise _UnsafeAPIResponse(_UNSAFE_API_RESPONSE)
+        elif isinstance(value, dict):
+            pending.extend(value.keys())
+            pending.extend(value.values())
+        elif isinstance(value, list):
+            pending.extend(value)
+    return payload
+
+
 async def _api_get(path: str) -> dict | str:
     """GET from aims-core API. Returns parsed JSON or error string."""
     if API_CONFIG_ERROR:
@@ -611,7 +640,9 @@ async def _api_get(path: str) -> dict | str:
         url = f"{API_URL.rstrip('/')}{path}"
         req = urllib.request.Request(url, headers=_api_credentials(url, os.environ.get("USER", "unknown"), require_bound=True))
         with _open_api_request(req, timeout=10) as resp:
-            return json.loads(resp.read())
+            return _checked_api_response(json.loads(resp.read()))
+    except _UnsafeAPIResponse:
+        return _UNSAFE_API_RESPONSE
     except urllib.error.HTTPError as e:
         return f"API error: HTTP {e.code}"
     except Exception:
@@ -633,7 +664,9 @@ async def _api_post(path: str, body: dict) -> dict | str:
         )
         req.add_header("Content-Type", "application/json")
         with _open_api_request(req, timeout=15) as resp:
-            return json.loads(resp.read())
+            return _checked_api_response(json.loads(resp.read()))
+    except _UnsafeAPIResponse:
+        return _UNSAFE_API_RESPONSE
     except urllib.error.HTTPError as e:
         return f"API error: HTTP {e.code}"
     except Exception:
@@ -1652,7 +1685,11 @@ async def skill_data_source_query(
         headers.update(_api_credentials(url, os.environ.get("M3C_USER_ID", ""), require_bound=not registry_url))
         req = urllib.request.Request(url, headers=headers)
         with _open_api_request(req, timeout=timeout, allow_anonymous=bool(registry_url)) as r:
-            doc = json.loads(r.read().decode())
+            doc = _checked_api_response(json.loads(r.read().decode()))
+    except _UnsafeAPIResponse:
+        return {"ok": False, "exit_code": 1, "error_class": "unsafe_response",
+                "stderr": _UNSAFE_API_RESPONSE,
+                "remediation": "Check API response handling."}
     except urllib.error.HTTPError as e:
         if e.code == 404:
             return {"ok": False, "exit_code": 2, "error_class": "not_found",
