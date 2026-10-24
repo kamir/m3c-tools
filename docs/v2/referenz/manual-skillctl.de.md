@@ -2821,8 +2821,23 @@ solche ohne Frontmatter melden.
 | `--interval <dur>` | Neues Scanintervall als Go-Dauer, standardmäßig `30m0s`. |
 | `--include-home` | Home-Skill-Verzeichnis ebenfalls überwachen. |
 
-**`sync-usage`**: lokale Skill-Nutzungszähler mit ER1 synchronisieren. Benötigt
-`--api-key`, `$M3C_API_KEY` oder `~/.m3c-tools/er1_session.json`.
+**`sync-usage`**: lokale Skill-Nutzungszähler mit ER1 synchronisieren. Zielpriorität:
+`--target <url>`, `$M3C_API_URL`, dann `https://onboarding.guide`. Schlüsselpriorität:
+`--api-key <key>`, `$M3C_API_KEY`, dann das alte Sitzungsfeld `api_key` in
+`~/.m3c-tools/er1_session.json`. Eine reine Kontext-Sitzung enthält keinen API-Key.
+
+Vor Schlüsselabfrage und Datenbankzugriff muss die unabhängig bekannte Herkunft
+über `--api-key-origin <origin>` oder `$M3C_API_KEY_ORIGIN` angegeben werden; das
+Flag gewinnt. Eine Origin enthält Schema, Host und effektiven Port, keinen
+API-Pfad, Query oder Fragment. Den Wert nicht aus einem neu konfigurierten Ziel
+ableiten: Er ordnet einen bestehenden Schlüssel bewusst seinem bekannten Server
+zu und beweist weder serverseitige Ausstellung noch Mandantenberechtigung.
+Fehlende oder abweichende Origins scheitern ohne Anfrage; alte Sitzungen werden
+nicht automatisch neu zugeordnet. API-Pfadpräfixe im Ziel bleiben erhalten.
+HTTPS ist Standard. `--allow-loopback-http` erlaubt ausdrücklich lokales
+Entwicklungs-HTTP nur für localhost oder eine numerische Loopbackadresse; die
+Origin muss weiterhin passen. Fehlgeschlagene Requests erzeugen einen Exitcode
+ungleich null; es gibt keine automatische Wiederholung.
 
 **`runbook publish <runbook.html>`**: Onboarding-Runbook im THOH-Katalog
 veröffentlichen (SPEC-0272/0275).

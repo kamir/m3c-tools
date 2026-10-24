@@ -2610,8 +2610,21 @@ projects.
 | `--interval <dur>` | Re-scan interval as a Go duration (default `30m0s`). |
 | `--include-home` | Also monitor the home skills dir. |
 
-**`sync-usage`**: sync local skill-usage counters to ER1. Needs `--api-key`, `$M3C_API_KEY`,
-or `~/.m3c-tools/er1_session.json`.
+**`sync-usage`**: sync local skill-usage counters to ER1. Target precedence is
+`--target <url>`, `$M3C_API_URL`, then `https://onboarding.guide`. Key precedence is
+`--api-key <key>`, `$M3C_API_KEY`, then the legacy `api_key` session field in
+`~/.m3c-tools/er1_session.json`. A context-only session does not contain an API key.
+
+Before any key lookup or database access, supply its independently known origin
+using `--api-key-origin <origin>` or `$M3C_API_KEY_ORIGIN` (flag wins). Origins
+include scheme, host and effective port, with no API path, query or fragment.
+Do not derive this value from a newly configured target: it deliberately assigns
+an existing key to its known server, rather than proving server-issued ownership
+or tenant authority. Missing or mismatched origins fail without a request; old
+sessions are not automatically rebound. Target API path prefixes are preserved.
+HTTPS is required by default. `--allow-loopback-http` permits explicit development
+HTTP only to localhost or a numeric loopback address; the origin must still match.
+Failed requests produce a nonzero exit status; there is no automatic retry.
 
 **`runbook publish <runbook.html>`**: publish an onboarding runbook into the THOH catalog
 (SPEC-0272/0275).
