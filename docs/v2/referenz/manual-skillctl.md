@@ -2071,6 +2071,10 @@ for this sync invocation, without claiming that the exported ingest-client
 fields are immutable. HTTPS remains mandatory even with `--insecure`. Automated store tests use
 in-memory providers; they do not establish native-store acceptance on customer
 operating systems.
+The legacy file fallback derives its encryption key only from nonsecret
+device/user identifiers, with no independent secret entropy. A copied blob
+can be decrypted on another machine when those identifiers are known; treat
+copies and backups as credential-bearing data.
 
 The supplied HTTP client now uses the existing credential redirect policy:
 cross-origin 302/303 may follow only as a GET without credentials or body;

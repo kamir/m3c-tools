@@ -2266,6 +2266,11 @@ die exportierten Ingest-Client-Felder als unveränderlich zu bezeichnen.
 HTTPS bleibt auch mit `--insecure` verpflichtend. Automatisierte Storetests
 verwenden In-Memory-Provider; sie belegen keine Abnahme des nativen Stores auf
 Kundenbetriebssystemen.
+Der alte Datei-Fallback leitet seinen Verschlüsselungsschlüssel nur aus
+nichtgeheimen Geräte-/Nutzerkennungen ab, ohne unabhängige geheime Entropie.
+Ein kopierter Blob kann bei bekannten Kennungen auf einem anderen Rechner
+entschlüsselt werden; behandeln Sie Kopien und Backups als credentialhaltige
+Daten.
 
 Der übergebene HTTP-Client nutzt nun die bestehende Credential-Redirectpolicy:
 Origin-übergreifende 302/303 dürfen nur als GET ohne Credentials oder Body
