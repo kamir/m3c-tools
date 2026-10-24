@@ -89,6 +89,13 @@ Benoetigte Ausfuehrungsnachweise vor Ablauf der siebentaegigen CI-Aufbewahrung
 sichern. Neue Testpakete brauchen eine Zuordnung; das Paketinventar beweist
 keine Ausfuehrung jedes plattformspezifischen oder optionalen Tests.
 
+Die Offline-E2E-Gruppe verlangt bestandene benannte CLI-Faelle und erlaubt nur
+ihre deklarierten exakten optionalen Skips. Optionale macOS-App-Bundle-
+Voraussetzungen werden vor dem Build geprueft. Eine gesonderte Packagingpruefung
+muss `M3C_REQUIRE_APP_BUNDLE=1` setzen, damit fehlende Voraussetzungen fehlschlagen;
+anschliessende Build- oder Ausfuehrungsfehler sind immer Fehler. Packaging- und
+Live-Service-Skips gelten nicht als Kundenabnahme.
+
 Der bestehende Job Lint & Vet führt die konfigurierte golangci-lint-Version nativ
 für macOS und für die Linux-/Windows-Buildauswahl aus. Portable Auswahlen verwenden
 `CGO_ENABLED=0`; dies sind statische Prüfungen, keine Ausführung auf den Zielplattformen.

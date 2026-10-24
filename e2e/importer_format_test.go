@@ -373,16 +373,9 @@ func TestBuildFileEntriesWithTrackingDB(t *testing.T) {
 
 func TestImporterCLIScanWithStatus(t *testing.T) {
 	binPath := BinaryPath(t)
-	if _, err := os.Stat(binPath); err != nil {
-		cmd := exec.Command("go", "build", "-tags", "cgo", "-o", binPath, "./cmd/m3c-tools/")
-		cmd.Dir = filepath.Join("..")
-		if buildErr := cmd.Run(); buildErr != nil {
-			t.Skipf("cannot build binary: %v", buildErr)
-		}
-	}
 	// Verify binary is actually executable
 	if out, err := exec.Command(binPath, "help").CombinedOutput(); err != nil {
-		t.Skipf("binary not executable: %v\n%s", err, out)
+		t.Fatalf("binary not executable: %v\n%s", err, out)
 	}
 
 	root := t.TempDir()
@@ -432,16 +425,9 @@ func TestImporterCLIScanWithStatus(t *testing.T) {
 
 func TestImporterCLICompactOutput(t *testing.T) {
 	binPath := BinaryPath(t)
-	if _, err := os.Stat(binPath); err != nil {
-		cmd := exec.Command("go", "build", "-tags", "cgo", "-o", binPath, "./cmd/m3c-tools/")
-		cmd.Dir = filepath.Join("..")
-		if buildErr := cmd.Run(); buildErr != nil {
-			t.Skipf("cannot build binary: %v", buildErr)
-		}
-	}
 	// Verify binary is actually executable
 	if out, err := exec.Command(binPath, "help").CombinedOutput(); err != nil {
-		t.Skipf("binary not executable: %v\n%s", err, out)
+		t.Fatalf("binary not executable: %v\n%s", err, out)
 	}
 
 	root := t.TempDir()

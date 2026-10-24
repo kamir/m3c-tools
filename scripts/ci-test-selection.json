@@ -145,7 +145,42 @@
       "run": "TestComposite|TestBuild|TestParseTagLine|TestER1Config|TestER1Queue|TestER1EnqueueFailure|TestUploadFailure|TestRecorderEncodeWAV|TestRecorderStats|TestExportsDB|TestFilesDB|TestHashFile|TestFormatterLoader|TestPrettyPrint|TestFormatTranscript|TestFormatSnippet|TestFormatKeyValue|TestFormatTable|TestFormatSection|TestFormatStatusLine|TestTranslateFlagParsing|TestTranslateNotTranslatable|TestTranslateTranslatable|TestRetryQueue|TestRetryBackoffTiming|TestRetryBackoffCustomBase|TestRetryProcessingOrder|TestRetryPartialFailure|TestRetryMaxRetriesDropsEntry|TestRetryDropCallback|TestRetryRespectsBackoffDelay|TestRetryProcessesAfterBackoffElapsed|TestRetryGracefulShutdownOnCancel|TestRetryRunStopsOnContextCancel|TestRetryRunProcessesMultipleCycles|TestRetryEmptyQueue|TestRetryOnRetryCallback|TestTranscriptFilter|TestProxy|TestRetryRunner|TestBackgroundRetry|TestTranscriptImport|TestTranscriptList|TestTranscriptExport|TestScheduleCommand|TestStatusCommand|TestCancelCommand|TestScheduleStatusCancelWorkflow|TestCLI|TestRepoRoot|TestWriteFixture|TestFixtureDir|TestTempDataDir|TestWithEnv|TestRunCLIWithEnv|TestImporter|TestE2E_|TestQuellwaechter_|TestMenubar|TestAppBundle|TestResolveMenuBarTitle",
       "step_if": "steps.classify.outputs.code == 'true'",
       "partial_reason": "Only the existing offline allow-list runs here. Remaining E2E tests require explicit review, network, ER1, whisper, capture hardware or separate local prerequisites; package assignment does not prove every test runs.",
-      "goos": "darwin"
+      "goos": "darwin",
+      "required_tests": {
+        "./e2e": [
+          "TestCLIHelp",
+          "TestCLIInformationalCommandsDoNotLoadConfig",
+          "TestCLIUnknownCommand",
+          "TestCLINoArgs",
+          "TestImporterCLIExtensions",
+          "TestImporterCLIScanDir",
+          "TestImporterCLIEmptyDir",
+          "TestImporterCLINonexistentDir",
+          "TestImporterCLINoArgs",
+          "TestE2E_AgentPackenErzeugtGenauEineDatei",
+          "TestE2E_UnbekannteArtWirdAbgewiesen",
+          "TestE2E_FehlendeAgentendateiNenntDenPfad",
+          "TestE2E_RegistryOhneRollenWirdAbgewiesen",
+          "TestE2E_RolleOhneFolgeWirdAbgewiesen",
+          "TestE2E_BinaryBuildFailureIsFailure",
+          "TestE2E_AppBundlePrerequisiteContract",
+          "TestE2E_AppBundleBuildFailureIsFailure"
+        ]
+      },
+      "allowed_test_skips": {
+        "./e2e": {
+          "TestBuildAppBundle": "Optional native macOS packaging requires make/go/ffmpeg/whisper. M3C_REQUIRE_APP_BUNDLE=1 makes missing prerequisites fail; available-tool build failures always fail.",
+          "TestAppBundleLaunchHelp": "Optional native macOS packaging requires make/go/ffmpeg/whisper. M3C_REQUIRE_APP_BUNDLE=1 makes missing prerequisites fail; available-tool build failures always fail.",
+          "TestAppBundleLaunchUnknownCommand": "Optional native macOS packaging requires make/go/ffmpeg/whisper. M3C_REQUIRE_APP_BUNDLE=1 makes missing prerequisites fail; available-tool build failures always fail.",
+          "TestAppBundleLaunchNoArgs": "Optional native macOS packaging requires make/go/ffmpeg/whisper. M3C_REQUIRE_APP_BUNDLE=1 makes missing prerequisites fail; available-tool build failures always fail.",
+          "TestAppBundleRetryGracefulShutdown": "Optional native macOS packaging requires make/go/ffmpeg/whisper. M3C_REQUIRE_APP_BUNDLE=1 makes missing prerequisites fail; available-tool build failures always fail.",
+          "TestAppBundleRetryExitsOnSIGINT": "Optional native macOS packaging requires make/go/ffmpeg/whisper. M3C_REQUIRE_APP_BUNDLE=1 makes missing prerequisites fail; available-tool build failures always fail.",
+          "TestAppBundleMenubarFlagParsing": "Optional native macOS packaging requires make/go/ffmpeg/whisper. M3C_REQUIRE_APP_BUNDLE=1 makes missing prerequisites fail; available-tool build failures always fail.",
+          "TestAppBundleExecPermissions": "Optional native macOS packaging requires make/go/ffmpeg/whisper. M3C_REQUIRE_APP_BUNDLE=1 makes missing prerequisites fail; available-tool build failures always fail.",
+          "TestAppBundleInfoPlistLSUIElement": "Optional native macOS packaging requires make/go/ffmpeg/whisper. M3C_REQUIRE_APP_BUNDLE=1 makes missing prerequisites fail; available-tool build failures always fail.",
+          "TestTranscriptList": "YouTube API integration requires explicit opt-in; not offline CLI acceptance."
+        }
+      }
     },
     "python-mcp": {
       "kind": "pytest",

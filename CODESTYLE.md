@@ -85,6 +85,12 @@ from the same attempt. Archive necessary execution records before their seven-da
 CI retention expires. New test packages require an assignment; package inventory
 does not establish that every platform-specific or optional test was executed.
 
+The offline E2E lane requires named CLI scenarios to pass and permits only its
+declared exact optional skips. Optional macOS app-bundle prerequisites are checked
+before building. A dedicated packaging check must set `M3C_REQUIRE_APP_BUNDLE=1`
+to fail on missing prerequisites; subsequent build or execution errors always
+fail. Packaging and live-service skips do not constitute customer acceptance.
+
 The existing Lint & Vet job runs the configured golangci-lint version on native
 macOS and on the Linux and Windows build selections. The portable selections use
 `CGO_ENABLED=0`; they are static checks, not native execution on those platforms.

@@ -280,14 +280,6 @@ func TestImporterExtensionCoverage(t *testing.T) {
 
 func TestImporterCLIExtensions(t *testing.T) {
 	binPath := BinaryPath(t)
-	if _, err := os.Stat(binPath); err != nil {
-		repoRoot, _ := filepath.Abs("..")
-		cmd := exec.Command("go", "build", "-o", binPath, "./cmd/m3c-tools/")
-		cmd.Dir = repoRoot
-		if buildErr := cmd.Run(); buildErr != nil {
-			t.Skipf("cannot build binary: %v", buildErr)
-		}
-	}
 
 	out, err := exec.Command(binPath, "import-audio", "--extensions").CombinedOutput()
 	if err != nil {
@@ -320,14 +312,6 @@ func TestImporterCLIScanDir(t *testing.T) {
 	}
 
 	binPath := BinaryPath(t)
-	if _, err := os.Stat(binPath); err != nil {
-		repoRoot, _ := filepath.Abs("..")
-		cmd := exec.Command("go", "build", "-o", binPath, "./cmd/m3c-tools/")
-		cmd.Dir = repoRoot
-		if buildErr := cmd.Run(); buildErr != nil {
-			t.Skipf("cannot build binary: %v", buildErr)
-		}
-	}
 
 	out, err := exec.Command(binPath, "import-audio", root).CombinedOutput()
 	if err != nil {
@@ -359,14 +343,6 @@ func TestImporterCLIEmptyDir(t *testing.T) {
 	root := t.TempDir()
 
 	binPath := BinaryPath(t)
-	if _, err := os.Stat(binPath); err != nil {
-		repoRoot, _ := filepath.Abs("..")
-		cmd := exec.Command("go", "build", "-o", binPath, "./cmd/m3c-tools/")
-		cmd.Dir = repoRoot
-		if buildErr := cmd.Run(); buildErr != nil {
-			t.Skipf("cannot build binary: %v", buildErr)
-		}
-	}
 
 	out, err := exec.Command(binPath, "import-audio", root).CombinedOutput()
 	if err != nil {
@@ -380,14 +356,6 @@ func TestImporterCLIEmptyDir(t *testing.T) {
 
 func TestImporterCLINonexistentDir(t *testing.T) {
 	binPath := BinaryPath(t)
-	if _, err := os.Stat(binPath); err != nil {
-		repoRoot, _ := filepath.Abs("..")
-		cmd := exec.Command("go", "build", "-o", binPath, "./cmd/m3c-tools/")
-		cmd.Dir = repoRoot
-		if buildErr := cmd.Run(); buildErr != nil {
-			t.Skipf("cannot build binary: %v", buildErr)
-		}
-	}
 
 	out, err := exec.Command(binPath, "import-audio", "/nonexistent/dir/12345").CombinedOutput()
 	if err == nil {
@@ -401,14 +369,6 @@ func TestImporterCLINonexistentDir(t *testing.T) {
 
 func TestImporterCLINoArgs(t *testing.T) {
 	binPath := BinaryPath(t)
-	if _, err := os.Stat(binPath); err != nil {
-		repoRoot, _ := filepath.Abs("..")
-		cmd := exec.Command("go", "build", "-o", binPath, "./cmd/m3c-tools/")
-		cmd.Dir = repoRoot
-		if buildErr := cmd.Run(); buildErr != nil {
-			t.Skipf("cannot build binary: %v", buildErr)
-		}
-	}
 
 	cmd := exec.Command(binPath, "import-audio")
 	// Run outside repo root so .env isn't loaded into the subprocess.

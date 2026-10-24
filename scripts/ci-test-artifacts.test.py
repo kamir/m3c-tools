@@ -151,6 +151,29 @@ class ArtifactContracts(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.run_gate()
 
+    def test_only_declared_optional_skips_are_allowed(self):
+        lane = self.config["lanes"]["e2e-offline"]
+        package = GATE.MODULE + "/e2e"
+        raw, _ = self.paths["e2e-offline"]
+        original = raw.read_text()
+        allowed_name = next(iter(lane["allowed_test_skips"]["./e2e"]))
+        for name, should_pass in ((allowed_name, True), ("TestUnexpectedSkip", False),
+                                  (lane["required_tests"]["./e2e"][0], False)):
+            with self.subTest(name=name):
+                rows = [json.loads(line) for line in original.splitlines()]
+                rows = [r for r in rows if r.get("Test") != name]
+                rows[-1:-1] = [dict(Package=package, Test=name, Action="run"),
+                               dict(Package=package, Test=name, Action="skip")]
+                raw.write_text("".join(json.dumps(row) + "\n" for row in rows))
+                counts = {"pass": sum(r["Action"] == "pass" and "Test" in r for r in rows), "skip": 1, "fail": 0}
+                self.mutate_meta("e2e-offline", lambda m: m.update(result_sha256=hashlib.sha256(raw.read_bytes()).hexdigest(),
+                                                                  test_terminal_counts=counts))
+                if should_pass:
+                    self.run_gate()
+                else:
+                    with self.assertRaises(ValueError):
+                        self.run_gate()
+
     def test_python_failure_and_all_skip_rejected(self):
         raw, meta = self.paths["python-mcp"]
         for child in ("failure", "error", "skipped"):

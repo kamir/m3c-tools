@@ -111,6 +111,13 @@ def go_counts(path, expected, lane, parity=None):
             raise ValueError("missing successful mandatory Go scenario: " + package)
     if lane.get("allow_test_skips") is False and "skip" in results.values():
         raise ValueError("unexpected skip in mandatory Go lane")
+    if "allowed_test_skips" in lane:
+        allowed = lane["allowed_test_skips"]
+        for (package, name), status in results.items():
+            relative = "." + package.removeprefix(MODULE)
+            reason = allowed.get(relative, {}).get(name)
+            if status == "skip" and (not isinstance(reason, str) or not reason.strip()):
+                raise ValueError("unexpected skipped Go scenario: " + package + "::" + name)
     return {action: sum(status == action for status in results.values()) for action in ("pass", "skip", "fail")}
 
 

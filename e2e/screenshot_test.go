@@ -190,14 +190,6 @@ func TestScreenshotClipboardImageTypes(t *testing.T) {
 func TestScreenshotCLIHelpOutput(t *testing.T) {
 	// Verify the CLI binary accepts --help and lists screenshot command
 	binPath := BinaryPath(t)
-	if _, err := os.Stat(binPath); err != nil {
-		// Try building first
-		cmd := exec.Command("go", "build", "-o", binPath, "./cmd/m3c-tools/")
-		cmd.Dir = filepath.Join("..")
-		if buildErr := cmd.Run(); buildErr != nil {
-			t.Skipf("cannot build binary: %v", buildErr)
-		}
-	}
 
 	out, _ := exec.Command(binPath, "help").CombinedOutput()
 	output := string(out)
@@ -217,13 +209,6 @@ func TestScreenshotCLICapture(t *testing.T) {
 
 	tmpDir := t.TempDir()
 	binPath := BinaryPath(t)
-	if _, err := os.Stat(binPath); err != nil {
-		cmd := exec.Command("go", "build", "-o", binPath, "./cmd/m3c-tools/")
-		cmd.Dir = filepath.Join("..")
-		if buildErr := cmd.Run(); buildErr != nil {
-			t.Skipf("cannot build binary: %v", buildErr)
-		}
-	}
 
 	out, err := exec.Command(binPath, "screenshot",
 		"--mode", "full",

@@ -67,6 +67,37 @@ func BinaryPath(t *testing.T) string {
 	return builtBinary
 }
 
+// requireAppBundlePrerequisites distinguishes optional packaging from a broken build.
+// A dedicated native packaging lane must set M3C_REQUIRE_APP_BUNDLE=1.
+func requireAppBundlePrerequisites(t *testing.T) {
+	t.Helper()
+	var missing []string
+	if runtime.GOOS != "darwin" {
+		missing = append(missing, "macOS")
+	}
+	for _, tool := range []string{"make", "go", "ffmpeg", "whisper"} {
+		if _, err := exec.LookPath(tool); err != nil {
+			missing = append(missing, tool)
+		}
+	}
+	if len(missing) == 0 {
+		return
+	}
+	if os.Getenv("M3C_REQUIRE_APP_BUNDLE") == "1" {
+		t.Fatalf("required app bundle prerequisites missing: %s", strings.Join(missing, ", "))
+	}
+	t.Skipf("optional app bundle prerequisites missing: %s", strings.Join(missing, ", "))
+}
+
+func requireBuild(t *testing.T, command *exec.Cmd) []byte {
+	t.Helper()
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("required build failed: %v\n%s", err, output)
+	}
+	return output
+}
+
 // ---------------------------------------------------------------------------
 // CLI runner: execute subcommands and capture output
 // ---------------------------------------------------------------------------
