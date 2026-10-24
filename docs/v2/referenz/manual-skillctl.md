@@ -619,6 +619,11 @@ Composes the canonical attestation message
 (`attestation\n<digest>\n<level>\n<attested_at>\n<reviewer_id>\n`), signs it with the given
 ed25519 key, and POSTs it to `<registry>/attestations`.
 
+`attest` uses its origin-bound registry credentials and does not autoload the
+ER1 device-token store. Help and invalid arguments therefore do not load that
+unrelated device token. Registry credential lookup for a valid request remains
+separate.
+
 | Flag | Purpose |
 |------|---------|
 | `-json` | Emit a versioned Registry acceptance receipt. Put `--json` first to include flag parsing failures. |
@@ -2066,7 +2071,8 @@ An explicit nonempty `$ER1_DEVICE_TOKEN` wins. An invalid selected value does
 not fall back to storage. Otherwise, after binding, sync reads the existing
 OS-keychain/file backend without migration, Save or Clear operations. This does
 not rewrite environment variables or add issuer, audience or tenant metadata;
-other commands retain their existing autoload behavior. Values are captured
+remaining ER1 commands retain their existing autoload behavior; `attest` uses
+its separate registry credentials. Values are captured
 for this sync invocation, without claiming that the exported ingest-client
 fields are immutable. HTTPS remains mandatory even with `--insecure`. Automated store tests use
 in-memory providers; they do not establish native-store acceptance on customer

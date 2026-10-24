@@ -661,6 +661,11 @@ Erstellt die kanonische Attestierungsnachricht
 dem angegebenen ed25519-Schlüssel und sendet sie per POST an
 `<registry>/attestations`.
 
+`attest` verwendet seine an die Origin gebundenen Registry-Zugangsdaten und
+lädt den ER1-Gerätetokenspeicher nicht automatisch. Hilfe und ungültige Argumente
+laden daher diesen unabhängigen Gerätetoken nicht. Das Laden der
+Registry-Zugangsdaten für eine gültige Anfrage bleibt davon getrennt.
+
 | Flag | Zweck |
 |------|---------|
 | `-json` | Versionierten Registry-Annahme-Receipt ausgeben. `--json` zuerst setzen, um Fehler beim Parsen der Flags einzuschließen. |
@@ -2260,8 +2265,9 @@ Ein expliziter nichtleerer `$ER1_DEVICE_TOKEN` gewinnt. Ein ungültiger gewählt
 Wert fällt nicht auf den Store zurück. Andernfalls liest Sync nach der Bindung
 das vorhandene OS-Keychain-/Datei-Backend ohne Migration, Save oder Clear.
 Dies schreibt weder Umgebungsvariablen um noch ergänzt es Aussteller-,
-Audience- oder Mandantenmetadaten; andere Befehle behalten ihr bestehendes
-Autoload-Verhalten. Werte werden für diesen Sync-Aufruf festgehalten, ohne
+Audience- oder Mandantenmetadaten; die übrigen ER1-Befehle behalten ihr
+bestehendes Autoload-Verhalten. `attest` verwendet seine separaten
+Registry-Zugangsdaten. Werte werden für diesen Sync-Aufruf festgehalten, ohne
 die exportierten Ingest-Client-Felder als unveränderlich zu bezeichnen.
 HTTPS bleibt auch mit `--insecure` verpflichtend. Automatisierte Storetests
 verwenden In-Memory-Provider; sie belegen keine Abnahme des nativen Stores auf
