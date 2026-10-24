@@ -169,8 +169,8 @@ run_tests() {
   # installiert wird PyYAML, importiert wird yaml.
   require_modules "fuer rag-mcp-server" "turbovec numpy PyYAML" turbovec numpy yaml
 
-  ( cd mcp-skill-server && "$PYTHON" -m pytest -q )
-  ( cd rag-mcp-server && "$PYTHON" -m pytest -q )
+  "$PYTHON" scripts/ci-test-map.py run python-mcp
+  "$PYTHON" scripts/ci-test-map.py run python-rag
 }
 
 case "$mode" in

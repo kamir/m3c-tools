@@ -9,6 +9,8 @@ import (
 // once-cache on both sides, so tests cannot leak a resolved key into each other.
 func stubKeychain(t *testing.T, key string) {
 	t.Helper()
+	// The lookup is synthetic; exercise it even when native stores are disabled.
+	t.Setenv("M3C_ER1_KEYCHAIN", "")
 	prev := keychainLookup
 	keychainLookup = func() string { return key }
 	keychainOnce = sync.Once{}
@@ -104,6 +106,7 @@ func TestKeychainLookupIsCached(t *testing.T) {
 	calls := 0
 	prev := keychainLookup
 	keychainLookup = func() string { calls++; return "key-from-the-keychain" }
+	t.Setenv("M3C_ER1_KEYCHAIN", "")
 	keychainOnce = sync.Once{}
 	keychainCached = ""
 	t.Cleanup(func() {

@@ -1,0 +1,219 @@
+{
+  "variants": [
+    {
+      "goos": "darwin",
+      "goarch": "arm64",
+      "cgo": "1",
+      "tags": ""
+    },
+    {
+      "goos": "darwin",
+      "goarch": "amd64",
+      "cgo": "1",
+      "tags": ""
+    },
+    {
+      "goos": "linux",
+      "goarch": "amd64",
+      "cgo": "0",
+      "tags": ""
+    },
+    {
+      "goos": "linux",
+      "goarch": "amd64",
+      "cgo": "1",
+      "tags": ""
+    },
+    {
+      "goos": "linux",
+      "goarch": "arm64",
+      "cgo": "0",
+      "tags": ""
+    },
+    {
+      "goos": "windows",
+      "goarch": "amd64",
+      "cgo": "0",
+      "tags": ""
+    },
+    {
+      "goos": "windows",
+      "goarch": "amd64",
+      "cgo": "0",
+      "tags": "allow_home_override_test"
+    }
+  ],
+  "lanes": {
+    "unit": {
+      "kind": "go",
+      "job": "test",
+      "selectors": [
+        "./pkg/...",
+        "./cmd/m3c-tools/...",
+        "./cmd/skillctl-demo/...",
+        "./cmd/secretctl/..."
+      ],
+      "race": true,
+      "step_if": "steps.classify.outputs.code == 'true'",
+      "goos": "darwin"
+    },
+    "release-tools": {
+      "kind": "go",
+      "job": "test",
+      "selectors": [
+        "./cmd/release-evidence",
+        "./cmd/skillctl-sim"
+      ],
+      "race": true,
+      "mandatory": [
+        "./cmd/release-evidence",
+        "./cmd/skillctl-sim"
+      ],
+      "goos": "darwin",
+      "allow_test_skips": false,
+      "required_tests": {
+        "./cmd/release-evidence": [
+          "TestBuildBundle_RejectsUnknownGateID",
+          "TestBuildBundle_RequiresCoreFields",
+          "TestBundle_ShapeAndRoundTrip",
+          "TestCustomerAcceptanceCLIAndGatesFileCannotAuthorize",
+          "TestCustomerAcceptanceOutputAndStatementRemainUnconfirmed",
+          "TestCustomerAcceptanceReservedInputs",
+          "TestCustomerAcceptanceSchemaContract",
+          "TestCustomerAcceptanceStrictValidationRejectsForgery",
+          "TestCustomerAcceptanceSyntheticSummaryIsNotAuthorization",
+          "TestMissingGate_DefaultsToSkip_NotReady",
+          "TestNormalizeStatus_GitHubResults",
+          "TestParseChecksums",
+          "TestParseGateFlag_EvidenceURLIntact",
+          "TestRecompute_EngineeringPass_CustomerUnconfirmed",
+          "TestRecompute_OneRequiredFail_NotReady",
+          "TestRecompute_RequiredSkip_NotReady",
+          "TestValidate_AcceptsCallerEvidenceWithFixedPolicy",
+          "TestValidate_NilBundle",
+          "TestValidate_RejectsAmbiguousArtifactNames",
+          "TestValidate_RejectsPolicyTampering",
+          "TestValidate_RejectsTamperedSummary"
+        ],
+        "./cmd/skillctl-sim": [
+          "TestResolveBinaryAbsolutisesARelativePath",
+          "TestResolveBinaryRejectsWhatItCannotRun"
+        ]
+      }
+    },
+    "security": {
+      "kind": "go",
+      "job": "skillctl-race",
+      "selectors": [
+        "./cmd/skillctl/...",
+        "./pkg/skillctl/..."
+      ],
+      "race": true,
+      "step_if": "steps.classify.outputs.code == 'true'",
+      "goos": "darwin"
+    },
+    "docaudit": {
+      "kind": "go",
+      "job": "docs-gate",
+      "selectors": [
+        "./cmd/docaudit/"
+      ],
+      "goos": "linux"
+    },
+    "verbaudit": {
+      "kind": "go",
+      "job": "docs-gate",
+      "selectors": [
+        "./cmd/verbaudit/"
+      ],
+      "goos": "linux"
+    },
+    "exitaudit": {
+      "kind": "go",
+      "job": "docs-gate",
+      "selectors": [
+        "./cmd/exitaudit/"
+      ],
+      "goos": "linux"
+    },
+    "e2e-offline": {
+      "kind": "go",
+      "job": "test",
+      "selectors": [
+        "./e2e/"
+      ],
+      "run": "TestComposite|TestBuild|TestParseTagLine|TestER1Config|TestER1Queue|TestER1EnqueueFailure|TestUploadFailure|TestRecorderEncodeWAV|TestRecorderStats|TestExportsDB|TestFilesDB|TestHashFile|TestFormatterLoader|TestPrettyPrint|TestFormatTranscript|TestFormatSnippet|TestFormatKeyValue|TestFormatTable|TestFormatSection|TestFormatStatusLine|TestTranslateFlagParsing|TestTranslateNotTranslatable|TestTranslateTranslatable|TestRetryQueue|TestRetryBackoffTiming|TestRetryBackoffCustomBase|TestRetryProcessingOrder|TestRetryPartialFailure|TestRetryMaxRetriesDropsEntry|TestRetryDropCallback|TestRetryRespectsBackoffDelay|TestRetryProcessesAfterBackoffElapsed|TestRetryGracefulShutdownOnCancel|TestRetryRunStopsOnContextCancel|TestRetryRunProcessesMultipleCycles|TestRetryEmptyQueue|TestRetryOnRetryCallback|TestTranscriptFilter|TestProxy|TestRetryRunner|TestBackgroundRetry|TestTranscriptImport|TestTranscriptList|TestTranscriptExport|TestScheduleCommand|TestStatusCommand|TestCancelCommand|TestScheduleStatusCancelWorkflow|TestCLI|TestRepoRoot|TestWriteFixture|TestFixtureDir|TestTempDataDir|TestWithEnv|TestRunCLIWithEnv|TestImporter|TestE2E_|TestQuellwaechter_|TestMenubar|TestAppBundle|TestResolveMenuBarTitle",
+      "step_if": "steps.classify.outputs.code == 'true'",
+      "partial_reason": "Only the existing offline allow-list runs here. Remaining E2E tests require explicit review, network, ER1, whisper, capture hardware or separate local prerequisites; package assignment does not prove every test runs.",
+      "goos": "darwin"
+    },
+    "python-mcp": {
+      "kind": "pytest",
+      "job": "python-gate",
+      "directory": "mcp-skill-server",
+      "via": "scripts/check-python.sh"
+    },
+    "python-rag": {
+      "kind": "pytest",
+      "job": "python-gate",
+      "directory": "rag-mcp-server",
+      "via": "scripts/check-python.sh"
+    }
+  },
+  "python_contracts": [
+    {
+      "file": "scripts/collect-release-checks.test.py",
+      "workflow": "ci.yml",
+      "job": "lint",
+      "command": "python3 scripts/collect-release-checks.test.py"
+    },
+    {
+      "file": "scripts/ci-matrix.test.py",
+      "workflow": "pin-guard.yml",
+      "job": "pin-guard",
+      "command": "python3 scripts/ci-matrix.test.py"
+    },
+    {
+      "file": "scripts/windows-trust-parity.test.py",
+      "workflow": "pin-guard.yml",
+      "job": "pin-guard",
+      "command": "python3 scripts/windows-trust-parity.test.py"
+    },
+    {
+      "file": "scripts/skillctl-smoke.test.py",
+      "workflow": "pin-guard.yml",
+      "job": "pin-guard",
+      "command": "python3 scripts/skillctl-smoke.test.py"
+    },
+    {
+      "file": "tools/skillctl_release_fallback_test.py",
+      "workflow": "ci.yml",
+      "job": "lint",
+      "command": "python3 tools/skillctl_release_fallback_test.py"
+    },
+    {
+      "file": "scripts/check-doc-languages.test.py",
+      "workflow": "ci.yml",
+      "job": "python-gate",
+      "command": "python3 scripts/check-doc-languages.test.py"
+    },
+    {
+      "file": "scripts/ci-test-map.test.py",
+      "workflow": "ci.yml",
+      "job": "python-gate",
+      "command": "python3 scripts/ci-test-map.test.py"
+    },
+    {
+      "file": "scripts/ci-test-artifacts.test.py",
+      "workflow": "ci.yml",
+      "job": "python-gate",
+      "command": "python3 scripts/ci-test-artifacts.test.py"
+    }
+  ],
+  "exceptions": [
+    {
+      "package": "./evaluation",
+      "reason": "Heavy evaluation requires RUN_EVAL and local kit/binary prerequisites. Existing Windows/Linux trust jobs still run its default tests; this classification does not claim a heavy evaluation pass."
+    }
+  ]
+}

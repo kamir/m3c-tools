@@ -71,6 +71,24 @@ und die [Go-Sicherheitshinweise](https://go.dev/doc/security/).
 
 ## Was heute maschinell erzwungen wird
 
+### Nachweise der Testausfuehrung
+
+`ci-test-selection.json` legt die erfassten Testgruppen fest. Der erforderliche
+Simulationsjob wartet auf deren Produzenten und prueft jeden erwarteten Rohbericht
+mit Commit, Lauf, Versuch, Produzent, Auswahl und Datei-Hash. Fehlende Artefakte,
+erfolglose Produzenten oder Berichte ohne bestandene Tests sperren diesen Job.
+Deklarierte Ausnahmen fuer reine Dokumentationsaenderungen bleiben als kleinere
+erwartete Testmenge sichtbar. Dies ist ein CI-Konsistenznachweis, keine unabhaengige
+Attestierung oder Kundenabnahme.
+
+Nach einem fehlgeschlagenen Versuch **Re-run all jobs** verwenden. Wer nur
+fehlgeschlagene Jobs wiederholt, kann Nachweise erfolgreicher Produzenten aus
+einem aelteren Versuch behalten; der Verbraucher weist diese absichtlich ab.
+Auch Windows-/Linux-Paritaet benoetigt beide Produzenten desselben Versuchs.
+Benoetigte Ausfuehrungsnachweise vor Ablauf der siebentaegigen CI-Aufbewahrung
+sichern. Neue Testpakete brauchen eine Zuordnung; das Paketinventar beweist
+keine Ausfuehrung jedes plattformspezifischen oder optionalen Tests.
+
 Der bestehende Job Lint & Vet führt die konfigurierte golangci-lint-Version nativ
 für macOS und für die Linux-/Windows-Buildauswahl aus. Portable Auswahlen verwenden
 `CGO_ENABLED=0`; dies sind statische Prüfungen, keine Ausführung auf den Zielplattformen.
