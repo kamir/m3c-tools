@@ -2807,11 +2807,33 @@ solche ohne Frontmatter melden.
 
 | Flag | Zweck |
 |------|---------|
-| `--target <url>` | Importziel. |
-| `--api-key <key>` | API-Schlüssel des Ziels. |
+| `--target <url>` | Erforderliches Importziel samt eventuellem API-Pfadpräfix. |
+| `--api-key <key>` | Expliziter API-Key; gewinnt gegenüber einem ambienten Bearer-Token. |
+| `--api-key-origin <origin>` | Unabhängige API-Key-Origin; gewinnt gegenüber `$M3C_API_KEY_ORIGIN`. |
+| `--allow-loopback-http` | Explizites Entwicklungs-HTTP nur für localhost oder eine numerische Loopbackadresse. |
 | `--user-id <id>` | Importiertes Inventar dieser Nutzer-ID zuordnen. |
 | `--input <scan.json>` / `--path <dir>` / `--recursive` / `--include-home` | Importbereich. |
-| `--dry-run` | Geplanten Import ausgeben, keinen POST senden. |
+| `--dry-run` | Ziel und Inventar prüfen und Vorschau ausgeben; kein Secret-, Store- oder HTTP-Zugriff. |
+
+Ein echter Import wählt zuerst `--api-key`, andernfalls
+`$ER1_DEVICE_TOKEN`, dann `$M3C_API_KEY`, dann das alte Sitzungsfeld `api_key`.
+Der gewählte Bearer benötigt seine eigene `$ER1_DEVICE_TOKEN_ORIGIN`; eine
+API-Key-Origin autorisiert keinen Bearer. Jeder gewählte API-Key benötigt
+`--api-key-origin` oder `$M3C_API_KEY_ORIGIN`. Die Origin muss unabhängig vom
+neuen Ziel bekannt sein, darf keinen API-Pfad, Query oder Fragment enthalten
+und muss zu Schema, kanonischem Host und effektivem Port passen. Fehlende oder
+abweichende Pins scheitern ohne Rückfall auf eine andere Quelle; der
+Sitzungsschlüssel wird erst danach gelesen. Reine Kontext-Sitzungen enthalten
+keinen API-Key; mehrdeutige doppelte API-Key-Felder werden abgelehnt. Die
+Zuordnung ist lokale Operatorprovenienz, kein Beweis für Ausstellung oder
+Mandantenberechtigung. `--user-id` bleibt Anfragezuordnung.
+
+Der Client hält Ziel und Credential für Healthcheck und Import fest und behält
+die Redirectprüfung. HTTP-Fehler zeigen nur den Status; eine erfolgreiche
+Antwortnachricht mit dem gewählten Key im Klartext wird abgelehnt. Geprüft wird
+die angezeigte Nachricht, nicht beliebige Credentials oder weitere Kodierungen.
+Import lädt keine nativen Gerätetoken-Stores; andere Clients und natives
+Autoload sind getrennte Pfade.
 
 **`menubar`**: macOS-Menüleistenmonitor für Skills starten; interaktiv und dauerhaft laufend.
 

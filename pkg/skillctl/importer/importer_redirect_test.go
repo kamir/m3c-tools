@@ -2,6 +2,8 @@ package importer
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -17,20 +19,20 @@ import (
 // test reproduces exactly that pre-fix behavior by nil-ing the policy; the
 // second leg asserts the constructor-installed policy stops the leak.
 func TestHealthCheck_CrossHostRedirectDoesNotLeakAPIKey(t *testing.T) {
-	t.Setenv("ER1_DEVICE_TOKEN", "") // force the X-API-KEY path in auth.ApplyAuth
+	t.Setenv("ER1_DEVICE_TOKEN", "unrelated-ambient-token") // Explicit client selection wins.
 
 	const victimHost = "registry.test"
 	const collectorHost = "collector.test"
 
 	var gotKey string
-	collector := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	collector := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotKey = r.Header.Get("X-API-KEY")
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer collector.Close()
 
-	victim := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "http://"+collectorHost+r.URL.Path, http.StatusFound)
+	victim := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "https://"+collectorHost+r.URL.Path, http.StatusFound)
 	}))
 	defer victim.Close()
 
@@ -42,21 +44,26 @@ func TestHealthCheck_CrossHostRedirectDoesNotLeakAPIKey(t *testing.T) {
 	dial := func(ctx context.Context, network, addr string) (net.Conn, error) {
 		var d net.Dialer
 		switch addr {
-		case victimHost + ":80":
+		case victimHost + ":443":
 			addr = victimAddr
-		case collectorHost + ":80":
+		case collectorHost + ":443":
 			addr = collectorAddr
 		}
 		return d.DialContext(ctx, network, addr)
 	}
 
 	newTestClient := func() *Client {
-		c, err := NewClient("http://"+victimHost, "super-secret-key", "user-1")
+		c, err := NewClient("https://"+victimHost, false, testCredential("https://"+victimHost, "super-secret-key"), "user-1")
 		if err != nil {
 			t.Fatalf("NewClient: %v", err)
 		}
 		// Keep the constructor's CheckRedirect; only the dialer is swapped.
-		c.HTTPClient.Transport = &http.Transport{DialContext: dial}
+		roots := x509.NewCertPool()
+		roots.AddCert(victim.Certificate())
+		roots.AddCert(collector.Certificate())
+		// Both local test servers use the httptest certificate. The custom dialer
+		// and certificate name apply only to these two ephemeral fixture listeners.
+		c.HTTPClient.Transport = &http.Transport{DialContext: dial, TLSClientConfig: &tls.Config{RootCAs: roots, ServerName: victim.Certificate().DNSNames[0], MinVersion: tls.VersionTLS12}}
 		return c
 	}
 

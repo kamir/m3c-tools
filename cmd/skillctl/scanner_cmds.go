@@ -1053,148 +1053,81 @@ func truncate(s string, n int) string {
 }
 
 // cmdImport pushes a skill inventory to the aims-core skill profile API.
-func cmdImport(args []string) {
-	target := ""
-	apiKey := ""
-	userID := "" // BUG-0084: Required for aims-core auth
-	input := ""
-	var paths []string
-	recursive := false
-	includeHome := false
-	dryRun := false
+func cmdImport(args []string) { os.Exit(runImport(args)) }
 
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--target":
-			if i+1 < len(args) {
-				i++
-				target = args[i]
-			}
-		case "--api-key":
-			if i+1 < len(args) {
-				i++
-				apiKey = args[i]
-			}
-		case "--user-id":
-			if i+1 < len(args) {
-				i++
-				userID = args[i]
-			}
-		case "--input":
-			if i+1 < len(args) {
-				i++
-				input = args[i]
-			}
-		case "--path":
-			if i+1 < len(args) {
-				i++
-				paths = append(paths, args[i])
-			}
-		case "--recursive":
-			recursive = true
-		case "--include-home":
-			includeHome = true
-		case "--dry-run":
-			dryRun = true
-		default:
-			if args[i] != "" && args[i][0] != '-' {
-				input = args[i]
-			} else {
-				fmt.Fprintf(os.Stderr, "Unknown flag: %s\n", args[i])
-				os.Exit(1)
-			}
-		}
-	}
+func runImport(args []string) int {
+	return runImportWithReaders(args, os.Getenv, readAPIKeyFromSession, os.Stdout, os.Stderr)
+}
 
-	// --target is required.
-	if target == "" {
-		fmt.Fprintln(os.Stderr, "Error: --target <url> is required")
-		fmt.Fprintln(os.Stderr, "Usage: skillctl import --target <url> [--api-key <key>] [--input <scan.json>] [--dry-run]")
-		os.Exit(1)
-	}
-
-	// Resolve API key: flag > env var > session file.
-	if apiKey == "" {
-		apiKey = os.Getenv("M3C_API_KEY")
-	}
-	if apiKey == "" {
-		apiKey = readAPIKeyFromSession()
-	}
-
-	// BUG-0084: Resolve user ID: flag > env var.
-	if userID == "" {
-		userID = os.Getenv("ER1_CONTEXT_ID")
-	}
-
-	// Load inventory from --input or run live scan.
-	var inv *model.Inventory
-	var err error
-
-	if input != "" {
-		inv, err = loadInventory(input)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error loading inventory: %v\n", err)
-			os.Exit(1)
-		}
-	} else {
-		if len(paths) == 0 {
-			cwd, err := os.Getwd()
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error getting working directory: %v\n", err)
-				os.Exit(1)
-			}
-			paths = []string{cwd}
-		}
-		sc := &scanner.Scanner{
-			Paths:       paths,
-			Recursive:   recursive,
-			IncludeHome: includeHome,
-		}
-		inv, err = sc.Scan()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Scan error: %v\n", err)
-			os.Exit(1)
-		}
-		fmt.Fprintf(os.Stderr, "Scanned %d skills across %d projects\n", inv.TotalCount, len(inv.ByProject))
-	}
-
-	// Create API client.
-	client, err := importer.NewClient(target, apiKey, userID)
+func runImportWithReaders(args []string, getenv func(string) string, readSession func() string, out, errOut io.Writer) int {
+	opts, err := parseImportArgs(args)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		fmt.Fprintf(errOut, "import: %v\n", err)
+		return 1
 	}
-
-	// Dry-run mode: print summary and exit.
-	if dryRun {
-		fmt.Print(client.DryRun(inv))
-		return
+	base, err := httpsafe.ParseAPIBase(opts.target, opts.allowLoopbackHTTP)
+	if err != nil {
+		fmt.Fprintf(errOut, "import: %v\n", err)
+		return 1
 	}
-
-	// Health check before import.
-	fmt.Fprintf(os.Stderr, "Checking connectivity to %s ...\n", target)
+	var client *importer.Client
+	if !opts.dryRun {
+		selected, err := selectImportCredential(opts, getenv, readSession)
+		if err != nil {
+			fmt.Fprintf(errOut, "import: %v\n", err)
+			return 1
+		}
+		userID := opts.userID
+		if userID == "" {
+			userID = getenv("ER1_CONTEXT_ID")
+		}
+		client, err = importer.NewClient(base.URL, opts.allowLoopbackHTTP, selected, userID)
+		if err != nil {
+			fmt.Fprintf(errOut, "import: %v; independently assign the selected API key origin (--api-key-origin/M3C_API_KEY_ORIGIN) or Bearer origin (ER1_DEVICE_TOKEN_ORIGIN). A context-only session has no API key.\n", err)
+			return 1
+		}
+	}
+	var inv *model.Inventory
+	if opts.input != "" {
+		inv, err = loadInventory(opts.input)
+	} else {
+		if len(opts.paths) == 0 {
+			cwd, cwdErr := os.Getwd()
+			if cwdErr != nil {
+				fmt.Fprintln(errOut, "import: working directory unavailable")
+				return 1
+			}
+			opts.paths = []string{cwd}
+		}
+		sc := &scanner.Scanner{Paths: opts.paths, Recursive: opts.recursive, IncludeHome: opts.includeHome}
+		inv, err = sc.Scan()
+	}
+	if err != nil {
+		fmt.Fprintln(errOut, "import: inventory could not be read or scanned")
+		return 1
+	}
+	if opts.dryRun {
+		fmt.Fprint(out, importer.DryRun(base, inv))
+		return 0
+	}
+	fmt.Fprintf(errOut, "Checking connectivity to %s ...\n", base.URL)
 	if err := client.HealthCheck(); err != nil {
-		fmt.Fprintf(os.Stderr, "Health check failed: %v\n", err)
-		os.Exit(1)
+		fmt.Fprintf(errOut, "Health check failed: %v\n", err)
+		return 1
 	}
-	fmt.Fprintln(os.Stderr, "Health check OK")
-
-	// Import.
-	fmt.Fprintf(os.Stderr, "Importing %d skills ...\n", len(inv.Skills))
+	fmt.Fprintln(errOut, "Health check OK")
+	fmt.Fprintf(errOut, "Importing %d skills ...\n", len(inv.Skills))
 	resp, err := client.Import(inv)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Import failed: %v\n", err)
-		os.Exit(1)
+		fmt.Fprintf(errOut, "Import failed: %v\n", err)
+		return 1
 	}
-
-	// Print result summary.
-	fmt.Printf("Import complete:\n")
-	fmt.Printf("  Imported:       %d\n", resp.Imported)
-	fmt.Printf("  New candidates: %d\n", resp.NewCandidates)
-	fmt.Printf("  Already known:  %d\n", resp.AlreadyKnown)
+	fmt.Fprintln(out, "Import complete:")
+	fmt.Fprintf(out, "  Imported:       %d\n  New candidates: %d\n  Already known:  %d\n", resp.Imported, resp.NewCandidates, resp.AlreadyKnown)
 	if resp.Message != "" {
-		fmt.Printf("  Message:        %s\n", resp.Message)
+		fmt.Fprintf(out, "  Message:        %s\n", resp.Message)
 	}
+	return 0
 }
 
 // readAPIKeyFromSession attempts to read the api_key field from
@@ -1208,13 +1141,11 @@ func readAPIKeyFromSession() string {
 	if err != nil {
 		return ""
 	}
-	var session struct {
-		APIKey string `json:"api_key"`
-	}
-	if err := json.Unmarshal(data, &session); err != nil {
+	key, err := decodeLegacySessionAPIKey(data)
+	if err != nil {
 		return ""
 	}
-	return session.APIKey
+	return key
 }
 
 // cmdSyncUsage reads unsynced skill usage events from the local SQLite database
