@@ -2659,6 +2659,41 @@ origin assignment proves no issuer or tenant authority, and a context-only
 session cannot be repaired by assuming that device login issued an API key.
 The independent usage hook is not wired to this MCP bootstrap.
 
+The standalone PostToolUse usage hook has its own bootstrap using the same
+canonical `api_connection.py`. From the repository root, copy both files into
+a dedicated directory before configuring your client to invoke the hook:
+
+```bash
+mkdir -p "$HOME/.claude/hooks/m3c-skill-usage"
+cp scripts/skill-usage-hook.py mcp-skill-server/api_connection.py "$HOME/.claude/hooks/m3c-skill-usage/"
+python3 "$HOME/.claude/hooks/m3c-skill-usage/skill-usage-hook.py"
+```
+
+Delivery requires Python 3.10 or newer for the shared helper. The command reads
+a hook event as JSON from stdin. This is a manual setup
+example, not an automatic installation or hook registration. The loader accepts
+only `api_connection.py` beside the installed hook. Running the source hook
+without that sibling blocks delivery; it never searches CWD, `PYTHONPATH` or a
+repository fallback. Local recording is still attempted.
+
+The hook requires the independent `$M3C_API_KEY_ORIGIN` before reading
+`$M3C_API_KEY` or a strict legacy session `api_key`; environment key takes
+precedence, and invalid selected configuration never falls back. Its target is
+`$M3C_API_URL` or `https://onboarding.guide`. Only
+`$M3C_ALLOW_LOOPBACK_HTTP=1` permits localhost or numeric loopback HTTP. Every
+redirect is refused, including same-origin redirects. For both this hook and
+MCP API calls, opted-in loopback HTTP bypasses ambient HTTP proxies; HTTPS proxy
+behavior is unchanged. Error diagnostics expose
+no key or remote body. Local source assignment does not establish issuer or
+tenant authority.
+
+Delivery is attempted before best-effort local SQLite recording, including an
+unsynced record after a refused request. There is no hard two-second or total
+process deadline, guaranteed zero exit for arbitrary input/filesystem failures,
+queue durability or guaranteed persistence. The request timeout is three
+seconds per operation, not a whole-hook budget; stdin, DNS and SQLite remain
+separate reliability boundaries. This hook is separate from trust enforcement.
+
 **`runbook publish <runbook.html>`**: publish an onboarding runbook into the THOH catalog
 (SPEC-0272/0275).
 

@@ -243,6 +243,12 @@
       "workflow": "ci.yml",
       "job": "python-gate",
       "command": "python3 scripts/ci-test-artifacts.test.py"
+    },
+    {
+      "file": "scripts/skill-usage-hook.test.py",
+      "workflow": "ci.yml",
+      "job": "python-gate",
+      "command": "python3 scripts/skill-usage-hook.test.py"
     }
   ],
   "exceptions": [

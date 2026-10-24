@@ -333,6 +333,9 @@ jobs:
       - name: Artifact consumer failure contracts
         run: python3 scripts/ci-test-artifacts.test.py
 
+      - name: Standalone usage hook contracts
+        run: python3 scripts/skill-usage-hook.test.py
+
       - name: Discover and assign Go and Python tests
         run: python3 scripts/ci-test-map.py check
 

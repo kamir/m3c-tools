@@ -584,7 +584,12 @@ def _open_api_request(req: urllib.request.Request, timeout: int, *, allow_anonym
         raise ValueError(API_CONFIG_ERROR)
     if origin != API_KEY_ORIGIN and (carries_credentials or req.data is not None):
         raise ValueError("Unbound API request blocked")
-    return urllib.request.build_opener(_SameOriginRedirectHandler()).open(req, timeout=timeout)
+    handlers = [_SameOriginRedirectHandler()]
+    # Validated HTTP is explicit loopback development traffic. Never forward
+    # its local credentials or body through an ambient HTTP proxy.
+    if origin[0] == "http":
+        handlers.append(urllib.request.ProxyHandler({}))
+    return urllib.request.build_opener(*handlers).open(req, timeout=timeout)
 
 
 def _api_credentials(url: str, user_id: str, *, require_bound: bool = False) -> dict[str, str]:

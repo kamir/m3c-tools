@@ -2876,6 +2876,46 @@ Kontext-Sitzung wird nicht dadurch repariert, dass man einen API-Key aus dem
 Gerätelogin annimmt. Der eigenständige Usage-Hook ist nicht an
 diesen MCP-Bootstrap angeschlossen.
 
+Der eigenständige PostToolUse-Usage-Hook hat einen eigenen Bootstrap mit
+demselben kanonischen `api_connection.py`. Kopieren Sie vom Repository-Stamm
+beide Dateien in ein eigenes Verzeichnis, bevor Sie Ihren Client zum Aufruf
+des Hooks konfigurieren:
+
+```bash
+mkdir -p "$HOME/.claude/hooks/m3c-skill-usage"
+cp scripts/skill-usage-hook.py mcp-skill-server/api_connection.py "$HOME/.claude/hooks/m3c-skill-usage/"
+python3 "$HOME/.claude/hooks/m3c-skill-usage/skill-usage-hook.py"
+```
+
+Die Übertragung benötigt Python 3.10 oder neuer für den gemeinsamen Helper.
+Der Befehl liest ein Hook-Ereignis als JSON von stdin. Dies ist ein Beispiel für
+manuelle Einrichtung, keine automatische Installation oder Hook-Registrierung.
+Der Loader akzeptiert nur `api_connection.py` neben dem installierten Hook.
+Der Quell-Hook ohne diese Nachbardatei blockiert die Übertragung; er sucht
+weder in CWD noch in `PYTHONPATH` oder einem Repository-Fallback. Eine lokale
+Aufzeichnung wird weiterhin versucht.
+
+Der Hook verlangt die unabhängige `$M3C_API_KEY_ORIGIN`, bevor er
+`$M3C_API_KEY` oder ein strikt geprüftes altes Sitzungsfeld `api_key` liest.
+Der Umgebungs-Key hat Vorrang; ungültige gewählte Konfiguration fällt nicht
+auf eine andere Quelle zurück. Ziel ist `$M3C_API_URL` oder
+`https://onboarding.guide`. Nur `$M3C_ALLOW_LOOPBACK_HTTP=1` erlaubt HTTP für
+localhost oder numerische Loopbackadressen. Jeder Redirect wird abgelehnt,
+auch innerhalb derselben Origin. Für diesen Hook und MCP-API-Anfragen umgeht
+explizites Loopback-HTTP ambiente HTTP-Proxys; das HTTPS-Proxyverhalten bleibt
+unverändert. Fehlerdiagnosen enthalten weder Key noch
+entfernten Antwortbody. Die lokale Quellenzuordnung beweist keine Ausstellung
+oder Mandantenberechtigung.
+
+Zuerst wird die Übertragung versucht, danach eine lokale SQLite-Aufzeichnung
+nach bestem Bemühen, einschließlich eines unsynchronisierten Datensatzes nach
+einer verweigerten Anfrage. Es gibt weder eine harte Zwei-Sekunden- oder
+Gesamtprozessfrist noch garantierten Exit null bei beliebigen Eingabe- oder
+Dateisystemfehlern, Queue-Dauerhaftigkeit oder garantierte Speicherung. Der
+Request-Timeout beträgt drei Sekunden pro Operation, kein Gesamtbudget für
+den Hook; stdin, DNS und SQLite bleiben getrennte Zuverlässigkeitsgrenzen.
+Dieser Hook ist von der Trust-Durchsetzung getrennt.
+
 **`runbook publish <runbook.html>`**: Onboarding-Runbook im THOH-Katalog
 veröffentlichen (SPEC-0272/0275).
 
