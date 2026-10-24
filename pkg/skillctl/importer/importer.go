@@ -9,21 +9,20 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/kamir/m3c-tools/pkg/auth"
 	"github.com/kamir/m3c-tools/pkg/httpsafe"
 	"github.com/kamir/m3c-tools/pkg/skillctl/model"
 )
 
 // Client handles communication with the aims-core skill profile API.
 type Client struct {
-	BaseURL    string
-	APIKey     string
-	UserID     string // BUG-0084: Required by aims-core auth (X-User-ID header)
+	baseURL    string
+	secret     string
+	kind       httpsafe.CredentialKind
+	userID     string
 	HTTPClient *http.Client
 }
 
@@ -35,64 +34,59 @@ type ImportResponse struct {
 	Message       string `json:"message,omitempty"`
 }
 
-// NewClient creates a Client with a 30-second timeout.
-// It validates that baseURL is a well-formed HTTP(S) URL.
-// BUG-0084: userID is required for aims-core auth (X-User-ID header).
-func NewClient(baseURL, apiKey, userID string) (*Client, error) {
-	u, err := url.Parse(baseURL)
+// NewClient validates the independent local operator binding before reading a
+// selected secret, then snapshots target, kind and secret for both requests.
+// It does not load stores or authenticate issuer/tenant metadata.
+func NewClient(baseURL string, allowLoopbackHTTP bool, selected httpsafe.DeferredSecret, userID string) (*Client, error) {
+	resolved, err := httpsafe.ResolveCredential(baseURL, allowLoopbackHTTP, selected)
 	if err != nil {
-		return nil, fmt.Errorf("invalid target URL: %w", err)
+		return nil, err
 	}
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return nil, fmt.Errorf("target URL must use http or https scheme, got %q", u.Scheme)
+	secret := strings.TrimSpace(string(resolved.Secret))
+	if secret == "" || strings.ContainsAny(secret, "\r\n\x00") {
+		return nil, fmt.Errorf("invalid import credential format")
 	}
-	if u.Host == "" {
-		return nil, fmt.Errorf("target URL must include a host")
-	}
-
-	// Normalize: strip trailing slash.
-	baseURL = strings.TrimRight(baseURL, "/")
-
 	return &Client{
-		BaseURL: baseURL,
-		APIKey:  apiKey,
-		UserID:  userID,
-		HTTPClient: &http.Client{
-			Timeout: 30 * time.Second,
-			// AUDIT-0001 Befund 1.1: X-API-KEY survives stdlib cross-host
-			// redirects; strip credentials on any host change.
-			CheckRedirect: httpsafe.NoCredentialRedirect,
-		},
+		baseURL: strings.TrimRight(resolved.Base.URL, "/"), secret: secret,
+		kind: resolved.Binding.Kind, userID: userID,
+		HTTPClient: &http.Client{Timeout: 30 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect},
 	}, nil
+}
+
+func (c *Client) applyCredential(req *http.Request) {
+	if c.kind == httpsafe.CredentialDeviceBearer {
+		req.Header.Set("Authorization", "Bearer "+c.secret)
+	} else {
+		req.Header.Set("X-API-KEY", c.secret)
+	}
+	if c.userID != "" {
+		req.Header.Set("X-User-ID", c.userID)
+	}
 }
 
 // HealthCheck verifies connectivity by calling GET /health on the target.
 func (c *Client) HealthCheck() error {
-	req, err := http.NewRequest(http.MethodGet, c.BaseURL+"/health", nil) // BUG-0085: was /api/health (404)
+	req, err := http.NewRequest(http.MethodGet, c.baseURL+"/health", nil) // BUG-0085: was /api/health (404)
 	if err != nil {
-		return fmt.Errorf("creating health check request: %w", err)
+		return fmt.Errorf("creating health check request")
 	}
-	auth.ApplyAuth(req, c.APIKey)
-	if c.UserID != "" {
-		req.Header.Set("X-User-ID", c.UserID) // BUG-0084
-	}
+	c.applyCredential(req)
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("health check failed: %w", err)
+		return fmt.Errorf("health check request failed")
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return fmt.Errorf("health check returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return fmt.Errorf("health check returned HTTP %d", resp.StatusCode)
 	}
 
 	return nil
 }
 
 // Import sends the inventory's skills to the aims-core skill profile API.
-// It POSTs to /api/v2/skills/profile/import with an X-API-KEY header.
+// It POSTs with the credential selected and bound when constructing the client.
 func (c *Client) Import(inv *model.Inventory) (*ImportResponse, error) {
 	payload := struct {
 		Skills []model.SkillDescriptor `json:"skills"`
@@ -105,45 +99,46 @@ func (c *Client) Import(inv *model.Inventory) (*ImportResponse, error) {
 		return nil, fmt.Errorf("marshaling import payload: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, c.BaseURL+"/api/v2/skills/profile/import", bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, c.baseURL+"/api/v2/skills/profile/import", bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("creating import request: %w", err)
+		return nil, fmt.Errorf("creating import request")
 	}
 	req.Header.Set("Content-Type", "application/json")
-	auth.ApplyAuth(req, c.APIKey)
-	if c.UserID != "" {
-		req.Header.Set("X-User-ID", c.UserID) // BUG-0084
-	}
+	c.applyCredential(req)
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("import request failed: %w", err)
+		return nil, fmt.Errorf("import request failed")
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
-	if err != nil {
-		return nil, fmt.Errorf("reading import response: %w", err)
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("import returned HTTP %d", resp.StatusCode)
 	}
 
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("import returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(respBody)))
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+	if err != nil {
+		return nil, fmt.Errorf("reading import response")
 	}
 
 	var result ImportResponse
 	if err := json.Unmarshal(respBody, &result); err != nil {
-		return nil, fmt.Errorf("parsing import response: %w", err)
+		return nil, fmt.Errorf("parsing import response")
 	}
 
+	if strings.Contains(result.Message, c.secret) {
+		return nil, fmt.Errorf("import response blocked: selected credential reflected in message")
+	}
 	return &result, nil
 }
 
-// DryRun returns a human-readable summary of what would be imported
-// without actually sending data to the server.
-func (c *Client) DryRun(inv *model.Inventory) string {
+// DryRun formats a preview from a validated base and inventory, without a
+// credential, store or HTTP client. It does not authorize a later real import.
+func DryRun(base httpsafe.APIBase, inv *model.Inventory) string {
+	baseURL := strings.TrimRight(base.URL, "/")
 	var b strings.Builder
 
-	fmt.Fprintf(&b, "Dry-run import to %s\n", c.BaseURL)
+	fmt.Fprintf(&b, "Dry-run import to %s\n", baseURL)
 	fmt.Fprintf(&b, "Total skills: %d\n\n", len(inv.Skills))
 
 	// Skills by type.
@@ -176,7 +171,7 @@ func (c *Client) DryRun(inv *model.Inventory) string {
 		fmt.Fprintln(&b)
 	}
 
-	fmt.Fprintf(&b, "Target endpoint: POST %s/api/v2/skills/profile/import\n", c.BaseURL)
+	fmt.Fprintf(&b, "Target endpoint: POST %s/api/v2/skills/profile/import\n", baseURL)
 	fmt.Fprintln(&b, "No data was sent (--dry-run).")
 
 	return b.String()
