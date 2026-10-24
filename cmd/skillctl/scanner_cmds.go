@@ -1221,60 +1221,35 @@ func readAPIKeyFromSession() string {
 // and POSTs each to aims-core /api/v2/skills/usage. Successfully synced rows are
 // marked synced=1 so they are not re-sent.
 func cmdSyncUsage(args []string) {
-	target := ""
-	apiKey := ""
+	os.Exit(runSyncUsage(args))
+}
 
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--target":
-			if i+1 < len(args) {
-				i++
-				target = args[i]
-			}
-		case "--api-key":
-			if i+1 < len(args) {
-				i++
-				apiKey = args[i]
-			}
-		default:
-			fmt.Fprintf(os.Stderr, "Unknown flag: %s\n", args[i])
-			os.Exit(1)
-		}
+func runSyncUsage(args []string) int {
+	opts, err := parseUsageConnectionArgs(args)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "sync-usage: %v\n", err)
+		return 1
 	}
-
-	// Resolve target URL: flag > env var > default.
-	if target == "" {
-		target = os.Getenv("M3C_API_URL")
+	connection, err := resolveUsageConnection(opts, os.Getenv, readAPIKeyFromSession)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "sync-usage: %v; set --api-key-origin or M3C_API_KEY_ORIGIN to the credential's known origin, independently of --target\n", err)
+		return 1
 	}
-	if target == "" {
-		target = "https://onboarding.guide"
-	}
-	target = strings.TrimRight(target, "/")
-
-	// Resolve API key: flag > env var > session file.
-	if apiKey == "" {
-		apiKey = os.Getenv("M3C_API_KEY")
-	}
-	if apiKey == "" {
-		apiKey = readAPIKeyFromSession()
-	}
-	if apiKey == "" {
-		fmt.Fprintln(os.Stderr, "Error: no API key found (use --api-key, M3C_API_KEY, or ~/.m3c-tools/er1_session.json)")
-		os.Exit(1)
-	}
+	target := strings.TrimRight(connection.Base.URL, "/")
+	apiKey := string(connection.Secret)
 
 	// Open the local usage database.
 	home, err := os.UserHomeDir()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error getting home directory: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
 	dbPath := filepath.Join(home, ".m3c-tools", "skill-usage.db")
 
 	db, err := sql.Open(dbdriver.DriverName(), dbPath+"?_journal_mode=WAL&_busy_timeout=5000")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error opening usage database: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
 	defer db.Close()
 
@@ -1282,7 +1257,7 @@ func cmdSyncUsage(args []string) {
 	rows, err := db.Query("SELECT id, skill_id, user_id, timestamp, project, session_id FROM skill_usage WHERE synced = 0 ORDER BY id")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error querying unsynced events: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
 
 	type usageRow struct {
@@ -1307,7 +1282,7 @@ func cmdSyncUsage(args []string) {
 
 	if len(pending) == 0 {
 		fmt.Println("No unsynced usage events.")
-		return
+		return 0
 	}
 
 	fmt.Fprintf(os.Stderr, "Found %d unsynced usage events. Syncing to %s ...\n", len(pending), target)
@@ -1334,11 +1309,10 @@ func cmdSyncUsage(args []string) {
 		}
 
 		url := target + "/api/v2/skills/usage"
-		// #nosec G704 -- target stammt aus args[i] dieses Aufrufs, also von dem,
-		// der das Werkzeug startet. Der Client traegt NoCredentialRedirect.
-		// VORAUSSETZUNG: dieser Befehl wird nicht von einem Dienst mit fremder
-		// Eingabe aufgerufen. Gemessen 2026-09-15: die beiden Server im Baum
-		// binden loopback und rufen ihn nicht.
+		// #nosec G704 -- resolveUsageConnection validates the configured target
+		// and independent operator-assigned credential origin before key/DB
+		// access. The client retains NoCredentialRedirect. The local origin
+		// assignment does not authenticate a server-issued tenant or issuer.
 		req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "  [SKIP] id=%d: request error: %v\n", r.ID, err)
@@ -1348,8 +1322,8 @@ func cmdSyncUsage(args []string) {
 		req.Header.Set("X-API-KEY", apiKey)
 		req.Header.Set("X-User-ID", r.UserID)
 
-		// #nosec G704 -- dieselbe Stelle, zweite Haelfte: gosec markiert Bau UND
-		// Ausfuehrung der Anfrage. Begruendung am http.NewRequest oben.
+		// #nosec G704 -- validated target/credential binding and redirect policy
+		// are described at http.NewRequest above; no unvalidated target fallback.
 		resp, err := httpClient.Do(req)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "  [FAIL] id=%d (%s): %v\n", r.ID, r.SkillID, err)
@@ -1370,4 +1344,8 @@ func cmdSyncUsage(args []string) {
 	}
 
 	fmt.Printf("Synced %d/%d usage events\n", synced, len(pending))
+	if synced != len(pending) {
+		return 1
+	}
+	return 0
 }
