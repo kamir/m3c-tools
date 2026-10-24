@@ -97,3 +97,5 @@ __pycache__/
 .grok/
 .cursor/
 .codex/
+
+/test-results/

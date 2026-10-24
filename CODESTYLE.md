@@ -69,6 +69,22 @@ and the [Go security guidance](https://go.dev/doc/security/).
 
 ## What is machine-enforced today
 
+### Test execution evidence
+
+`ci-test-selection.json` declares the managed test lanes. The required simulation
+job waits for their producer jobs and validates each expected raw report and its
+commit, run, attempt, producer, selection and digest metadata. A missing artifact,
+unsuccessful producer or report without successful tests blocks that job.
+Declared prose-only exclusions remain visible as a smaller expected lane set.
+This is CI consistency evidence, not independent attestation or customer acceptance.
+
+Use **Re-run all jobs** after a failed attempt. Re-running only failed jobs can
+leave successful producers' evidence on an older attempt; the consumer rejects
+that evidence intentionally. Windows/Linux parity likewise needs both producers
+from the same attempt. Archive necessary execution records before their seven-day
+CI retention expires. New test packages require an assignment; package inventory
+does not establish that every platform-specific or optional test was executed.
+
 The existing Lint & Vet job runs the configured golangci-lint version on native
 macOS and on the Linux and Windows build selections. The portable selections use
 `CGO_ENABLED=0`; they are static checks, not native execution on those platforms.

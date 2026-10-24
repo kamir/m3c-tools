@@ -327,8 +327,29 @@ jobs:
           python -m pip freeze | grep -iE '^(mcp|turbovec|numpy|PyYAML)=='
 
 
+      - name: Test mapping failure contracts
+        run: python3 scripts/ci-test-map.test.py
+
+      - name: Artifact consumer failure contracts
+        run: python3 scripts/ci-test-artifacts.test.py
+
+      - name: Discover and assign Go and Python tests
+        run: python3 scripts/ci-test-map.py check
+
+      - name: Language gate failure contracts
+        run: python3 scripts/check-doc-languages.test.py
+
       - name: ruff + pytest over the tracked Python tree
         run: ./scripts/check-python.sh
+
+      - name: Upload test execution records
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: test-records-python-gate-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: error
 
   docs-gate:
     name: CLI/manual consistency (docaudit)
@@ -345,13 +366,13 @@ jobs:
           go-version-file: go.mod
 
       - name: docaudit unit tests
-        run: go test -count=1 ./cmd/docaudit/
+        run: python3 scripts/ci-test-map.py run docaudit
 
       - name: Every real flag documented, every documented flag real
         run: go run ./cmd/docaudit -cli all
 
       - name: verbaudit unit tests
-        run: go test -count=1 ./cmd/verbaudit/
+        run: python3 scripts/ci-test-map.py run verbaudit
 
       - name: Every dispatched verb registered (FR-0113)
         run: go run ./cmd/verbaudit
@@ -383,7 +404,7 @@ jobs:
         run: ./scripts/check-makefile-targets.sh
 
       - name: exitaudit unit tests
-        run: go test -count=1 ./cmd/exitaudit/
+        run: python3 scripts/ci-test-map.py run exitaudit
 
       - name: Documented exit codes match the register (AUDIT-0001 Befund 2.1)
         run: go run ./cmd/exitaudit
@@ -400,8 +421,19 @@ jobs:
           go build -o build/skillctl ./cmd/skillctl
           bash scripts/skillctl-acceptance.sh --skillctl ./build/skillctl
 
+      - name: Upload test execution records
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: test-records-docs-gate-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: error
+
   test:
     name: Unit Tests
+    outputs:
+      code: ${{ steps.classify.outputs.code }}
     runs-on: macos-latest
     timeout-minutes: 25
     steps:
@@ -435,7 +467,6 @@ jobs:
         run: ./scripts/ci-classify.sh --github-output
 
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
-        if: steps.classify.outputs.code == 'true'
         with:
           go-version-file: go.mod
 
@@ -454,7 +485,10 @@ jobs:
       # package tests ran on no CI job at all before this line named them.
       - name: Run unit tests (-race, ./pkg/... + m3c-tools/skillctl-demo cmds)
         if: steps.classify.outputs.code == 'true'
-        run: go test -race -count=1 ./pkg/... ./cmd/m3c-tools/... ./cmd/skillctl-demo/... ./cmd/secretctl/...
+        run: python3 scripts/ci-test-map.py run unit
+
+      - name: Release evidence and simulator package tests (-race)
+        run: python3 scripts/ci-test-map.py run release-tools
 
       # Die Liste ist eine Positivliste, weil einige e2e-Tests Netz und
       # API-Schluessel brauchen und auf dem Runner nicht laufen koennen.
@@ -477,7 +511,16 @@ jobs:
       # ausgewertet, go test exit 0, 17s.
       - name: Run e2e tests (allow-list)
         if: steps.classify.outputs.code == 'true'
-        run: go test -v -count=1 ./e2e/ -run "TestComposite|TestBuild|TestParseTagLine|TestER1Config|TestER1Queue|TestER1EnqueueFailure|TestUploadFailure|TestRecorderEncodeWAV|TestRecorderStats|TestExportsDB|TestFilesDB|TestHashFile|TestFormatterLoader|TestPrettyPrint|TestFormatTranscript|TestFormatSnippet|TestFormatKeyValue|TestFormatTable|TestFormatSection|TestFormatStatusLine|TestTranslateFlagParsing|TestTranslateNotTranslatable|TestTranslateTranslatable|TestRetryQueue|TestRetryBackoffTiming|TestRetryBackoffCustomBase|TestRetryProcessingOrder|TestRetryPartialFailure|TestRetryMaxRetriesDropsEntry|TestRetryDropCallback|TestRetryRespectsBackoffDelay|TestRetryProcessesAfterBackoffElapsed|TestRetryGracefulShutdownOnCancel|TestRetryRunStopsOnContextCancel|TestRetryRunProcessesMultipleCycles|TestRetryEmptyQueue|TestRetryOnRetryCallback|TestTranscriptFilter|TestProxy|TestRetryRunner|TestBackgroundRetry|TestTranscriptImport|TestTranscriptList|TestTranscriptExport|TestScheduleCommand|TestStatusCommand|TestCancelCommand|TestScheduleStatusCancelWorkflow|TestCLI|TestRepoRoot|TestWriteFixture|TestFixtureDir|TestTempDataDir|TestWithEnv|TestRunCLIWithEnv|TestImporter|TestE2E_|TestQuellwaechter_|TestMenubar|TestAppBundle|TestResolveMenuBarTitle"
+        run: python3 scripts/ci-test-map.py run e2e-offline
+
+      - name: Upload test execution records
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: test-records-test-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: error
 
   skillctl-race:
     name: skillctl Security Tests (-race)
@@ -531,10 +574,21 @@ jobs:
       # exercised with the race detector. Run both explicitly, green-or-fail.
       - name: Run skillctl security tests (-race)
         if: steps.classify.outputs.code == 'true'
-        run: go test -race -count=1 ./cmd/skillctl/... ./pkg/skillctl/...
+        run: python3 scripts/ci-test-map.py run security
+
+      - name: Upload test execution records
+        if: always() && steps.classify.outputs.code == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: test-records-skillctl-race-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: error
 
   sim-gate:
     name: Trust-Plane Simulation (theory vs measurement)
+    needs: [test, docs-gate, python-gate, skillctl-race]
+    if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -543,6 +597,17 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
+
+      - name: Download current test execution records
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: test-records-*-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: test-artifacts/
+
+      - name: Require complete current-run test evidence
+        env:
+          TEST_PRODUCER_RESULTS: ${{ toJSON(needs) }}
+        run: python3 scripts/ci-test-artifacts.py test-artifacts
 
       # WF-004: the trust plane is checked twice, in two ways that can disagree.
       #
