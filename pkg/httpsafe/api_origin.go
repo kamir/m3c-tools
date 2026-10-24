@@ -18,7 +18,7 @@ var ErrInvalidAPIBase = errors.New("invalid or disallowed API base URL")
 type APIOrigin struct {
 	scheme   string
 	hostname string
-	port     uint16
+	port     string
 }
 
 // String returns a canonical origin, including its effective port.
@@ -26,7 +26,7 @@ func (o APIOrigin) String() string {
 	if o.scheme == "" {
 		return ""
 	}
-	return o.scheme + "://" + net.JoinHostPort(o.hostname, strconv.Itoa(int(o.port)))
+	return o.scheme + "://" + net.JoinHostPort(o.hostname, o.port)
 }
 
 // APIBase contains a validated URL with its path prefix preserved and its origin.
@@ -70,9 +70,9 @@ func ParseAPIBase(raw string, allowLoopbackHTTP bool) (APIBase, error) {
 	if scheme == "http" && (!allowLoopbackHTTP || (hostname != "localhost" && (ipErr != nil || !addr.IsLoopback()))) {
 		return APIBase{}, ErrInvalidAPIBase
 	}
-	port := 443
+	port := "443"
 	if scheme == "http" {
-		port = 80
+		port = "80"
 	}
 	if p := u.Port(); p != "" {
 		for _, c := range p {
@@ -80,16 +80,17 @@ func ParseAPIBase(raw string, allowLoopbackHTTP bool) (APIBase, error) {
 				return APIBase{}, ErrInvalidAPIBase
 			}
 		}
-		port, err = strconv.Atoi(p)
-		if err != nil || port < 1 || port > 65535 {
+		value, err := strconv.ParseUint(p, 10, 16)
+		if err != nil || value == 0 {
 			return APIBase{}, ErrInvalidAPIBase
 		}
+		port = strconv.FormatUint(value, 10)
 	} else if strings.HasSuffix(u.Host, ":") {
 		return APIBase{}, ErrInvalidAPIBase
 	}
-	origin := APIOrigin{scheme: scheme, hostname: hostname, port: uint16(port)}
+	origin := APIOrigin{scheme: scheme, hostname: hostname, port: port}
 	u.Scheme = scheme
-	u.Host = net.JoinHostPort(hostname, strconv.Itoa(port))
+	u.Host = net.JoinHostPort(hostname, port)
 	return APIBase{URL: u.String(), Origin: origin}, nil
 }
 
