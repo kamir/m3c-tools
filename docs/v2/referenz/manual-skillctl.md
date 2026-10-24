@@ -2657,7 +2657,7 @@ configuration diagnostic. An explicit HTTPS `registry_url` on
 credentials; it cannot bypass transport or redirect checks. This local
 origin assignment proves no issuer or tenant authority, and a context-only
 session cannot be repaired by assuming that device login issued an API key.
-The independent usage hook and Replay are not wired to this MCP bootstrap.
+The independent usage hook is not wired to this MCP bootstrap.
 
 **`runbook publish <runbook.html>`**: publish an onboarding runbook into the THOH catalog
 (SPEC-0272/0275).

@@ -56,13 +56,11 @@ against which this repository asks to be measured.
 
 1. The threat model covers the runtime trust chain, not the m3c-tools capture
    pipeline; its scope note states that boundary.
-2. There are two gosec baselines, and only one has a gate: the blocking
-   no-new-findings gate
+2. The blocking no-new-findings gate
    ([gosec-diff-gate.yml](../../../.github/workflows/gosec-diff-gate.yml),
-   in the CI workflow) checks the signature baseline
-   `gosec-inci-baseline.txt`; the SARIF snapshot
-   [gosec-baseline.sarif](../../security/gosec-baseline.sarif) is
-   not wired into a gate and serves only for triage.
+   in the CI workflow) checks the committed signature baseline
+   `gosec-inci-baseline.txt`. CI generates SARIF for Code Scanning separately;
+   a historical SARIF snapshot is not an executable gate input.
 3. A required check is bound to a job NAME; renaming silently disconnects
    enforcement. The explanation is in
    [required-checks.txt](../../security/required-checks.txt) itself.

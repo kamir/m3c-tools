@@ -2873,7 +2873,7 @@ einen anonymen GET ohne lokale Credentials; Transport- und Redirectprüfungen
 bleiben verbindlich. Die lokale Origin-Zuordnung
 beweist weder Ausstellung noch Mandantenberechtigung. Eine reine
 Kontext-Sitzung wird nicht dadurch repariert, dass man einen API-Key aus dem
-Gerätelogin annimmt. Der eigenständige Usage-Hook und Replay sind nicht an
+Gerätelogin annimmt. Der eigenständige Usage-Hook ist nicht an
 diesen MCP-Bootstrap angeschlossen.
 
 **`runbook publish <runbook.html>`**: Onboarding-Runbook im THOH-Katalog

@@ -355,13 +355,11 @@ Massstab, an dem dieses Repository gemessen werden will.
 
 1. Das Threat Model deckt die Laufzeit-Trust-Kette ab, nicht die
    Capture-Pipeline von m3c-tools; die Abgrenzung steht in seinem Scope-Hinweis.
-2. Es gibt zwei gosec-Baselines, und nur eine traegt ein Tor: das blockierende
-   no-new-findings-Tor
+2. Das blockierende no-new-findings-Tor
    ([gosec-diff-gate.yml](../../../.github/workflows/gosec-diff-gate.yml),
-   im CI-Workflow) prueft gegen die Signatur-Baseline
-   `gosec-inci-baseline.txt`; die SARIF-Punktaufnahme
-   [gosec-baseline.sarif](../../security/gosec-baseline.sarif) ist
-   unverdrahtet und dient nur der Triage.
+   im CI-Workflow) prueft gegen die versionierte Signatur-Baseline
+   `gosec-inci-baseline.txt`. CI erzeugt SARIF fuer Code Scanning separat;
+   eine historische SARIF-Punktaufnahme ist keine ausfuehrbare Toreingabe.
 3. Ein Pflicht-Check ist an einen Job-NAMEN gebunden; eine Umbenennung
    entkoppelt die Durchsetzung lautlos. Die Begruendung steht in
    [required-checks.txt](../../security/required-checks.txt) selbst.
