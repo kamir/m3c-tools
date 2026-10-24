@@ -1,97 +1,110 @@
 package auth
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"os"
+	"runtime"
 	"strings"
 
 	keyring "github.com/zalando/go-keyring"
 )
 
-// keyring item coordinates. There is exactly one device token per machine+home
-// (mirroring the single-file model), so a fixed service+account is used; the
-// secret is the DeviceToken JSON, encrypted at rest by the OS keychain.
 const (
 	keyringService = "m3c-tools"
 	keyringAccount = "device-token"
 )
 
-// keyringStore persists the token in the OS keychain via go-keyring:
-// macOS Keychain (security), Linux Secret Service (D-Bus), Windows Credential
-// Manager. Unlike the file backend, the encryption key is OS-managed and not
-// derivable by a reader of the store.
+// keyringStore uses the native macOS Keychain, Linux Secret Service or Windows
+// Credential Manager. An unavailable provider never selects weaker persistence.
 type keyringStore struct{}
 
-// newKeyringStore returns the keychain backend, unless the operator has opted
-// out via M3C_TOKEN_STORE=file (force the encrypted-file backend. Useful on a
-// macOS box where keychain prompts are unwanted, in CI, or to keep tests off
-// the real OS keychain). Any other value ("", "keychain", "auto") keeps the
-// keychain-first behaviour.
+// The historical auto spelling now means native-only. Explicit file and unknown
+// selectors fail before any provider call, including management and diagnostics.
 func newKeyringStore() TokenStore {
-	if strings.EqualFold(strings.TrimSpace(os.Getenv("M3C_TOKEN_STORE")), "file") {
-		return disabledStore{}
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("M3C_TOKEN_STORE"))) {
+	case "", "keychain", "auto":
+		return keyringStore{}
+	default:
+		return unsupportedStore{}
 	}
-	return keyringStore{}
 }
 
-// disabledStore is a keychain backend that reports itself unavailable, so the
-// orchestration in store.go transparently uses the file backend.
-type disabledStore struct{}
+type unsupportedStore struct{}
 
-func (disabledStore) Name() string                           { return "keychain(disabled)" }
-func (disabledStore) Save(*DeviceToken) error                { return ErrUnavailable }
-func (disabledStore) Load(_, _ string) (*DeviceToken, error) { return nil, ErrUnavailable }
-func (disabledStore) Clear() error                           { return nil }
-func (disabledStore) Has() bool                              { return false }
+func (unsupportedStore) Name() string                           { return "none" }
+func (unsupportedStore) Save(*DeviceToken) error                { return ErrStorePolicy }
+func (unsupportedStore) Load(_, _ string) (*DeviceToken, error) { return nil, ErrStorePolicy }
+func (unsupportedStore) Clear() error                           { return ErrStorePolicy }
+func (unsupportedStore) Has() bool                              { return false }
 
 func (keyringStore) Name() string { return "keychain" }
 
-func (keyringStore) Save(t *DeviceToken) error {
+// Native error text may contain credentials or provider-controlled diagnostics.
+// Retain only known stable classifications, never the original error chain.
+func nativeStoreError(err error) error {
+	if errors.Is(err, keyring.ErrSetDataTooBig) {
+		return fmt.Errorf("%w: %w", ErrUnavailable, keyring.ErrSetDataTooBig)
+	}
+	return ErrUnavailable
+}
+
+func (keyringStore) Save(t *DeviceToken) error { return saveKeyringToken(t, keyring.Set) }
+
+func saveKeyringToken(t *DeviceToken, set func(string, string, string) error) error {
+	if t == nil {
+		return ErrInvalidToken
+	}
 	blob, err := json.Marshal(t)
 	if err != nil {
-		return fmt.Errorf("marshal token: %w", err)
+		return ErrInvalidToken
 	}
-	if err := keyring.Set(keyringService, keyringAccount, string(blob)); err != nil {
-		// Make the security downgrade observable: an oversized secret falls
-		// back to the weaker file backend (orchestration in store.go), which
-		// would otherwise be silent.
-		if errors.Is(err, keyring.ErrSetDataTooBig) {
-			log.Printf("[auth] WARNING: device token too large for the OS keychain: storing in the encrypted file backend instead")
-		}
-		return fmt.Errorf("%w: %v", ErrUnavailable, err)
+	// go-keyring v0.2.8 starts security -i before enforcing its 4096-byte
+	// stdin-command limit. Reject oversized serialized data before dispatch to
+	// avoid that adapter's early-return path without Close/Wait. The fixed
+	// identifiers and base64 alphabet need no extra shellescape quoting.
+	const darwinCommandPrefix = "add-generic-password -U -s " + keyringService + " -a " + keyringAccount + " -w go-keyring-base64:"
+	if runtime.GOOS == "darwin" && len(darwinCommandPrefix)+base64.StdEncoding.EncodedLen(len(blob))+1 > 4096 {
+		return nativeStoreError(keyring.ErrSetDataTooBig)
+	}
+	if err := set(keyringService, keyringAccount, string(blob)); err != nil {
+		return nativeStoreError(err)
 	}
 	return nil
 }
 
-func (keyringStore) Load(_, _ string) (*DeviceToken, error) {
-	val, err := keyring.Get(keyringService, keyringAccount)
+func (keyringStore) Load(_, _ string) (*DeviceToken, error) { return loadKeyringToken(keyring.Get) }
+
+func loadKeyringToken(get func(string, string) (string, error)) (*DeviceToken, error) {
+	val, err := get(keyringService, keyringAccount)
 	if err != nil {
 		if errors.Is(err, keyring.ErrNotFound) {
-			return nil, nil // keychain reachable but empty
+			return nil, nil
 		}
-		return nil, fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return nil, nativeStoreError(err)
 	}
 	var t DeviceToken
 	if err := json.Unmarshal([]byte(val), &t); err != nil {
-		return nil, fmt.Errorf("unmarshal token: %w", err)
+		return nil, ErrInvalidToken
 	}
 	return &t, nil
 }
 
-func (keyringStore) Clear() error {
-	if err := keyring.Delete(keyringService, keyringAccount); err != nil {
+func (keyringStore) Clear() error { return clearKeyringToken(keyring.Delete) }
+
+func clearKeyringToken(remove func(string, string) error) error {
+	if err := remove(keyringService, keyringAccount); err != nil {
 		if errors.Is(err, keyring.ErrNotFound) {
 			return nil
 		}
-		return fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return nativeStoreError(err)
 	}
 	return nil
 }
 
 func (keyringStore) Has() bool {
-	_, err := keyring.Get(keyringService, keyringAccount)
-	return err == nil
+	t, err := loadKeyringToken(keyring.Get)
+	return err == nil && t != nil
 }

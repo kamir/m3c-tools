@@ -7,13 +7,17 @@ import (
 	"time"
 
 	"github.com/kamir/m3c-tools/pkg/auth"
+	keyring "github.com/zalando/go-keyring"
 )
 
 // FR-0043: ER1-bound commands autoload the persisted token into the env.
 
 func TestAutoloadDeviceToken_FromStore(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("M3C_TOKEN_STORE", "file")
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	keyring.MockInit()
+	t.Setenv("M3C_TOKEN_STORE", "keychain")
 	t.Setenv("ER1_DEVICE_TOKEN", "")
 	t.Setenv("ER1_USER_ID", "")
 	t.Setenv("ER1_CONTEXT_ID", "testsub___mft") // → userID hint "testsub"
@@ -44,8 +48,11 @@ func TestAutoloadDeviceToken_RespectsExplicitEnv(t *testing.T) {
 }
 
 func TestAutoloadDeviceToken_ExpiredWarns(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("M3C_TOKEN_STORE", "file")
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	keyring.MockInit()
+	t.Setenv("M3C_TOKEN_STORE", "keychain")
 	t.Setenv("ER1_DEVICE_TOKEN", "")
 	t.Setenv("ER1_USER_ID", "testsub")
 

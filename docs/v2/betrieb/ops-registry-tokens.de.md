@@ -249,6 +249,12 @@ klaren Disabled-Fehler; ein neuer File-Credential-Backend wird dadurch nicht imp
 Ohne beide Schalter bleibt das normale Plattformverhalten erhalten.
 `M3C_ER1_KEYCHAIN` ist keine globale Backend-Policy.
 
+Der gemeinsame ER1-Gerätetokenspeicher weist `M3C_TOKEN_STORE=file` separat ab;
+er nutzt oder migriert die alte Datei `device-token.enc` niemals. Fehler seines
+nativen Stores aktivieren keine Dateipersistenz. Dies ändert weder die
+artifactauth-Suchreihenfolge noch belegt es die Policy-Konformität aller
+Credential-Familien.
+
 ## Reihenfolge, in der gesucht wird
 
 Findet `skillctl` nichts, arbeitet es anonym weiter. Das ist Absicht: eine

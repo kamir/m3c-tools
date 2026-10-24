@@ -33,14 +33,9 @@ func AuthMethod() string {
 	return "none"
 }
 
-// PersistedBearer resolves a device token from the at-rest store (OS keychain or
-// the encrypted-file fallback) for use as an Authorization: Bearer credential,
-// WITHOUT requiring the caller to export ER1_DEVICE_TOKEN. It is the read-back
-// half of FR-0043: `m3c-tools login` / `skillctl login` persist the token; this
-// reads it so skillctl can authenticate after a login alone.
-//
-// userIDHint is only consulted by the encrypted-file backend's key derivation
-// (the keychain backend ignores it). Pass the caller's own Google sub, or "".
+// PersistedBearer resolves only the native OS token store. It never reads,
+// migrates or deletes retired token files. userIDHint remains for compatibility;
+// the native store ignores it. Callers handle external tokens separately.
 //
 // Returns ("", false) when no token is stored, and ("", true) when a token
 // exists but has expired (caller should prompt a re-login).

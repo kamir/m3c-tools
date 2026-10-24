@@ -2,114 +2,50 @@ package auth
 
 import "errors"
 
-// ErrUnavailable indicates a backend cannot be used on this host right now
-// (e.g. no Secret Service on a headless Linux box, or a locked keychain).
-// Callers treat it as "try the next backend", not a hard failure.
-var ErrUnavailable = errors.New("auth: token store unavailable")
+// ErrUnavailable indicates that the native credential store cannot be used.
+// It never authorizes a fallback to a file or another persistence backend.
+var ErrUnavailable = errors.New("auth: native token store unavailable")
+
+// ErrStorePolicy indicates an unsupported persistence selector.
+var ErrStorePolicy = errors.New("auth: token store selector is unsupported; use the native store or an externally supplied token")
+
+// ErrInvalidToken indicates an invalid stored token representation.
+var ErrInvalidToken = errors.New("auth: stored token is invalid")
 
 // TokenStore persists exactly one device token at rest.
 type TokenStore interface {
-	// Name is a short identifier for diagnostics ("keychain", "file").
 	Name() string
-	// Save persists the token, replacing any existing one.
 	Save(t *DeviceToken) error
-	// Load returns the stored token; (nil, nil) when the store is reachable
-	// but empty; (nil, ErrUnavailable) when the backend cannot be used.
-	// deviceID/userID are only consumed by the file backend (key derivation).
+	// Load returns (nil, nil) for an empty store. Identity hints are retained
+	// for compatibility; the native backend does not derive keys from them.
 	Load(deviceID, userID string) (*DeviceToken, error)
-	// Clear removes the stored token. An absent token is not an error.
+	// Clear removes only the native entry. Legacy files are never touched.
 	Clear() error
-	// Has reports whether a token is present, as cheaply as the backend allows.
 	Has() bool
 }
 
-// stores returns the ordered backend preference: the OS keychain first, then
-// the host-bound encrypted file as a fallback (headless Linux, CI, a locked
-// keyring). Both backends are stateless, so constructing them is free.
-func stores() (primary, fallback TokenStore) {
-	return newKeyringStore(), newFileStore()
-}
+// Save persists only in the native OS store. An unavailable or oversized native
+// write is a failure, with no file creation, migration or cleanup.
+func Save(t *DeviceToken) error { return newKeyringStore().Save(t) }
 
-// Save persists the device token, preferring the OS keychain. When the keychain
-// accepts the token, any legacy encrypted file is removed so the secret is not
-// duplicated in two places with weaker protection. If the keychain is
-// unavailable, the encrypted file is used instead.
-func Save(t *DeviceToken) error {
-	primary, fallback := stores()
-	if err := primary.Save(t); err != nil {
-		if errors.Is(err, ErrUnavailable) {
-			// Writing to the file backend (kill-switch on, or no keychain).
-			// Proactively drop any stale entry from the *real* keychain: we
-			// bypass newKeyringStore() (which honours M3C_TOKEN_STORE=file) on
-			// purpose, so an old keychain token cannot shadow this newer file
-			// token on a later run with the keychain re-enabled.
-			_ = keyringStore{}.Clear()
-			return fallback.Save(t)
-		}
-		return err
-	}
-	_ = fallback.Clear() // best-effort: drop the weaker legacy file
-	return nil
-}
-
-// Load reads the device token, preferring the OS keychain. If the keychain is
-// reachable but empty and a legacy encrypted file exists, the token is migrated
-// into the keychain and the file removed (one-time upgrade on first run).
-// Returns (nil, nil) when no token is stored anywhere.
+// Load reads only the native OS store. Legacy files are ignored and unchanged.
 func Load(deviceID, userID string) (*DeviceToken, error) {
-	primary, fallback := stores()
-	t, err := primary.Load(deviceID, userID)
-	switch {
-	case err == nil && t != nil:
-		return t, nil
-	case err != nil && !errors.Is(err, ErrUnavailable):
-		return nil, err
-	}
-
-	// Keychain is empty (err == nil) or unavailable: consult the file.
-	ft, ferr := fallback.Load(deviceID, userID)
-	if ferr != nil || ft == nil {
-		return ft, ferr
-	}
-
-	// Found in the legacy file. If the keychain is usable, migrate the secret
-	// into it and remove the file.
-	if err == nil {
-		if mErr := primary.Save(ft); mErr == nil {
-			_ = fallback.Clear()
-		}
-	}
-	return ft, nil
+	return newKeyringStore().Load(deviceID, userID)
 }
 
-// Clear removes the device token from every backend.
-func Clear() error {
-	primary, fallback := stores()
-	e1 := primary.Clear()
-	e2 := fallback.Clear()
-	if e1 != nil && !errors.Is(e1, ErrUnavailable) {
-		return e1
-	}
-	return e2
-}
+// Clear removes only the native entry. Retired files require separate manual
+// cleanup; this operation neither reads nor deletes them.
+func Clear() error { return newKeyringStore().Clear() }
 
-// HasStoredToken reports whether a device token is persisted in any backend,
-// without exporting it. Used to suppress "no auth" warnings and in diagnostics.
-func HasStoredToken() bool {
-	primary, fallback := stores()
-	return primary.Has() || fallback.Has()
-}
+// HasStoredToken reports whether the selected native store contains a token.
+// Unsupported selectors and unavailable stores report false.
+func HasStoredToken() bool { return newKeyringStore().Has() }
 
-// ActiveStoreName returns the name of the backend currently holding the token,
-// or "none". Used by the doctor command.
+// ActiveStoreName reports "keychain" only for a populated native store.
 func ActiveStoreName() string {
-	primary, fallback := stores()
-	switch {
-	case primary.Has():
-		return primary.Name()
-	case fallback.Has():
-		return fallback.Name()
-	default:
-		return "none"
+	s := newKeyringStore()
+	if s.Has() {
+		return s.Name()
 	}
+	return "none"
 }

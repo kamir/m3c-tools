@@ -9,31 +9,29 @@ import (
 	keyring "github.com/zalando/go-keyring"
 )
 
-// Establish an in-memory provider before every package test, including tests
-// whose explicit file backend still reaches the legacy direct keyring Clear.
+// Establish an in-memory provider before every package test. Production policy
+// is native-only; test binaries and child builds also use a private provider trap.
 func TestMain(m *testing.M) {
 	keyring.MockInit()
 	os.Exit(m.Run())
 }
 
-func TestFileSaveDeletesOnlyMockKeyringEntry(t *testing.T) {
-	keyring.MockInit() // Independently isolate this test before any Set.
+func TestNativeSaveClearUsesOnlyMockEntry(t *testing.T) {
+	keyring.MockInit() // Independently safe before any operation.
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
-	t.Setenv("M3C_TOKEN_STORE", "file")
-	// These service/account coordinates exercise the actual legacy Save -> Clear
-	// route, after TestMain has replaced the provider with in-memory storage.
-	if err := keyring.Set(keyringService, keyringAccount, "synthetic-stale-entry"); err != nil {
+	t.Setenv("M3C_TOKEN_STORE", "keychain")
+	if err := Save(sampleToken()); err != nil {
 		t.Fatal(err)
 	}
-	if err := Save(&DeviceToken{Token: "synthetic-new-token", DeviceID: "synthetic-device", UserID: "synthetic-user"}); err != nil {
+	if err := Clear(); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := keyring.Get(keyringService, keyringAccount); !errors.Is(err, keyring.ErrNotFound) {
-		t.Fatal("legacy Clear did not remove mock entry")
+		t.Fatal("native mock entry remained")
 	}
-	if _, err := os.Stat(filepath.Join(home, ".m3c-tools", "device-token.enc")); err != nil {
-		t.Fatal("synthetic file token not saved")
+	if _, err := os.Stat(filepath.Join(home, ".m3c-tools")); !os.IsNotExist(err) {
+		t.Fatal("native management created filesystem state")
 	}
 }

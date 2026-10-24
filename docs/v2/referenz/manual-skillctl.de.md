@@ -2263,7 +2263,7 @@ Default-off und unbekannte Backend-Auswahl liegen ebenfalls vor diesen Reads.
 
 Ein expliziter nichtleerer `$ER1_DEVICE_TOKEN` gewinnt. Ein ungültiger gewählter
 Wert fällt nicht auf den Store zurück. Andernfalls liest Sync nach der Bindung
-das vorhandene OS-Keychain-/Datei-Backend ohne Migration, Save oder Clear.
+den nativen OS-Credential-Store ohne Migration, Save oder Clear.
 Dies schreibt weder Umgebungsvariablen um noch ergänzt es Aussteller-,
 Audience- oder Mandantenmetadaten; die übrigen ER1-Befehle behalten ihr
 bestehendes Autoload-Verhalten. `attest` verwendet seine separaten
@@ -2272,7 +2272,7 @@ die exportierten Ingest-Client-Felder als unveränderlich zu bezeichnen.
 HTTPS bleibt auch mit `--insecure` verpflichtend. Automatisierte Storetests
 verwenden In-Memory-Provider; sie belegen keine Abnahme des nativen Stores auf
 Kundenbetriebssystemen.
-Der alte Datei-Fallback leitet seinen Verschlüsselungsschlüssel nur aus
+Der zurückgezogene Datei-Fallback leitete seinen Verschlüsselungsschlüssel nur aus
 nichtgeheimen Geräte-/Nutzerkennungen ab, ohne unabhängige geheime Entropie.
 Ein kopierter Blob kann bei bekannten Kennungen auf einem anderen Rechner
 entschlüsselt werden; behandeln Sie Kopien und Backups als credentialhaltige
@@ -2701,8 +2701,33 @@ skillctl login [--no-browser] [--timeout 5m] [--base-url URL]
 skillctl login --status | --logout
 ```
 
-Browsergestützte Gerätekopplung mit ER1. Speichert ein Token, das `skillctl` bei
-Registry-Befehlen automatisch verwendet. Die ER1-Anmeldung wird mit `m3c-tools` geteilt.
+Browsergestützte Gerätekopplung mit ER1. Speichert den Token ausschließlich
+im nativen OS-Credential-Store, den sich `skillctl` und `m3c-tools` teilen.
+Die bisherigen ER1-Befehlsfamilien verwenden diesen gespeicherten Token;
+separat gebundene Registry-Zugangsdaten bleiben davon getrennt.
+
+Der Gerätetokenspeicher akzeptiert `$M3C_TOKEN_STORE` ungesetzt, `keychain` oder
+`auto`; `auto` bedeutet jetzt ausschließlich nativ. Der bisherige Wert `file`
+und unbekannte Werte werden vor nativem Zugriff abgewiesen. Ein nicht
+verfügbarer, gesperrter oder überfüllter nativer Store löst niemals eine
+Dateispeicherung aus. `skillctl login` meldet Persistenzfehler mit einem
+Exitcode ungleich null statt einer erfolgreichen Tokenspeicherung. Auf
+Headless-Hosts kann `$ER1_DEVICE_TOKEN` für unterstützende Verbraucher extern
+bereitgestellt werden; deren unabhängige Origin-Vorgaben bleiben notwendig.
+Dies ist keine neue Secret-Manager-Integration.
+
+Bestehende Dateien `~/.m3c-tools/device-token.enc` werden ignoriert: Save, Load
+und `login --logout` lesen, migrieren oder löschen sie nicht. Melden Sie sich
+mit funktionsfähigem nativem Store erneut an oder stellen Sie einen neuen
+Token extern bereit. Entfernen Sie stillgelegte Dateien und Backup-Kopien
+über Ihr kontrolliertes Credential-Bereinigungsverfahren; ihre alte, aus
+Kennungen abgeleitete Verschlüsselung bietet keinen starken Offline-Schutz.
+Logout löscht nur den nativen Gerätetoken, keine extern bereitgestellten
+Credentials. Fehler des nativen Stores bleiben Fehler. Andere Credential-
+Familien und versionierte Aussteller-/Origin-Metadaten sind getrennte Arbeit.
+Die gemeinsame Capture-Anmeldung kann nach einem Token-Persistenzfehler
+weiterhin einen erfolgreichen Context-Login melden; das beweist keinen
+dauerhaft gespeicherten Token.
 
 | Flag | Zweck |
 |------|---------|

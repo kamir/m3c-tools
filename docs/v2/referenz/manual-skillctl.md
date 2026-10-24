@@ -2069,7 +2069,7 @@ backend selection also precede those reads.
 
 An explicit nonempty `$ER1_DEVICE_TOKEN` wins. An invalid selected value does
 not fall back to storage. Otherwise, after binding, sync reads the existing
-OS-keychain/file backend without migration, Save or Clear operations. This does
+native OS credential store without migration, Save or Clear operations. This does
 not rewrite environment variables or add issuer, audience or tenant metadata;
 remaining ER1 commands retain their existing autoload behavior; `attest` uses
 its separate registry credentials. Values are captured
@@ -2077,7 +2077,7 @@ for this sync invocation, without claiming that the exported ingest-client
 fields are immutable. HTTPS remains mandatory even with `--insecure`. Automated store tests use
 in-memory providers; they do not establish native-store acceptance on customer
 operating systems.
-The legacy file fallback derives its encryption key only from nonsecret
+The retired file fallback derived its encryption key only from nonsecret
 device/user identifiers, with no independent secret entropy. A copied blob
 can be decrypted on another machine when those identifiers are known; treat
 copies and backups as credential-bearing data.
@@ -2488,8 +2488,28 @@ skillctl login [--no-browser] [--timeout 5m] [--base-url URL]
 skillctl login --status | --logout
 ```
 
-Browser device-pairing against ER1; saves a token `skillctl` uses automatically for
-registry-backed commands. Shares the ER1 login with `m3c-tools`.
+Browser device-pairing against ER1; persists its token only in the native OS
+credential store shared with `m3c-tools`. The legacy ER1 command families use
+that stored token; separately bound registry credentials remain distinct.
+
+Device-token storage accepts `$M3C_TOKEN_STORE` unset, `keychain` or `auto`;
+`auto` now means native-only. The former `file` value and unknown values are
+refused before native access. An unavailable, locked or oversized native store
+never triggers file storage. `skillctl login` reports persistence failure with
+a nonzero exit instead of claiming the token was saved. On headless hosts,
+provide `$ER1_DEVICE_TOKEN` externally for consumers that support it; retain
+their independent origin requirements. This is not a new secret-manager integration.
+
+Existing `~/.m3c-tools/device-token.enc` files are ignored: Save, Load and
+`login --logout` neither read, migrate nor delete them. Reauthenticate with a
+working native store or provide a new token externally. Remove retired files
+and backup copies through your controlled credential-cleanup procedure; their
+old identifier-derived encryption is not strong offline protection. Logout
+clears only the native device token and does not remove externally supplied
+credentials. Native-store failure remains an error. Other credential families
+and versioned issuer/origin metadata are separate work; the shared Capture
+login may still report context-login success after token-persistence failure,
+which does not prove a durable token was saved.
 
 | Flag | Purpose |
 |------|---------|
