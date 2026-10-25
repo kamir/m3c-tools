@@ -94,6 +94,13 @@ PROJECT_CASES = {
         'TestBoundIdentityReaderTransport',
         'TestManagedClientBoundary',
         'TestManagedClientSnapshotAndLifecycle',
+        'TestAgentEvidenceRecordFraming',
+        'TestAgentEvidenceContextSnapshotBounds',
+        'TestAgentEvidencePlatformPublication',
+        'TestAgentEvidenceProcessLock',
+        'TestAgentRetainedProofSameBytesAndContext',
+        'TestAgentRetainedProofIdentityAndBounds',
+        'TestAgentRetainedProofPublicationFailures',
     ),
     'github.com/kamir/m3c-tools/pkg/skillctl/install': (
         'TestProjectManagedInstallRequiresPolicyBeforeIO',
@@ -135,6 +142,7 @@ PROJECT_CASES = {
         'TestInstallRetainedRootSnapshotActualCLI',
         'TestInstallRegistryIdentityActualCLI',
         'TestInstallManagedTransportActualCLI',
+        'TestPullInstallAgentRetainedProofActualCLI',
     ),
 }
 for _package, _cases in PROJECT_CASES.items():

@@ -256,6 +256,7 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 
 	// Confirm-install OR a --install with zero overwrites: actually write.
 	results, err := registry.ConfirmInstall(res.Staged, *installToken, registry.InstallOpts{
+		NativeTrustRoots:      tr,
 		SkillsDir:             *installSkillsDir,
 		TrustRootsFingerprint: tr.Fingerprint,
 		ContextID:             *er1Context,

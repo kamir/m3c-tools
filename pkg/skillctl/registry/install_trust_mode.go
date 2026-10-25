@@ -16,6 +16,7 @@ package registry
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
@@ -81,6 +82,14 @@ type SignatureSidecar struct {
 
 // InstallOpts describes a trust-mode install.
 type InstallOpts struct {
+	// NativeTrustRoots is explicit authority for new agent retention. Neither a
+	// fingerprint nor a missing signed context can stand in for these keys.
+	NativeTrustRoots *SelfTrustRoots
+	Ctx              context.Context
+	agentOps         *agentFileOps
+	agentNow         func() time.Time
+	agentLease       *agentPublicationLease
+
 	StagedSkbPath         string // path under M3C_SKILL_CACHE_DIR (output of PullBundles)
 	Bundle                *StagedBundle
 	SkillsDir             string // override; default ~/.claude/skills
@@ -186,7 +195,47 @@ func PlanInstall(bundles []*StagedBundle, skillsDir string) (*InstallPlan, error
 // ConfirmInstall re-derives the plan from the current state, verifies the
 // caller's token matches, and only then writes. Drift in the create/overwrite
 // set ⇒ refuse with ErrPlanDrift. Stale token ⇒ refuse with ErrTokenExpired.
-func ConfirmInstall(bundles []*StagedBundle, providedToken string, opts InstallOpts) ([]*InstallResult, error) {
+func ConfirmInstall(bundles []*StagedBundle, providedToken string, opts InstallOpts) (results []*InstallResult, resultErr error) {
+	hasAgent := false
+	agentNames := map[string]bool{}
+	for _, b := range bundles {
+		if b == nil {
+			return nil, ErrAgentEvidenceInvalid
+		}
+		if b.Kind == skillbundle.KindAgent {
+			hasAgent = true
+			if !validAgentName(b.Name) {
+				return nil, ErrAgentEvidenceInvalid
+			}
+			key := strings.ToLower(b.Name)
+			if agentNames[key] {
+				return nil, ErrAgentEvidenceInvalid
+			}
+			agentNames[key] = true
+			if b.Attestation == nil {
+				return nil, ErrAgentEvidenceRequired
+			}
+		}
+	}
+	if hasAgent {
+		roots, err := snapshotAgentRoots(opts.NativeTrustRoots)
+		if err != nil {
+			return nil, agentEvidenceDiagnostic(err)
+		}
+		opts.NativeTrustRoots = roots
+		lease, err := acquireAgentPublication(agentContextOf(opts), agentsDirFor(opts.SkillsDir), agentOpsOf(opts))
+		if err != nil {
+			return nil, err
+		}
+		opts.agentLease = lease
+		defer func() {
+			resultErr = errors.Join(resultErr, lease.Close())
+			if resultErr != nil && lease.published {
+				resultErr = agentPublicationFailure(resultErr)
+			}
+		}()
+	}
+
 	// SEC-M9: reject path-traversal / unsafe bundle names BEFORE the G-23
 	// overwrite/token gate. PlanInstall joins each name onto the skills dir, so a
 	// traversal name (e.g. "..") resolves to an existing parent dir and lands in
@@ -216,6 +265,22 @@ func ConfirmInstall(bundles []*StagedBundle, providedToken string, opts InstallO
 	// Token check OK (or not needed). Write each.
 	var out []*InstallResult
 	for _, b := range bundles {
+		if b.Kind == skillbundle.KindAgent {
+			for _, row := range plan.Creates {
+				if row.Name == b.Name {
+					if e := opts.agentLease.validate(); e != nil {
+						return out, e
+					}
+					_, e := opts.agentLease.agents.root.Lstat(b.Name + ".md")
+					if e == nil {
+						return out, ErrPlanDrift
+					}
+					if !errors.Is(e, os.ErrNotExist) {
+						return out, e
+					}
+				}
+			}
+		}
 		r, err := installOne(b, opts)
 		if err != nil {
 			return out, err
@@ -414,9 +479,31 @@ func installOne(b *StagedBundle, opts InstallOpts) (*InstallResult, error) {
 	if err := sanitizeBundleName(b.Name); err != nil {
 		return nil, err
 	}
-	skb, err := readBoundInstallSnapshot(b.StagedSkbPath, b.Digest)
+	var skb []byte
+	var err error
+	if b.Kind == skillbundle.KindAgent {
+		roots, e := snapshotAgentRoots(opts.NativeTrustRoots)
+		if e != nil {
+			return nil, agentEvidenceDiagnostic(e)
+		}
+		snapshot, _, e := snapshotAgentContext(b.Attestation)
+		if e != nil {
+			return nil, agentEvidenceDiagnostic(e)
+		}
+		frozen := *b
+		frozen.Attestation = snapshot
+		b = &frozen
+		opts.NativeTrustRoots = roots
+		skb, err = readBoundAgentSnapshot(b.StagedSkbPath, b.Digest, agentOpsOf(opts))
+	} else {
+		skb, err = readBoundInstallSnapshot(b.StagedSkbPath, b.Digest)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("install: read staged .skb: %w", err)
+	}
+
+	if b.Kind == skillbundle.KindAgent {
+		return publishAgentEvidence(b, skb, opts)
 	}
 
 	// SPEC-0432 §3.2: the bundle says what it is and where it goes. Read that
@@ -765,105 +852,13 @@ func agentsDirFor(skillsDir string) string {
 // Written to a temp file in the same directory and then renamed, so a reader
 // never sees a half-written agent; the same reason the skill path stages into
 // a temp dir before renaming.
-func installAgent(b *StagedBundle, man skillbundle.BundleManifest, skb []byte, opts InstallOpts) (*InstallResult, error) {
-	entries, err := skillbundle.Unpack(skb, skillbundle.UnpackOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("install: unpack agent %s: %w", b.Name, err)
-	}
-	want := b.Name + ".md"
-	var body []byte
-	extra := 0
-	for _, e := range entries {
-		if e.IsDir || e.Rel == "bundle.json" || e.Rel == "CHECKSUMS" {
-			continue
-		}
-		if e.Rel == want {
-			body = e.Content
-			continue
-		}
-		extra++
-	}
-	if body == nil {
-		return nil, fmt.Errorf("install: agent bundle %s carries no %s; nothing was installed", b.Name, want)
-	}
-	if extra > 0 {
-		// AC-14 on the receiving side. A bundle that admits more than the one
-		// file was not built by this contract, and silently dropping the rest
-		// would hide that.
-		return nil, fmt.Errorf("install: agent bundle %s carries %d file(s) besides %s; "+
-			"nothing was installed", b.Name, extra, want)
-	}
+func installAgent(b *StagedBundle, _ skillbundle.BundleManifest, skb []byte, opts InstallOpts) (*InstallResult, error) {
+	return publishAgentEvidence(b, skb, opts)
+}
 
-	agentsDir := agentsDirFor(opts.SkillsDir)
-	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
-	if err := os.MkdirAll(agentsDir, 0o755); err != nil {
-		return nil, fmt.Errorf("install: mkdir %s: %w", agentsDir, err)
-	}
-	target := filepath.Join(agentsDir, want)
-	_, statErr := os.Stat(target)
-	existed := statErr == nil
-
-	// Downgrade gate, mirroring the skill path (SPEC-0432 §5: an agent gets no
-	// LESS protection than a skill). A replayed old admit item passes every
-	// signature gate legitimately; without this check it would overwrite a
-	// newer agent in place. The provenance sidecar beside the agent carries the
-	// installed version.
-	if !opts.AllowDowngrade {
-		if pre, err := loadProvenance(filepath.Join(agentsDir, ".provenance", b.Name+".json")); err == nil {
-			if semver.Compare(b.Version, pre.Version) < 0 {
-				return nil, fmt.Errorf("install: refusing to downgrade agent %s: have %s, new %s (use --allow-downgrade)", b.Name, pre.Version, b.Version)
-			}
-		}
-	}
-
-	tmp, err := os.CreateTemp(agentsDir, "."+b.Name+"-*.md")
-	if err != nil {
-		return nil, fmt.Errorf("install: mktmp in %s: %w", agentsDir, err)
-	}
-	tmpName := tmp.Name()
-	if _, err := tmp.Write(body); err != nil {
-		_ = tmp.Close()
-		_ = os.Remove(tmpName)
-		return nil, fmt.Errorf("install: write %s: %w", target, err)
-	}
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpName)
-		return nil, fmt.Errorf("install: close %s: %w", target, err)
-	}
-	// #nosec G302 -- Klassenentscheidung: nicht geheimes lokales Artefakt; die Agentendatei muss fuer den Loader lesbar sein.
-	if err := os.Chmod(tmpName, 0o644); err != nil {
-		_ = os.Remove(tmpName)
-		return nil, fmt.Errorf("install: chmod %s: %w", target, err)
-	}
-	if err := os.Rename(tmpName, target); err != nil {
-		_ = os.Remove(tmpName)
-		return nil, fmt.Errorf("install: place %s: %w", target, err)
-	}
-	// An agent is a FILE, so its provenance cannot live inside it the way a
-	// skill's lives inside its directory. It goes to
-	// <agents>/.provenance/<name>.json: a dotted directory, therefore
-	// invisible to the agent loader that globs *.md, and beside the file it
-	// describes rather than far away from it.
-	//
-	// Not optional. Without it an agent would be the ONE artifact on the
-	// machine whose digest cannot be checked after the fact, and SPEC-0432 §5
-	// asks for more care with agents than with skills, not less.
-	provDir := filepath.Join(agentsDir, ".provenance")
-	// #nosec G301 -- Klassenentscheidung: nicht geheimes lokales Artefakt. Die enge Form ist im Baum fuer Geheimnisse besetzt (0600/0700).
-	if err := os.MkdirAll(provDir, 0o755); err != nil {
-		return nil, fmt.Errorf("install: mkdir %s: %w", provDir, err)
-	}
-	provPath := filepath.Join(provDir, b.Name+".json")
-	if err := writeProvenance(provPath, provenanceFor(b, opts)); err != nil {
-		return nil, fmt.Errorf("install: write provenance: %w", err)
-	}
-
-	return &InstallResult{
-		SkillPath:      target,
-		ProvenancePath: provPath,
-		CreatedFresh:   !existed,
-		OverwroteOld:   existed,
-	}, nil
+func agentVersionOlder(version, previous string) bool { return semver.Compare(version, previous) < 0 }
+func errAgentDowngrade(name, previous, version string) error {
+	return fmt.Errorf("install: refusing to downgrade agent %s: have %s, new %s (use --allow-downgrade)", name, previous, version)
 }
 
 // provenanceFor builds the sidecar for one staged bundle. Shared by the skill

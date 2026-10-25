@@ -65,6 +65,9 @@ func TestInstallSnapshotRegistryCacheBinding(t *testing.T) {
 				}
 				b := stagedFor(t, bundleName, "1.0.0", blob)
 				b.Kind = kind
+				if agent {
+					signAgentStagedFixture(t, b)
+				}
 				if changed {
 					if err := os.WriteFile(b.StagedSkbPath, packedInstallSnapshot(t, agent, "substituted unsigned body"), 0o600); err != nil {
 						t.Fatal(err)
@@ -89,7 +92,7 @@ func TestInstallSnapshotRegistryCacheBinding(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				res, err := ConfirmInstall([]*StagedBundle{b}, plan.Token, InstallOpts{SkillsDir: skills})
+				res, err := ConfirmInstall([]*StagedBundle{b}, plan.Token, InstallOpts{NativeTrustRoots: agentFixtureRoots(), SkillsDir: skills})
 				if !changed {
 					if err != nil || len(res) != 1 {
 						t.Fatalf("same pulled bytes failed: %v", err)

@@ -136,7 +136,14 @@
           "TestBoundIdentityReaderPhases",
           "TestBoundIdentityReaderTransport",
           "TestManagedClientBoundary",
-          "TestManagedClientSnapshotAndLifecycle"
+          "TestManagedClientSnapshotAndLifecycle",
+          "TestAgentEvidenceRecordFraming",
+          "TestAgentEvidenceContextSnapshotBounds",
+          "TestAgentEvidencePlatformPublication",
+          "TestAgentEvidenceProcessLock",
+          "TestAgentRetainedProofSameBytesAndContext",
+          "TestAgentRetainedProofIdentityAndBounds",
+          "TestAgentRetainedProofPublicationFailures"
         ],
         "./pkg/httpsafe": [
           "TestGETBoundaryContract"
@@ -276,7 +283,8 @@
           "TestInstallInstalledSkillDependenciesRevokedActualCLI",
           "TestInstallRetainedRootSnapshotActualCLI",
           "TestInstallRegistryIdentityActualCLI",
-          "TestInstallManagedTransportActualCLI"
+          "TestInstallManagedTransportActualCLI",
+          "TestPullInstallAgentRetainedProofActualCLI"
         ],
         "./pkg/skillctl/verify": [
           "TestSnapshotSameBytesScopes",
@@ -289,7 +297,14 @@
           "TestBoundIdentityReaderPhases",
           "TestBoundIdentityReaderTransport",
           "TestManagedClientBoundary",
-          "TestManagedClientSnapshotAndLifecycle"
+          "TestManagedClientSnapshotAndLifecycle",
+          "TestAgentEvidenceRecordFraming",
+          "TestAgentEvidenceContextSnapshotBounds",
+          "TestAgentEvidencePlatformPublication",
+          "TestAgentEvidenceProcessLock",
+          "TestAgentRetainedProofSameBytesAndContext",
+          "TestAgentRetainedProofIdentityAndBounds",
+          "TestAgentRetainedProofPublicationFailures"
         ],
         "./pkg/httpsafe": [
           "TestGETBoundaryContract"
