@@ -203,7 +203,16 @@ func runInstall(args []string, stdout, stderr io.Writer) (code int) {
 
 	// Build a registry HTTP client targeting the matched trust root.
 	httpClient := install.HTTPClientOf(*timeout)
-	c := newRegistryClient(root.RegistryURL, httpClient)
+	var c *registry.Client
+	if policy != nil && root.IdentityKeysAuthorized == "from-registry" {
+		c, err = newManagedRegistryClient(root.RegistryURL, httpClient)
+		if err != nil {
+			fmt.Fprintln(stderr, "install: registry credential assignment requires a matching approved origin")
+			return 12
+		}
+	} else {
+		c = newRegistryClient(root.RegistryURL, httpClient)
+	}
 
 	// Audit poster targets the same registry. The CLI does NOT carry a
 	// separate audit URL: keeping the configuration surface narrow.

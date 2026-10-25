@@ -115,7 +115,10 @@
           "TestInstalledSkillSourceRejectsAmbiguousOrForeignEvidence",
           "TestRetainedRootLocalSnapshot",
           "TestRetainedRootHTTPStagingSnapshot",
-          "TestRetainedRootManifestAndAdoption"
+          "TestRetainedRootManifestAndAdoption",
+          "TestProjectRegistryIdentitySnapshot",
+          "TestProjectRegistryIdentityFinalRecheck",
+          "TestRegistryIdentityGovernancePolicy"
         ],
         "./pkg/skillctl/verify": [
           "TestSnapshotSameBytesScopes",
@@ -125,6 +128,11 @@
         ],
         "./pkg/skillbundle": [
           "TestUnpackInflatedBudget"
+        ],
+        "./pkg/skillctl/registry": [
+          "TestBoundIdentityReaderResponses",
+          "TestBoundIdentityReaderPhases",
+          "TestBoundIdentityReaderTransport"
         ]
       }
     },
@@ -241,7 +249,10 @@
           "TestInstalledSkillSourceRejectsAmbiguousOrForeignEvidence",
           "TestRetainedRootLocalSnapshot",
           "TestRetainedRootHTTPStagingSnapshot",
-          "TestRetainedRootManifestAndAdoption"
+          "TestRetainedRootManifestAndAdoption",
+          "TestProjectRegistryIdentitySnapshot",
+          "TestProjectRegistryIdentityFinalRecheck",
+          "TestRegistryIdentityGovernancePolicy"
         ],
         "./cmd/skillctl": [
           "TestInstallEnterpriseProfileActualCLI",
@@ -253,13 +264,19 @@
           "TestInstallInstalledSkillDependenciesActualCLI",
           "TestInstallInstalledSkillDependenciesTamperActualCLI",
           "TestInstallInstalledSkillDependenciesRevokedActualCLI",
-          "TestInstallRetainedRootSnapshotActualCLI"
+          "TestInstallRetainedRootSnapshotActualCLI",
+          "TestInstallRegistryIdentityActualCLI"
         ],
         "./pkg/skillctl/verify": [
           "TestSnapshotSameBytesScopes",
           "TestSnapshotRejectsPathReopen",
           "TestSnapshotBoundedInputs",
           "TestSnapshotExistingVerifyParity"
+        ],
+        "./pkg/skillctl/registry": [
+          "TestBoundIdentityReaderResponses",
+          "TestBoundIdentityReaderPhases",
+          "TestBoundIdentityReaderTransport"
         ]
       }
     },
