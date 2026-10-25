@@ -74,7 +74,7 @@ Grouped by domain:
 ## F. skillctl trust subsystem (`pkg/skillctl/*` + siblings)
 
 The offline-verifiable skill **trust plane**: the library behind the
-[`skillctl`](program-index.md) CLI. 53 subpackages under `pkg/skillctl/`, plus the
+[`skillctl`](program-index.md) CLI. 54 subpackages under `pkg/skillctl/`, plus the
 sibling top-level packages at the end of this section, grouped by role. The list
 and the number are both gated by `scripts/check-index.sh`: it diffs `pkg/**` and
 `internal/**` against this file in both directions AND re-counts the directories,
@@ -107,6 +107,7 @@ It runs in `scripts/check-docs.sh` and in the `docs-gate` job of `ci.yml`,
 | Package | Responsibility |
 |---------|----------------|
 | `skillctl/install` | SPEC-0188 §7 client install pipeline. |
+| `skillctl/dependencies` | Runtime dependency resolver with explicitly selected local profiles and consumer-authenticated artifact inputs; no provisioning or automatic CLI enforcement. |
 | `skillctl/importer` | Talks to the aims-core skill-profile API. |
 | `skillctl/registry` | HTTP client for the aims-core skill registry. |
 | `skillctl/awareness` | SPEC-0195 admission bridge. |

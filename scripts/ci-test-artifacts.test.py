@@ -44,6 +44,7 @@ class ArtifactContracts(unittest.TestCase):
             if lane["kind"] == "go":
                 expected = lane.get("mandatory") or [s[:-4] + "/fixture" if s.endswith("/...") else s.rstrip("/")
                                                        for s in lane["selectors"]]
+                expected = sorted(set(expected) | set(lane.get("required_tests", {})))
                 packages = [GATE.MODULE + p[1:] for p in expected]
                 rows = []
                 for package in packages:
@@ -244,6 +245,66 @@ class ArtifactContracts(unittest.TestCase):
         self.paths["release-tools"][0].unlink()
         bad = subprocess.run(args, env=env, capture_output=True, text=True)
         self.assertEqual(bad.returncode, 1, bad.stdout + bad.stderr)
+
+    def test_dependency_python_required_in_both_mac_lanes_actual_cli(self):
+        env = dict(os.environ, TEST_PRODUCER_RESULTS=json.dumps(self.needs))
+        args = [sys.executable, str(ROOT / "scripts/ci-test-artifacts.py"), str(self.root),
+                "--commit", self.context["commit"], "--run-id", "123", "--attempt", "2"]
+        good = subprocess.run(args, env=env, capture_output=True, text=True)
+        self.assertEqual(good.returncode, 0, good.stderr)
+        for lane in ("unit", "security"):
+            raw, metadata = self.paths[lane]
+            original_raw, original_metadata = raw.read_bytes(), metadata.read_bytes()
+            for action in ("skip", "missing"):
+                with self.subTest(lane=lane, action=action):
+                    rows = [json.loads(line) for line in original_raw.splitlines()]
+                    if action == "missing":
+                        rows = [r for r in rows if r.get("Test") != "TestPythonRuntimeFixture"]
+                    else:
+                        next(r for r in rows if r.get("Test") == "TestPythonRuntimeFixture" and r["Action"] == "pass")["Action"] = "skip"
+                    raw.write_text("".join(json.dumps(r) + "\n" for r in rows))
+                    meta = json.loads(original_metadata)
+                    meta["result_sha256"] = hashlib.sha256(raw.read_bytes()).hexdigest()
+                    meta["test_terminal_counts"] = {
+                        status: sum(r["Action"] == status and "Test" in r for r in rows)
+                        for status in ("pass", "skip", "fail")
+                    }
+                    metadata.write_text(json.dumps(meta))
+                    bad = subprocess.run(args, env=env, capture_output=True, text=True)
+                    self.assertEqual(bad.returncode, 1, bad.stdout + bad.stderr)
+                    self.assertIn("mandatory Go scenario", bad.stderr)
+                    raw.write_bytes(original_raw)
+                    metadata.write_bytes(original_metadata)
+
+    def test_dependency_graph_budget_required_in_both_mac_lanes_actual_cli(self):
+        env = dict(os.environ, TEST_PRODUCER_RESULTS=json.dumps(self.needs))
+        args = [sys.executable, str(ROOT / "scripts/ci-test-artifacts.py"), str(self.root),
+                "--commit", self.context["commit"], "--run-id", "123", "--attempt", "2"]
+        good = subprocess.run(args, env=env, capture_output=True, text=True)
+        self.assertEqual(good.returncode, 0, good.stderr)
+        for lane in ("unit", "security"):
+            raw, metadata = self.paths[lane]
+            original_raw, original_metadata = raw.read_bytes(), metadata.read_bytes()
+            for action in ("skip", "missing"):
+                with self.subTest(lane=lane, action=action):
+                    rows = [json.loads(line) for line in original_raw.splitlines()]
+                    if action == "missing":
+                        rows = [r for r in rows if r.get("Test") != "TestGraphAggregateBudget"]
+                    else:
+                        next(r for r in rows if r.get("Test") == "TestGraphAggregateBudget" and r["Action"] == "pass")["Action"] = "skip"
+                    raw.write_text("".join(json.dumps(r) + "\n" for r in rows))
+                    meta = json.loads(original_metadata)
+                    meta["result_sha256"] = hashlib.sha256(raw.read_bytes()).hexdigest()
+                    meta["test_terminal_counts"] = {
+                        status: sum(r["Action"] == status and "Test" in r for r in rows)
+                        for status in ("pass", "skip", "fail")
+                    }
+                    metadata.write_text(json.dumps(meta))
+                    bad = subprocess.run(args, env=env, capture_output=True, text=True)
+                    self.assertEqual(bad.returncode, 1, bad.stdout + bad.stderr)
+                    self.assertIn("mandatory Go scenario", bad.stderr)
+                    raw.write_bytes(original_raw)
+                    metadata.write_bytes(original_metadata)
 
     def test_consumer_is_in_required_always_job(self):
         data = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())

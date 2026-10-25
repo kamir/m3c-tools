@@ -18,7 +18,7 @@ import sys
 
 
 VERIFY = "github.com/kamir/m3c-tools/pkg/skillctl/verify"
-# Fixed portable cases from verify_test.go and errors_test.go. No generated names.
+# Fixed portable verifier and runtime-resolver identities. No generated names.
 REQUIRED = {
     (VERIFY, name) for name in (
         "TestVerify_HappyPath",
@@ -36,6 +36,27 @@ REQUIRED = {
         "TestExitCode_Sentinels/identity_mismatch",
     )
 }
+DEPENDENCIES = "github.com/kamir/m3c-tools/pkg/skillctl/dependencies"
+DEPENDENCY_CASES = (
+    'TestReleaseConstraints',
+    'TestProfileStrict',
+    'TestGraphAndLock',
+    'TestGraphDenials',
+    'TestSelectedSystemRuntime',
+    'TestProbeLimitsAndCancellation',
+    'TestProfileSnapshotAndCaps',
+    'TestCatalogVersionBacktracking',
+    'TestProfileByteBoundary',
+    'TestPythonRuntimeFixture',
+    'TestPythonCanonicalDeclarationIdentity',
+    'TestTypedProfilePreMarshalBounds',
+    'TestSiteTreeContract',
+    'TestRuntimeReportWireField',
+    'TestSiteTreeGoldenAndBounds',
+    'TestWindowsVenvSiteClassification',
+    'TestGraphAggregateBudget',
+)
+REQUIRED.update({(DEPENDENCIES, name) for name in DEPENDENCY_CASES})
 JOBS = {"linux": "drift-guard", "windows": "windows-trust"}
 # These are classifications outside REQUIRED, never waivers for required cases.
 CLASSIFIED_PARENTS = {

@@ -73,6 +73,11 @@ override:
   - { path: '^pkg/skillctl/delta$',        threshold: 82 } # measured 82.8
   - { path: '^pkg/skillctl/datascope$',    threshold: 82 } # measured 82.5
   - { path: '^pkg/skillctl/artifactauth$', threshold: 82 } # measured 82.1
+  # Runtime resolver: measured 83.6% (576/689 Go statements) with go1.26.10,
+  # -covermode=atomic on darwin/arm64, explicit Python3.14.7/packaging26.3.
+  # Seed floor(actual - 0.5) like the host-dependent packages below. Actual
+  # pinned hosted Python3.12.14 execution remains pending at introduction.
+  - { path: '^pkg/skillctl/dependencies$', threshold: 83 } # measured 83.6
   - { path: '^pkg/skillctl/backend/git$',  threshold: 80 } # measured 80.7
   - { path: '^pkg/skillctl/signing$',      threshold: 80 } # measured 80.4
   - { path: '^pkg/skillctl/device$',       threshold: 79 } # measured 79.6

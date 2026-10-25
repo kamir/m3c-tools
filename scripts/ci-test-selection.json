@@ -55,7 +55,28 @@
       ],
       "race": true,
       "step_if": "steps.classify.outputs.code == 'true'",
-      "goos": "darwin"
+      "goos": "darwin",
+      "required_tests": {
+        "./pkg/skillctl/dependencies": [
+          "TestReleaseConstraints",
+          "TestProfileStrict",
+          "TestGraphAndLock",
+          "TestGraphDenials",
+          "TestSelectedSystemRuntime",
+          "TestProbeLimitsAndCancellation",
+          "TestProfileSnapshotAndCaps",
+          "TestCatalogVersionBacktracking",
+          "TestProfileByteBoundary",
+          "TestPythonRuntimeFixture",
+          "TestPythonCanonicalDeclarationIdentity",
+          "TestTypedProfilePreMarshalBounds",
+          "TestSiteTreeContract",
+          "TestRuntimeReportWireField",
+          "TestSiteTreeGoldenAndBounds",
+          "TestWindowsVenvSiteClassification",
+          "TestGraphAggregateBudget"
+        ]
+      }
     },
     "release-tools": {
       "kind": "go",
@@ -110,7 +131,28 @@
       ],
       "race": true,
       "step_if": "steps.classify.outputs.code == 'true'",
-      "goos": "darwin"
+      "goos": "darwin",
+      "required_tests": {
+        "./pkg/skillctl/dependencies": [
+          "TestReleaseConstraints",
+          "TestProfileStrict",
+          "TestGraphAndLock",
+          "TestGraphDenials",
+          "TestSelectedSystemRuntime",
+          "TestProbeLimitsAndCancellation",
+          "TestProfileSnapshotAndCaps",
+          "TestCatalogVersionBacktracking",
+          "TestProfileByteBoundary",
+          "TestPythonRuntimeFixture",
+          "TestPythonCanonicalDeclarationIdentity",
+          "TestTypedProfilePreMarshalBounds",
+          "TestSiteTreeContract",
+          "TestRuntimeReportWireField",
+          "TestSiteTreeGoldenAndBounds",
+          "TestWindowsVenvSiteClassification",
+          "TestGraphAggregateBudget"
+        ]
+      }
     },
     "docaudit": {
       "kind": "go",
@@ -249,6 +291,12 @@
       "workflow": "ci.yml",
       "job": "python-gate",
       "command": "python3 scripts/skill-usage-hook.test.py"
+    },
+    {
+      "file": "scripts/setup-dependency-python.test.py",
+      "job": "python-gate",
+      "command": "python3 scripts/setup-dependency-python.test.py",
+      "workflow": "ci.yml"
     }
   ],
   "exceptions": [

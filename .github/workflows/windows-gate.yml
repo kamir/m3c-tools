@@ -143,6 +143,16 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        id: dependency-python
+        with:
+          python-version: "3.12.14"
+
+      - name: Provision dependency fixture Python
+        run: |
+          & "${{ steps.dependency-python.outputs.python-path }}" scripts/setup-dependency-python.py --directory "${{ runner.temp }}/dependency-python"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: go vet (Windows)
         run: go vet ./...
 
@@ -212,6 +222,15 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        id: dependency-python
+        with:
+          python-version: "3.12.14"
+
+      - name: Provision dependency fixture Python
+        run: |
+          "${{ steps.dependency-python.outputs.python-path }}" scripts/setup-dependency-python.py --directory "${{ runner.temp }}/dependency-python"
 
       # (1) No -run allow-list may exist inside the windows-trust job.
       #     We isolate the windows-trust job block, drop comment lines (so the
