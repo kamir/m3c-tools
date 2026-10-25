@@ -153,9 +153,13 @@ func newIdentReal(t *testing.T) *Ident {
 // ---------------------------------------------------------------------------
 
 func TestOpen_AgainstFakeER1(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("ER1_DEVICE_TOKEN_ORIGIN", "")
 	var gotUploadTags string
 	var searchHits int
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.HasPrefix(r.URL.Path, "/memory/") && strings.Contains(r.URL.Path, "/search"):
 			searchHits++
@@ -186,6 +190,7 @@ func TestOpen_AgainstFakeER1(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("ER1_API_KEY", "test-key-1234567890")
+	t.Setenv("ER1_API_KEY_ORIGIN", srv.URL)
 	t.Setenv("ER1_DEVICE_TOKEN", "")
 	t.Setenv("M3C_DEVICES_DIR", filepath.Join(dir, "no-such")) // skip device lookup
 	t.Setenv("CLAUDE_SESSION_ID", "")
@@ -207,7 +212,7 @@ func TestOpen_AgainstFakeER1(t *testing.T) {
 	}
 
 	// idempotency: now make search return the existing doc → Open is a no-op
-	srv2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv2 := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "/search") {
 			_ = json.NewEncoder(w).Encode(map[string]any{"items": []any{map[string]any{"doc_id": "DOC_EXISTING"}}})
 			return
@@ -216,6 +221,7 @@ func TestOpen_AgainstFakeER1(t *testing.T) {
 		http.NotFound(w, r)
 	}))
 	defer srv2.Close()
+	t.Setenv("ER1_API_KEY_ORIGIN", srv2.URL)
 	desc2 := strings.Replace(desc, srv.URL, srv2.URL, 1)
 	_ = os.WriteFile(filepath.Join(dir, ".m3c", "project.yaml"), []byte(desc2), 0o644)
 	r2, err := Open(OpenOpts{WorkingDir: dir, SessionID: "sess-abc-1"})

@@ -2447,6 +2447,42 @@ Speichert die Arbeitssitzung als ER1-Eintrag und hängt Prüfpunkte an; die Sitz
 kann auf jeder Maschine fortgesetzt werden. Alle Befehle teilen einen Flag-Satz,
 wobei pro Befehl nur ein Teil gilt.
 
+Session-Operationen validieren das endgültige HTTPS-Ziel nach CLI-/Descriptor-
+Overrides. Setzen Sie die unabhängig bekannte `ER1_DEVICE_TOKEN_ORIGIN` für
+Bearer oder `ER1_API_KEY_ORIGIN` für einen API-Key. Ein gesetzter Pin wählt diese
+Familie; alle gesetzten Pins müssen passen, bevor eine Quelle gelesen wird.
+Ohne Pin wird kein Credential gelesen. Ungültige gewählte Werte lösen keinen
+Fallback zwischen Familien aus. Ein nichtleerer externer Wert gewinnt innerhalb
+seiner Familie; sonst nutzt Bearer den N2B-gebundenen nativen DeviceToken und
+API-Key den bestehenden macOS-Keychain-Eintrag. Andere Plattformen benötigen
+einen externen API-Key, wenn diese Familie gewählt wird. Dies ist weder ein
+plattformübergreifender API-Key-Vault noch ein authentifizierter Aussteller-/
+Mandantennachweis.
+
+Ein privater Client hält Credentials und Ziel für alle GETs und Uploads der
+Operation fest. GET kann beide unabhängig gebundenen Header senden; Upload
+bevorzugt Bearer. Spätere Umgebungsänderungen ersetzen sie nicht. Redirects
+tragen weder Credentials noch Anfragekörper über Origin-Grenzen und erlauben
+kein HTTPS-Downgrade; ein bereinigter GET ohne Credentials kann dennoch einem
+Redirect folgen. Fehlgeschlagene Lookups stoppen open/checkpoint vor jedem
+Upload. Null, skalare Zeilen und unbekannte Suchantwortformen sind Fehler,
+keine bestätigten leeren Trefferlisten. HTTP- und Parse-Diagnosen enthalten keine Antwortkörper; wörtlich
+bekannte Credentials werden nach regulärem JSON-Decodieren erfolgreicher
+Antworten abgewiesen. Dies erkennt
+keine beliebigen Kodierungen.
+
+Kontextpriorität: `--er1-context`, Descriptor `er1.context`, dann `main`.
+Derselbe Wert gilt im Session-Dokument, GET und Multipart-Upload;
+`ER1_CONTEXT_ID` überschreibt ihn nicht mehr. Ein erfolgreicher Upload muss eine nichtleere Dokument-ID ohne Kontrollzeichen
+bestätigen. Eine fehlende Bestätigung ist ein Fehler, auch wenn der Server POST
+bereits empfangen hat; sie beweist keinen Rollback. Prüfen Sie den entfernten
+Zustand vor einer Wiederholung. Dies behebt die bisherige
+Abweichung zwischen Descriptor-/CLI-Metadaten und Transportkontext. Groß- und
+Kleinschreibung sowie Präfixe des URL-Pfads bleiben erhalten. Bestehende Einträge
+ohne Login-Origin-Bindung verlangen eine erneute Anmeldung. Andere ER1-
+Befehlsfamilien bleiben getrennte Prüfbereiche.
+
+
 | Befehl | Zweck |
 |------|---------|
 | `open` | Sitzungszustandseintrag für diese Sitzung idempotent erstellen. |
@@ -2712,7 +2748,7 @@ Das globale Token-Autoload ist in beiden Programmen deaktiviert. Sync verwendet
 einen gespeicherten Token erst nach Abgleich des endgültigen Endpunkts mit
 `ER1_DEVICE_TOKEN_ORIGIN` und anschließender Prüfung der gespeicherten Bindung.
 Alte Einträge ohne Bindung, unbekannte Versionen und abweichende Origins verlangen
-eine erneute Anmeldung, ohne automatische Neuzuordnung. Bisherige ER1-
+eine erneute Anmeldung, ohne automatische Neuzuordnung. Andere bisherige ER1-
 Befehlsfamilien benötigen explizite externe Credentials, bis ihre Anfragekontexte
 gebundene Speicherzugriffe unterstützen. Deren bisheriges Verhalten mit externen
 Tokens ist keine allgemeine Garantie für Origin-Isolation. Separat gebundene
@@ -3296,8 +3332,10 @@ warum ein Schreib-Token dem Projekt statt einer Person gehört, beschreibt die
 | `.m3c/project.yaml` | PLM-Projektdeskriptor nach SPEC-0214, aufgelöst von `project`, `publish` und `session`. |
 | `~/.config/m3c/skill-registry-self.key` | Standard-Signierschlüssel der Registry `self` für `publish` / `pull`; alternativ `$SIGNING_KEY_LOCATION`. |
 
-ER1-Zugangsdaten für Registry-Befehle werden nach ADR-0003 über
-Keychain → Secret Manager → Umgebung aufgelöst, jeweils nach ER1-Ziel.
+ER1-Zugangsdaten werden je Befehlsfamilie aufgelöst. Session verwendet die oben
+beschriebenen unabhängigen Pins und gebundenen Snapshots; andere Registry-
+Befehle besitzen weiterhin gesonderte Legacy-Pfade. Es gibt keine gemeinsame
+zugesicherte Keychain-/Secret-Manager-/Umgebungskette für alle Befehle.
 
 ---
 

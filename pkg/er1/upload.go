@@ -2,6 +2,7 @@ package er1
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
@@ -53,7 +54,16 @@ type UploadResponse struct {
 // Upload sends a multipart upload to the ER1 server.
 // Authenticates via device token (Bearer, preferred) or API key (X-API-KEY, fallback).
 func Upload(cfg *Config, payload *UploadPayload) (*UploadResponse, error) {
-	hasToken := os.Getenv("ER1_DEVICE_TOKEN") != ""
+	return uploadWithContext(context.Background(), cfg, payload)
+}
+
+func uploadWithContext(ctx context.Context, cfg *Config, payload *UploadPayload) (*UploadResponse, error) {
+	hasToken := false
+	if cfg.boundAuth != nil {
+		hasToken = cfg.boundAuth.bearer != ""
+	} else {
+		hasToken = os.Getenv("ER1_DEVICE_TOKEN") != ""
+	}
 	if cfg.APIKey == "" && !hasToken {
 		return nil, fmt.Errorf("no authentication configured: log in with 'Sign In' or set ER1_API_KEY. " +
 			"Run 'm3c-tools setup' to configure")
@@ -129,7 +139,7 @@ func Upload(cfg *Config, payload *UploadPayload) (*UploadResponse, error) {
 	_ = writer.Close()
 
 	// Build request
-	req, err := http.NewRequest("POST", cfg.APIURL, &body)
+	req, err := http.NewRequestWithContext(ctx, "POST", cfg.APIURL, &body)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -155,22 +165,46 @@ func Upload(cfg *Config, payload *UploadPayload) (*UploadResponse, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
+		if cfg.boundAuth != nil {
+			return nil, boundRequestError(ctx)
+		}
 		return nil, fmt.Errorf("upload request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
+	responseLimit := int64(10 << 20)
+	if cfg.boundAuth != nil {
+		responseLimit++
+	}
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, responseLimit))
 	if err != nil {
+		if cfg.boundAuth != nil {
+			return nil, boundRequestError(ctx)
+		}
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
 	if resp.StatusCode != 200 {
+		if cfg.boundAuth != nil {
+			return nil, fmt.Errorf("ER1 upload failed (status %d)", resp.StatusCode)
+		}
 		return nil, fmt.Errorf("ER1 upload failed (status %d): %s",
 			resp.StatusCode, truncate(string(respBody), 200))
 	}
 
+	if cfg.boundAuth != nil {
+		if len(respBody) > 10<<20 {
+			return nil, errBoundResponse
+		}
+		if _, err := cfg.boundAuth.decodeJSON(respBody); err != nil {
+			return nil, err
+		}
+	}
 	var result UploadResponse
 	if err := json.Unmarshal(respBody, &result); err != nil {
+		if cfg.boundAuth != nil {
+			return nil, errBoundResponse
+		}
 		return nil, fmt.Errorf("parse response: %w", err)
 	}
 	return &result, nil

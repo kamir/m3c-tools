@@ -335,7 +335,40 @@ New device logins save the selected HTTPS origin as local client provenance.
 Sync checks its independent `ER1_DEVICE_TOKEN_ORIGIN` pin before reading storage,
 then validates the saved record. Legacy or mismatched records require a fresh
 login. No automatic global Bearer export occurs at startup or after login.
-Legacy command families require explicit external credentials until their own
+Other legacy command families require explicit external credentials until their own
 bound request integration is complete. This is not authenticated issuer/tenant
 verification. `m3c-tools token --print` requires a matching HTTPS `ER1_API_URL`,
 independent pin and saved binding; status and logout remain management operations.
+
+## Bound ER1 sessions
+
+Session operations validate the final HTTPS target after CLI/descriptor overrides.
+Set the independently known `ER1_DEVICE_TOKEN_ORIGIN` for Bearer authentication,
+or `ER1_API_KEY_ORIGIN` for an API key. A configured pin selects that family;
+all configured pins must match before either source is read. Without a pin no
+credential is read. Invalid selected values do not fall back across families.
+A nonempty external value wins within its family; otherwise Bearer uses the
+N2B-bound native DeviceToken, and API key uses the existing macOS Keychain item.
+Other platforms require an external API key when that family is selected.
+This is not a cross-platform API-key vault or authenticated issuer/tenant proof.
+
+One private client snapshots credentials and target for every GET and upload in
+the operation. GET may send both independently bound headers; upload prefers the
+Bearer. Later environment changes cannot replace them. Redirects do not carry
+credentials or request bodies across origins and cannot downgrade HTTPS; a
+sanitized GET may still follow a redirect without credentials. Failed lookups
+stop open/checkpoint before any upload. Null, scalar rows and unrecognized
+search response shapes are errors, not confirmed empty results. HTTP and parse diagnostics omit response
+bodies and reject known-credential reflection after normal JSON decoding in
+successful responses;
+this is not detection of arbitrary encodings.
+
+Context precedence is `--er1-context`, descriptor `er1.context`, then `main`.
+The same value is used in the session document, GET and multipart upload;
+`ER1_CONTEXT_ID` no longer overrides it. A successful upload must return a nonempty document ID without control characters.
+A missing acknowledgement is an error even if the server already received POST;
+it does not prove rollback. Reconcile remote state before retrying.
+This fixes the former discrepancy
+between descriptor/CLI metadata and the transport context. URL path case and
+prefixes are preserved. Existing saved records without login-origin binding
+require a fresh login. Other ER1 command families remain separately scoped.

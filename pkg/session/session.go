@@ -10,11 +10,8 @@
 package session
 
 import (
-	"crypto/tls"
-	"encoding/json"
+	"context"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
@@ -22,10 +19,10 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/kamir/m3c-tools/pkg/er1"
-	"github.com/kamir/m3c-tools/pkg/httpsafe"
 	"github.com/kamir/m3c-tools/pkg/m3cproject"
 )
 
@@ -222,106 +219,84 @@ func ER1Endpoint(target string) (baseURL string, verifySSL bool) {
 	return er1.ResolveTarget(target)
 }
 
-// er1Config builds a pkg/er1.Config pointed at the session's ER1 target.
-func (id *Ident) er1Config() (*er1.Config, error) {
-	base, verify := ER1Endpoint(id.ER1Target)
-	cfg := er1.LoadConfig()
-	cfg.APIURL = base + "/upload_2"
-	cfg.VerifySSL = verify
-	if cfg.APIKey == "" && os.Getenv("ER1_DEVICE_TOKEN") == "" {
-		return nil, fmt.Errorf("no ER1 credential: set ER1_API_KEY or add the `aims-core-er1` Keychain item (ADR-0003)")
+// er1Client freezes the resolved target, context and selected authentication
+// once per operation. It never invokes the legacy configuration loader.
+func (id *Ident) er1Client() (*er1.BoundClient, error) {
+	base, verify, err := er1.ResolveBoundTarget(id.ER1Target)
+	if err != nil {
+		return nil, err
 	}
-	return cfg, nil
+	return er1.NewBoundClient(er1.BoundOptions{BaseURL: base, ContextID: id.ER1Context, VerifySSL: verify,
+		BearerOrigin: os.Getenv("ER1_DEVICE_TOKEN_ORIGIN"), APIKeyOrigin: os.Getenv("ER1_API_KEY_ORIGIN")})
 }
 
-// uploadItem POSTs a text item to /upload_2 with the given tags; returns its doc_id.
-func uploadItem(cfg *er1.Config, body, filename, tags, contentType string) (string, error) {
-	resp, err := er1.Upload(cfg, &er1.UploadPayload{
-		TranscriptData:     []byte(body),
-		TranscriptFilename: filename,
-		Tags:               tags,
-		ContentType:        contentType,
-	})
+func uploadItem(client *er1.BoundClient, body, filename, tags, contentType string) (string, error) {
+	resp, err := client.Upload(context.Background(), &er1.UploadPayload{TranscriptData: []byte(body), TranscriptFilename: filename, Tags: tags, ContentType: contentType})
 	if err != nil {
 		return "", err
+	}
+	if resp == nil || !validSessionDocID(resp.DocID) {
+		return "", fmt.Errorf("ER1 session upload response has no valid document id")
 	}
 	return resp.DocID, nil
 }
 
-// httpGetJSON does a best-effort GET against the ER1 base URL + path, returning
-// the decoded JSON (as a generic value) or an error.
-func httpGetJSON(target, path string) (any, error) {
-	base, verify := ER1Endpoint(target)
-	apiKey := er1.LoadConfig().APIKey
-	client := &http.Client{Timeout: 15 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect} // SEC F25
-	if !verify {
-		// #nosec G402 -- gegated: verify stammt aus sessionVerifyTLS, das ein
-		// Ueberspringen nur fuer einen GEPARSTEN Loopback-Host zulaesst und fuer
-		// jeden anderen fail-closed auf true zwingt (BUG-0444, SEC-M7, gleiche
-		// Regel wie pkg/er1.applyTLSVerificationPolicy). Festgehalten von
-		// TestER1Endpoint_LoopbackWacheParstDenHost.
-		client.Transport = &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
-	}
-	req, err := http.NewRequest("GET", base+path, nil)
-	if err != nil {
-		return nil, err
-	}
-	if apiKey != "" {
-		req.Header.Set("X-API-KEY", apiKey)
-	}
-	if tok := os.Getenv("ER1_DEVICE_TOKEN"); tok != "" {
-		req.Header.Set("Authorization", "Bearer "+tok)
-	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	b, _ := io.ReadAll(io.LimitReader(resp.Body, 10<<20))
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("GET %s -> HTTP %d", path, resp.StatusCode)
-	}
-	var v any
-	if err := json.Unmarshal(b, &v); err != nil {
-		return nil, fmt.Errorf("decode %s: %w", path, err)
-	}
-	return v, nil
+func validSessionDocID(value string) bool {
+	return strings.TrimSpace(value) != "" && !strings.ContainsFunc(value, unicode.IsControl)
 }
 
 // searchByTags queries ER1 for items carrying ALL of tags. Best-effort: returns
 // a list of item maps (whatever shape the server gives) or an error.
-func searchByTags(ctxID, target string, tags []string) ([]map[string]any, error) {
+func searchByTags(client *er1.BoundClient, ctxID string, tags []string) ([]map[string]any, error) {
 	q := url.Values{}
 	q.Set("tags", strings.Join(tags, ","))
-	v, err := httpGetJSON(target, "/memory/"+url.PathEscape(ctxID)+"/search?"+q.Encode())
+	v, err := client.HTTPGetJSON(context.Background(), "/memory/"+url.PathEscape(ctxID)+"/search?"+q.Encode())
 	if err != nil {
 		return nil, err
 	}
-	return coerceItems(v), nil
+	return coerceItems(v)
 }
 
-func coerceItems(v any) []map[string]any {
-	switch x := v.(type) {
+// coerceItems accepts only confirmed search envelopes or identifiable records.
+// A successful HTTP status with an unknown shape is not a verified empty result.
+func coerceItems(v any) ([]map[string]any, error) {
+	invalid := fmt.Errorf("ER1 session search response is invalid")
+	var rows []any
+	switch value := v.(type) {
 	case []any:
-		return toMapList(x)
+		rows = value
 	case map[string]any:
+		found := false
 		for _, key := range []string{"items", "results", "memories", "docs"} {
-			if inner, ok := x[key].([]any); ok {
-				return toMapList(inner)
+			inner, exists := value[key]
+			if !exists {
+				continue
+			}
+			if found {
+				return nil, invalid
+			}
+			found = true
+			var ok bool
+			rows, ok = inner.([]any)
+			if !ok {
+				return nil, invalid
 			}
 		}
-		return []map[string]any{x}
-	}
-	return nil
-}
-func toMapList(xs []any) []map[string]any {
-	out := make([]map[string]any, 0, len(xs))
-	for _, e := range xs {
-		if m, ok := e.(map[string]any); ok {
-			out = append(out, m)
+		if !found {
+			rows = []any{value}
 		}
+	default:
+		return nil, invalid
 	}
-	return out
+	items := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		item, ok := row.(map[string]any)
+		if !ok || !validSessionDocID(stringField(item, "doc_id", "id")) {
+			return nil, invalid
+		}
+		items = append(items, item)
+	}
+	return items, nil
 }
 
 // ---------------------------------------------------------------------------
@@ -459,12 +434,16 @@ func Open(o OpenOpts) (*OpenResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	cfg, err := id.er1Config()
+	client, err := id.er1Client()
 	if err != nil {
 		return nil, err
 	}
 	// idempotency: already an open item for this session?
-	if existing, _ := searchByTags(cfg.ContextID, id.ER1Target, []string{"claude-code.session", "session:" + id.SessionID}); len(existing) > 0 {
+	existing, err := searchByTags(client, id.ER1Context, []string{"claude-code.session", "session:" + id.SessionID})
+	if err != nil {
+		return nil, err
+	}
+	if len(existing) > 0 {
 		if doc := firstDocID(existing); doc != "" {
 			return &OpenResult{DocID: doc, AlreadyExists: true, Ident: id}, nil
 		}
@@ -474,7 +453,7 @@ func Open(o OpenOpts) (*OpenResult, error) {
 		return nil, fmt.Errorf("refusing to write session-state item, secret-shaped content: %v", hits)
 	}
 	tags := id.SessionStateTags(o.ContinuesFrom)
-	doc, err := uploadItem(cfg, body, "session-"+id.SessionID+".md", strings.Join(tags, ","), "text-note")
+	doc, err := uploadItem(client, body, "session-"+id.SessionID+".md", strings.Join(tags, ","), "text-note")
 	if err != nil {
 		return nil, err
 	}
@@ -512,11 +491,14 @@ func Checkpoint(o CheckpointOpts) (*CheckpointResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	cfg, err := id.er1Config()
+	client, err := id.er1Client()
 	if err != nil {
 		return nil, err
 	}
-	existing, _ := searchByTags(cfg.ContextID, id.ER1Target, []string{"claude-code.session", "session:" + id.SessionID})
+	existing, err := searchByTags(client, id.ER1Context, []string{"claude-code.session", "session:" + id.SessionID})
+	if err != nil {
+		return nil, err
+	}
 	sessionDoc := firstDocID(existing)
 	if sessionDoc == "" {
 		return nil, fmt.Errorf("no open session-state item for session:%s: run `skillctl session open` first", id.SessionID)
@@ -538,8 +520,8 @@ func Checkpoint(o CheckpointOpts) (*CheckpointResult, error) {
 	if hits := scanSecrets(body); len(hits) > 0 {
 		return nil, fmt.Errorf("refusing to write checkpoint, secret-shaped content: %v", hits)
 	}
-	tags := id.CheckpointTags(cfg.ContextID, sessionDoc, o.Closing, o.Distilled)
-	doc, err := uploadItem(cfg, body, "checkpoint-"+id.SessionID+"-"+time.Now().UTC().Format("20060102T150405")+".md", strings.Join(tags, ","), "text-note")
+	tags := id.CheckpointTags(id.ER1Context, sessionDoc, o.Closing, o.Distilled)
+	doc, err := uploadItem(client, body, "checkpoint-"+id.SessionID+"-"+time.Now().UTC().Format("20060102T150405")+".md", strings.Join(tags, ","), "text-note")
 	if err != nil {
 		return nil, err
 	}
@@ -548,6 +530,7 @@ func Checkpoint(o CheckpointOpts) (*CheckpointResult, error) {
 
 // ListOpts configures List.
 type ListOpts struct {
+	ER1Context string // override, otherwise the descriptor context or main
 	WorkingDir string
 	Project    string // "" = the descriptor's project
 	Host       string
@@ -566,13 +549,13 @@ type SessionRow struct {
 // List returns the session-state items matching the filter. Best-effort over the
 // ER1 search endpoint: returns an error (with a hint) if the endpoint is down.
 func List(o ListOpts) ([]SessionRow, error) {
-	id, err := ResolveIdent(o.WorkingDir, "", o.Project, o.ER1Target, "")
+	id, err := ResolveIdent(o.WorkingDir, "", o.Project, o.ER1Target, o.ER1Context)
 	if err != nil {
 		return nil, err
 	}
-	cfg := er1.LoadConfig()
-	if cfg.ContextID == "" {
-		return nil, fmt.Errorf("ER1_CONTEXT_ID is not set")
+	client, err := id.er1Client()
+	if err != nil {
+		return nil, err
 	}
 	tags := []string{"claude-code.session"}
 	if id.Project != "" {
@@ -581,7 +564,7 @@ func List(o ListOpts) ([]SessionRow, error) {
 	if o.Host != "" {
 		tags = append(tags, "host:"+o.Host)
 	}
-	items, err := searchByTags(cfg.ContextID, id.ER1Target, tags)
+	items, err := searchByTags(client, id.ER1Context, tags)
 	if err != nil {
 		return nil, fmt.Errorf("%w (the ER1 search endpoint may be unavailable, for interactive browsing use the `/session-state` skill or the memory viewer)", err)
 	}
