@@ -52,6 +52,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/auth"
 	"github.com/kamir/m3c-tools/pkg/httpsafe"
 	"github.com/kamir/m3c-tools/pkg/skillctl/auditexport"
 	"github.com/kamir/m3c-tools/pkg/skillctl/device"
@@ -192,6 +193,10 @@ func runSyncWithReaders(args []string, stdout, stderr io.Writer, getenv func(str
 	selected := syncBearerSource(getenv, readStored)
 	client, err := buildIngestClient(ep, *pubkey, *logID, *insecure, stderr, selected)
 	if err != nil {
+		if errors.Is(err, auth.ErrCredentialBinding) {
+			fmt.Fprintln(stderr, "skillctl sync: saved device token requires a fresh login for this origin; run 'skillctl login' against the intended server.")
+			return syncExitError
+		}
 		fmt.Fprintf(stderr, "skillctl sync: %v\n", err)
 		return syncExitError
 	}

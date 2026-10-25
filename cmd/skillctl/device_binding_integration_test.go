@@ -54,6 +54,9 @@ func TestSyncNativeRecordBindingAtEntryPoint(t *testing.T) {
 				t.Fatal("selected record changed")
 			}
 			if name != "matching" {
+				if !strings.Contains(errb.String(), "requires a fresh login") {
+					t.Fatal("missing explicit legacy recovery diagnostic")
+				}
 				entries, err := os.ReadDir(home)
 				if err != nil || len(entries) != 0 {
 					t.Fatal("denied credential opened local state")
