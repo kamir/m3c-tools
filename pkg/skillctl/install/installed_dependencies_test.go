@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -719,18 +720,80 @@ func TestInstalledSkillSourceRejectsAmbiguousOrForeignEvidence(t *testing.T) {
 			p := installedDependencyPolicy(t, home, keys)
 			leaf := installedDependencyBundle(t, keys, "required", "1.0.0", "")
 			dir := installedDependencyTree(t, home, leaf, "required", "1.0.0")
-			source := newInstalledSkillSource(p)
-			held, err := source.openActive(context.Background(), "required")
-			if err != nil {
-				t.Fatal(err)
-			}
 			moved := dir
 			if replace == "parent" {
 				moved = filepath.Dir(dir)
 			}
+			parentBefore, err := os.Lstat(moved)
+			if err != nil {
+				t.Fatal(err)
+			}
+			childBefore, err := os.Lstat(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			bodyBefore := make(map[string][]byte)
+			for _, name := range []string{"SKILL.md", "bundle.json", "retained.skb", offlineMetaFile} {
+				raw, err := os.ReadFile(filepath.Join(dir, name))
+				if err != nil {
+					t.Fatal(err)
+				}
+				bodyBefore[name] = raw
+			}
+			if runtime.GOOS == "windows" && replace == "parent" {
+				if err := os.Rename(moved, moved+"-old"); err != nil {
+					t.Fatalf("unheld parent rename preflight: %v", err)
+				}
+				if err := os.Rename(moved+"-old", moved); err != nil {
+					t.Fatalf("unheld parent restore preflight: %v", err)
+				}
+			}
+			source := newInstalledSkillSource(p)
+			t.Cleanup(func() { closeInstalledDependencyHandles(t, source) })
+			held, err := source.openActive(context.Background(), "required")
+			if err != nil {
+				t.Fatal(err)
+			}
 			if err := os.Rename(moved, moved+"-old"); err != nil {
-				if closeErr := source.Close(); closeErr != nil {
-					t.Fatal(closeErr)
+				if runtime.GOOS == "windows" && replace == "parent" && errors.Is(err, syscall.Errno(5)) {
+					parentAfter, statErr := os.Lstat(moved)
+					if statErr != nil || !os.SameFile(parentBefore, parentAfter) {
+						t.Fatal("denied rename changed parent identity")
+					}
+					childAfter, statErr := os.Lstat(dir)
+					heldAfter, heldErr := held.root.Stat(".")
+					if statErr != nil || heldErr != nil || !os.SameFile(childBefore, childAfter) || !os.SameFile(childAfter, heldAfter) {
+						t.Fatal("denied rename changed active or held identity")
+					}
+					if _, statErr := os.Lstat(moved + "-old"); !os.IsNotExist(statErr) {
+						t.Fatalf("denied rename created destination: %v", statErr)
+					}
+					entries, readErr := os.ReadDir(dir)
+					if readErr != nil || len(entries) != len(bodyBefore) {
+						t.Fatal("denied rename changed active inventory")
+					}
+					for name, before := range bodyBefore {
+						after, readErr := os.ReadFile(filepath.Join(dir, name))
+						if readErr != nil || !bytes.Equal(before, after) {
+							t.Fatalf("denied rename changed retained body %q: %v", name, readErr)
+						}
+					}
+					if err := source.validateLive(context.Background()); err != nil {
+						t.Fatalf("denied rename invalidated live bindings: %v", err)
+					}
+					candidates, candidateErr := source.Candidates(context.Background(), "skill", "required")
+					if candidateErr != nil || len(candidates) != 1 || candidates[0].Digest != leaf.digestStr || candidates[0].Authority != p.ProfileDigest() {
+						t.Fatalf("unchanged signed proof after OS prevention: %v %v", candidates, candidateErr)
+					}
+					closeInstalledDependencyHandles(t, source)
+					if err := os.Rename(moved, moved+"-old"); err != nil {
+						t.Fatalf("parent rename still denied after checked descriptor release: %v", err)
+					}
+					if err := os.Rename(moved+"-old", moved); err != nil {
+						t.Fatalf("parent restore after checked descriptor release: %v", err)
+					}
+					t.Log("Windows prevented ancestor rename while child descriptors were held; parent drift detector was not exercised")
+					return
 				}
 				t.Fatalf("required directory-rename fixture unavailable: %v", err)
 			}
