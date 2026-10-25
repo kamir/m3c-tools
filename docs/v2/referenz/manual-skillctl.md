@@ -2240,6 +2240,38 @@ skillctl session <open|checkpoint|close|resume|list|show> [flags]
 Persists the working session as an ER1 item and appends checkpoints; resume it on any machine.
 All verbs share one flag-set (only some flags apply per verb).
 
+Session operations validate the final HTTPS target after CLI/descriptor overrides.
+Set the independently known `ER1_DEVICE_TOKEN_ORIGIN` for Bearer authentication,
+or `ER1_API_KEY_ORIGIN` for an API key. A configured pin selects that family;
+all configured pins must match before either source is read. Without a pin no
+credential is read. Invalid selected values do not fall back across families.
+A nonempty external value wins within its family; otherwise Bearer uses the
+N2B-bound native DeviceToken, and API key uses the existing macOS Keychain item.
+Other platforms require an external API key when that family is selected.
+This is not a cross-platform API-key vault or authenticated issuer/tenant proof.
+
+One private client snapshots credentials and target for every GET and upload in
+the operation. GET may send both independently bound headers; upload prefers the
+Bearer. Later environment changes cannot replace them. Redirects do not carry
+credentials or request bodies across origins and cannot downgrade HTTPS; a
+sanitized GET may still follow a redirect without credentials. Failed lookups
+stop open/checkpoint before any upload. Null, scalar rows and unrecognized
+search response shapes are errors, not confirmed empty results. HTTP and parse diagnostics omit response
+bodies and reject known-credential reflection after normal JSON decoding in
+successful responses;
+this is not detection of arbitrary encodings.
+
+Context precedence is `--er1-context`, descriptor `er1.context`, then `main`.
+The same value is used in the session document, GET and multipart upload;
+`ER1_CONTEXT_ID` no longer overrides it. A successful upload must return a nonempty document ID without control characters.
+A missing acknowledgement is an error even if the server already received POST;
+it does not prove rollback. Reconcile remote state before retrying.
+This fixes the former discrepancy
+between descriptor/CLI metadata and the transport context. URL path case and
+prefixes are preserved. Existing saved records without login-origin binding
+require a fresh login. Other ER1 command families remain separately scoped.
+
+
 | Verb | Purpose |
 |------|---------|
 | `open` | Create the session-state item for this session (idempotent). |
@@ -2497,7 +2529,7 @@ Global token autoload is disabled in both programs. Sync uses a saved token only
 after validating the final endpoint against `ER1_DEVICE_TOKEN_ORIGIN`, then
 checking the saved binding. Legacy records without binding, unknown versions
 and mismatched origins require a fresh login, without automatic rebinding.
-Legacy ER1 command families require explicit external credentials until their
+Other legacy ER1 command families require explicit external credentials until their
 request contexts support bound storage reads. Their existing external-token
 behavior is not a universal origin-isolation guarantee. Separately bound
 registry credentials remain distinct. Owner context comes only from explicit
@@ -3044,8 +3076,10 @@ a write token belongs to the project rather than to a person:
 | `.m3c/project.yaml` | SPEC-0214 PLM project descriptor resolved by `project` (and by `publish`/`session`). |
 | `~/.config/m3c/skill-registry-self.key` | Default `self`-registry signing key for `publish` / `pull` (or `$SIGNING_KEY_LOCATION`). |
 
-ER1 credentials for registry-backed commands resolve via Keychain → Secret Manager → env
-(ADR-0003), keyed by the ER1 target.
+ER1 credentials resolve per command family. Session uses the independent pins
+and bound snapshots described above; other registry commands retain separately
+scoped legacy paths. There is no universal guaranteed Keychain/Secret Manager/
+environment chain across all commands.
 
 ---
 

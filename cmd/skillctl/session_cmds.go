@@ -14,7 +14,7 @@ package main
 //
 // -C <dir> resolves the project context relative to <dir> instead of $PWD.
 // Writes go to /upload_2 at the descriptor-resolved ER1 target (ADR-0003 matrix);
-// the ER1 credential resolves from ER1_API_KEY or the `aims-core-er1` Keychain item.
+// selected credentials require independent origin pins before any source read.
 
 import (
 	"flag"
@@ -53,6 +53,19 @@ func runSession(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	rest := fs.Args()
+	expected := 0
+	switch sub {
+	case "show":
+		expected = 1
+	case "open", "checkpoint", "close", "resume", "list":
+	default:
+		fmt.Fprintln(stderr, "session: unknown subcommand")
+		return 2
+	}
+	if len(rest) != expected {
+		fmt.Fprintln(stderr, "session: unexpected or missing positional arguments")
+		return 2
+	}
 
 	switch sub {
 	case "open":
@@ -75,7 +88,7 @@ func runSession(args []string, stdout, stderr io.Writer) int {
 		return 0
 
 	case "checkpoint":
-		if *sid == "" {
+		if strings.TrimSpace(*sid) == "" {
 			fmt.Fprintln(stderr, "skillctl session checkpoint: --session is required")
 			return 2
 		}
@@ -96,7 +109,7 @@ func runSession(args []string, stdout, stderr io.Writer) int {
 		return 0
 
 	case "close":
-		if *sid == "" {
+		if strings.TrimSpace(*sid) == "" {
 			fmt.Fprintln(stderr, "skillctl session close: --session is required")
 			return 2
 		}
@@ -133,7 +146,7 @@ func runSession(args []string, stdout, stderr io.Writer) int {
 	case "list":
 		rows, err := session.List(session.ListOpts{
 			WorkingDir: *dir, Project: *project, Host: *host,
-			ER1Target: *er1Target, OpenOnly: *openOnly,
+			ER1Target: *er1Target, ER1Context: *er1Context, OpenOnly: *openOnly,
 		})
 		if err != nil {
 			fmt.Fprintf(stderr, "skillctl session list: %v\n", err)
@@ -155,7 +168,7 @@ func runSession(args []string, stdout, stderr io.Writer) int {
 		}
 		// minimal: list and filter: full flatten-with-checkpoints is the
 		// /session-state skill's job (it has the richer ER1 read path).
-		rows, err := session.List(session.ListOpts{WorkingDir: *dir, ER1Target: *er1Target})
+		rows, err := session.List(session.ListOpts{WorkingDir: *dir, ER1Target: *er1Target, ER1Context: *er1Context})
 		if err != nil {
 			fmt.Fprintf(stderr, "skillctl session show: %v\n", err)
 			return 1
@@ -171,7 +184,7 @@ func runSession(args []string, stdout, stderr io.Writer) int {
 		return 1
 
 	case "resume":
-		rows, err := session.List(session.ListOpts{WorkingDir: *dir, Project: *project, Host: *host, ER1Target: *er1Target})
+		rows, err := session.List(session.ListOpts{WorkingDir: *dir, Project: *project, Host: *host, ER1Target: *er1Target, ER1Context: *er1Context})
 		if err != nil {
 			fmt.Fprintf(stderr, "skillctl session resume: %v\n", err)
 			return 1

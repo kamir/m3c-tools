@@ -18,9 +18,12 @@ package er1
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
+
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 )
 
 // resolveTargetWarnOnce begrenzt die Abweisungsmeldung auf eine pro Prozess.
@@ -72,4 +75,50 @@ func ResolveTarget(target string) (baseURL string, verifySSL bool) {
 		return base, VerifyTLSFor(base, os.Getenv("ER1_VERIFY_SSL") != "false")
 	}
 	return "https://onboarding.guide", true
+}
+
+// ResolveBoundTarget selects a Session target without credential reads or logs.
+// HTTPS is required; only a parsed loopback target may skip TLS verification.
+// Unlike the legacy resolver, validation precedes URL suffix handling.
+func ResolveBoundTarget(target string) (string, bool, error) {
+	raw := strings.TrimSpace(target)
+	verify := true
+	switch strings.ToLower(raw) {
+	case "", "prod":
+		raw = "https://onboarding.guide"
+	case "local":
+		raw = "https://127.0.0.1:8081"
+		verify = false
+	default:
+		if strings.ContainsAny(raw, ":/?#@\\") {
+			verify = false
+		} else {
+			raw = os.Getenv("ER1_API_URL")
+			if raw == "" {
+				raw = "https://onboarding.guide"
+			}
+			verify = os.Getenv("ER1_VERIFY_SSL") != "false"
+		}
+	}
+	base, err := httpsafe.ParseAPIBase(raw, false)
+	if err != nil {
+		return "", true, httpsafe.ErrInvalidAPIBase
+	}
+	u, err := url.Parse(base.URL)
+	if err != nil {
+		return "", true, httpsafe.ErrInvalidAPIBase
+	}
+	path := strings.TrimRight(u.EscapedPath(), "/")
+	for _, suffix := range []string{"/upload_2", "/upload"} {
+		if strings.HasSuffix(path, suffix) {
+			path = strings.TrimSuffix(path, suffix)
+			break
+		}
+	}
+	u.Path, err = url.PathUnescape(path)
+	if err != nil {
+		return "", true, httpsafe.ErrInvalidAPIBase
+	}
+	u.RawPath = path
+	return u.String(), verify || !isLoopbackURL(base.URL), nil
 }

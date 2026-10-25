@@ -116,7 +116,10 @@ type Descriptor struct {
 
 // EffectiveER1Target returns ER1.Target or "prod" (ADR-0003 default).
 func (d *Descriptor) EffectiveER1Target() string {
-	t := strings.TrimSpace(strings.ToLower(d.ER1.Target))
+	t := strings.TrimSpace(d.ER1.Target)
+	if !strings.Contains(t, "://") {
+		t = strings.ToLower(t)
+	}
 	if t == "" {
 		return "prod"
 	}

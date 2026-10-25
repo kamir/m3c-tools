@@ -341,9 +341,46 @@ Neue Geräteanmeldungen speichern die gewählte HTTPS-Origin als lokale
 Client-Provenienz. Sync prüft vor dem Speicherzugriff den unabhängigen Pin
 `ER1_DEVICE_TOKEN_ORIGIN` und danach den gespeicherten Eintrag. Alte oder
 abweichende Einträge verlangen eine erneute Anmeldung. Weder beim Start noch
-nach der Anmeldung erfolgt ein globaler Bearer-Export. Bisherige Befehlsfamilien
+nach der Anmeldung erfolgt ein globaler Bearer-Export. Andere bisherige Befehlsfamilien
 benötigen explizite externe Credentials, bis ihre eigene gebundene
 Anfrageintegration abgeschlossen ist. Dies ist keine authentifizierte
 Aussteller-/Mandantenprüfung. `m3c-tools token --print` verlangt passende HTTPS
 `ER1_API_URL`, unabhängigen Pin und gespeicherte Bindung; Status und Logout
 bleiben Verwaltungsaktionen.
+
+## Gebundene ER1-Sessions
+
+Session-Operationen validieren das endgültige HTTPS-Ziel nach CLI-/Descriptor-
+Overrides. Setzen Sie die unabhängig bekannte `ER1_DEVICE_TOKEN_ORIGIN` für
+Bearer oder `ER1_API_KEY_ORIGIN` für einen API-Key. Ein gesetzter Pin wählt diese
+Familie; alle gesetzten Pins müssen passen, bevor eine Quelle gelesen wird.
+Ohne Pin wird kein Credential gelesen. Ungültige gewählte Werte lösen keinen
+Fallback zwischen Familien aus. Ein nichtleerer externer Wert gewinnt innerhalb
+seiner Familie; sonst nutzt Bearer den N2B-gebundenen nativen DeviceToken und
+API-Key den bestehenden macOS-Keychain-Eintrag. Andere Plattformen benötigen
+einen externen API-Key, wenn diese Familie gewählt wird. Dies ist weder ein
+plattformübergreifender API-Key-Vault noch ein authentifizierter Aussteller-/
+Mandantennachweis.
+
+Ein privater Client hält Credentials und Ziel für alle GETs und Uploads der
+Operation fest. GET kann beide unabhängig gebundenen Header senden; Upload
+bevorzugt Bearer. Spätere Umgebungsänderungen ersetzen sie nicht. Redirects
+tragen weder Credentials noch Anfragekörper über Origin-Grenzen und erlauben
+kein HTTPS-Downgrade; ein bereinigter GET ohne Credentials kann dennoch einem
+Redirect folgen. Fehlgeschlagene Lookups stoppen open/checkpoint vor jedem
+Upload. Null, skalare Zeilen und unbekannte Suchantwortformen sind Fehler,
+keine bestätigten leeren Trefferlisten. HTTP- und Parse-Diagnosen enthalten keine Antwortkörper; wörtlich
+bekannte Credentials werden nach regulärem JSON-Decodieren erfolgreicher
+Antworten abgewiesen. Dies erkennt
+keine beliebigen Kodierungen.
+
+Kontextpriorität: `--er1-context`, Descriptor `er1.context`, dann `main`.
+Derselbe Wert gilt im Session-Dokument, GET und Multipart-Upload;
+`ER1_CONTEXT_ID` überschreibt ihn nicht mehr. Ein erfolgreicher Upload muss eine nichtleere Dokument-ID ohne Kontrollzeichen
+bestätigen. Eine fehlende Bestätigung ist ein Fehler, auch wenn der Server POST
+bereits empfangen hat; sie beweist keinen Rollback. Prüfen Sie den entfernten
+Zustand vor einer Wiederholung. Dies behebt die bisherige
+Abweichung zwischen Descriptor-/CLI-Metadaten und Transportkontext. Groß- und
+Kleinschreibung sowie Präfixe des URL-Pfads bleiben erhalten. Bestehende Einträge
+ohne Login-Origin-Bindung verlangen eine erneute Anmeldung. Andere ER1-
+Befehlsfamilien bleiben getrennte Prüfbereiche.

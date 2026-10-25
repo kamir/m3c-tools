@@ -101,6 +101,8 @@ func hasDeviceTokenAuth() bool {
 
 // Config holds ER1 server connection settings, loaded from environment variables.
 type Config struct {
+	// boundAuth is private to BoundClient; nil preserves legacy ambient auth.
+	boundAuth     *boundAuthSnapshot
 	APIURL        string // ER1 upload endpoint (default: https://127.0.0.1:8081/upload_2)
 	APIKey        string // X-API-KEY header value
 	ContextID     string // context_id form field
@@ -271,7 +273,13 @@ func (c *Config) MemoryItemURL(docID string) string {
 // Prefers device token (Bearer) over API key (SPEC-0127).
 func (c *Config) AuthHeaders() map[string]string {
 	h := map[string]string{}
-	if token := os.Getenv("ER1_DEVICE_TOKEN"); token != "" {
+	if c.boundAuth != nil {
+		if c.boundAuth.bearer != "" {
+			h["Authorization"] = "Bearer " + c.boundAuth.bearer
+		} else if c.boundAuth.apiKey != "" {
+			h["X-API-KEY"] = c.boundAuth.apiKey
+		}
+	} else if token := os.Getenv("ER1_DEVICE_TOKEN"); token != "" {
 		h["Authorization"] = "Bearer " + token
 	} else if c.APIKey != "" {
 		h["X-API-KEY"] = c.APIKey
