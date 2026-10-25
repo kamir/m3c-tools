@@ -74,7 +74,7 @@ Nach Domäne gegliedert:
 ## F. skillctl-Vertrauenssubsystem (`pkg/skillctl/*` und Nachbarpakete)
 
 Die offline prüfbare Skill-Vertrauensebene als Bibliothek hinter der
-[`skillctl`](program-index.de.md)-CLI. Es gibt 52 Unterpakete in `pkg/skillctl/`
+[`skillctl`](program-index.de.md)-CLI. Es gibt 53 Unterpakete in `pkg/skillctl/`
 und die am Abschnittsende genannten Nachbarpakete, gegliedert nach Rolle.
 `scripts/check-index.sh` prüft im Original sowohl Liste als auch Anzahl: Es gleicht
 `pkg/**` und `internal/**` in beiden Richtungen ab und zählt Verzeichnisse neu.
@@ -131,6 +131,7 @@ Die Prüfung läuft in `scripts/check-docs.sh` und dem Job `docs-gate` von `ci.y
 | Paket | Verantwortung |
 |---------|----------------|
 | `skillctl/outbox` | Transaktionale Audit-Outbox nach SPEC-0317 P0. |
+| `skillctl/mutationstate` | Dauerhafte lokale Registry-/Epoch-/Uhrbeobachtungen mit explizitem Enrollment und gehaltener Mutationssperre; keine Garantie gegen Änderungen desselben Benutzers oder Maschinen-Rollback. |
 | `skillctl/statemachine` | Benannter Offline-Zustandsautomat SPEC-0317 R-7. |
 | `skillctl/govlevel` | Zentrales Vokabular der Governance-Stufen. |
 | `skillctl/datascope` | Typisierter clientseitiger Vertrag nach SPEC-0196. |

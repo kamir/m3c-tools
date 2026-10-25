@@ -42,6 +42,8 @@ func runTrust(args []string, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 	switch args[0] {
+	case "state":
+		return runTrustState(args[1:], stdout, stderr)
 	case "list":
 		return runTrustList(args[1:], stdout, stderr)
 	case "add":
@@ -326,6 +328,7 @@ func printTrustUsage(w io.Writer) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Verbs:")
 	fmt.Fprintln(w, "  list     Print configured registries and their pinned keys.")
+	fmt.Fprintln(w, "  state    Inspect, enroll or adopt local managed mutation history.")
 	fmt.Fprintln(w, "  add      Pin a registry public key.")
 	fmt.Fprintln(w, "  add-author   Pin an AUTHOR key, with a fingerprint confirmed out-of-band.")
 	fmt.Fprintln(w, "  fingerprint  Print sha256:<hex> of a public key, to read aloud on a call.")

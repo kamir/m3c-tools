@@ -74,7 +74,7 @@ Grouped by domain:
 ## F. skillctl trust subsystem (`pkg/skillctl/*` + siblings)
 
 The offline-verifiable skill **trust plane**: the library behind the
-[`skillctl`](program-index.md) CLI. 52 subpackages under `pkg/skillctl/`, plus the
+[`skillctl`](program-index.md) CLI. 53 subpackages under `pkg/skillctl/`, plus the
 sibling top-level packages at the end of this section, grouped by role. The list
 and the number are both gated by `scripts/check-index.sh`: it diffs `pkg/**` and
 `internal/**` against this file in both directions AND re-counts the directories,
@@ -131,6 +131,7 @@ It runs in `scripts/check-docs.sh` and in the `docs-gate` job of `ci.yml`,
 | Package | Responsibility |
 |---------|----------------|
 | `skillctl/outbox` | SPEC-0317 (P0) transactional audit outbox. |
+| `skillctl/mutationstate` | Durable local-operator registry/epoch/clock observations with explicit enrollment and a held mutation lock; no same-user or whole-machine rollback guarantee. |
 | `skillctl/statemachine` | SPEC-0317 R-7 named offline state machine. |
 | `skillctl/govlevel` | The one canonical governance-level vocabulary. |
 | `skillctl/datascope` | Typed client-side contract for SPEC-0196. |

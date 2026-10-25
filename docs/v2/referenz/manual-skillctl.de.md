@@ -377,6 +377,71 @@ siehe [Exit-Codes](manual-skillctl.md#exit-codes).
 
 ---
 
+**`trust state`: lokale verwaltete Mutationshistorie**
+
+Vor einer lokalen verwalteten Bundle-Installation einmal `trust state enroll`
+aufrufen. Sowohl `--profile local-operator-v1` als auch `--confirm-local-trust`
+sind Pflicht: Der Betreiber vertraut damit ausdrücklich dem lokalen Betreiber
+und der OS-Systemuhr. Enrollment legt registryspezifische Historie unter
+`<home>/.claude/mutation-state` an und verweigert ein vorhandenes oder reserviertes
+Registryverzeichnis, auch bei unvollständigem Zustand. Für State-Befehle und
+Installation dieselben Werte für `--home`, Registry und fest hinterlegte
+Vertrauensanker verwenden.
+
+`trust state status` gibt JSON-Metadaten aus: Registry, Anker-/Evidenzfingerprints,
+Epoche, Ausgabezeitpunkt und letzte Uhrbeobachtung. Es führt kein Enrollment,
+keine Reparatur und keine Fortschreibung der Beobachtung aus und kann veraltete,
+authentisierte Evidenz diagnostizieren. Erfolgreicher Status erlaubt keine
+Installation. `trust state adopt` benötigt vorhandene gültige Historie und eine
+frische vollständige signierte Liste; Epoche und signierter Ausgabezeitpunkt
+dürfen nicht zurückgehen. Ein Refresh derselben Epoche muss die Widerrufsmenge
+beibehalten. Vollständige Listen sind auf 1 MiB begrenzt und müssen reguläre
+Dateien statt Symlinks sein.
+
+```bash
+skillctl trust state enroll --trust-roots roots.yaml --registry https://registry.example/api/skills --home ./demo-home --revocations revocations.json --profile local-operator-v1 --confirm-local-trust
+skillctl trust state status --trust-roots roots.yaml --registry https://registry.example/api/skills --home ./demo-home
+skillctl trust state adopt --trust-roots roots.yaml --registry https://registry.example/api/skills --home ./demo-home --revocations revocations.json
+skillctl install --bundle demo@1.0.0.skb --trust-roots roots.yaml --registry https://registry.example/api/skills --home ./demo-home --revocations revocations.json
+```
+
+Verwaltetes lokales `install --bundle` benötigt weiterhin `--revocations`. Der
+Befehl behält einen begrenzten Snapshot und übernimmt gültige frische Evidenz in
+vorhandene Historie, auch wenn der angefragte Subject widerrufen ist oder eine
+weitere optionale Richtlinieneingabe danach verweigert. Eine spätere alte Liste
+kann diese übernommene Untergrenze nicht löschen. Unmittelbar vor Staging werden
+die gespeicherte Historie erneut geprüft und die lokale Beobachtung dauerhaft
+fortgeschrieben; eine exklusive OS-Sperre bleibt bis zum Installationsende
+gehalten. Fehlender oder korrupter Zustand, Evidenz unter der gespeicherten
+Untergrenze sowie unbestätigte Zustandsschreibvorgänge verweigern die Installation. Ein Fehler nach der
+Fortschreibung kann neuere Historie ohne abgeschlossene Installation
+hinterlassen; State und Skill-Veröffentlichung sind keine gemeinsame atomare
+Transaktion. Fehler beim Sperren-Close melden ungewissen Abschluss: Status prüfen,
+statt Rollback anzunehmen. Das JSON-Feld `freshness` beschreibt die Prüfung des
+Snapshot-Alters; das gesamte `ok` beschreibt das Befehlsergebnis einschließlich
+nachfolgender State-Prüfungen.
+
+Dieses Modell verlangt ein betreiber- oder OS-kontrolliertes lokales Home und
+entsprechende Elternpfade; State nicht unter einem fremd beschreibbaren
+Gemeinschaftsverzeichnis ablegen. Rechte der ausgewählten State-Pfade werden
+geprüft, die vollständige ACL-Kette aller Vorfahren jedoch nicht. Das Modell
+weist neu vorgelegte Epochen oder Uhrwerte unter der erhaltenen Historie über
+normale Neustarts ab und koordiniert kooperierende Writer. Das Wiederherstellen
+eines älteren vollständigen gültigen Historieneintrags oder -verzeichnisses
+wird ohne externen Anker nicht erkannt. Es schützt nicht gegen böswillige Änderungen
+desselben Benutzers, Administratorkontrolle oder vollständigen Maschinen-/Snapshot-
+Rollback. Änderungen des Anker-Richtlinienfingerprints erfordern gesonderte
+Betreiber-Recovery und erzeugen niemals still eine neue Baseline.
+
+Es gibt weder `reset` noch `--force` oder einen automatisierten Recovery-Executor.
+Recovery benötigt einen dokumentierten betrieblichen Vier-Augen-Prozess; die CLI
+authentisiert diese Freigaben nicht. Originalzustand und Diagnose sichern und
+verlorene Historie, unvollständiges Enrollment oder eine hinter die gespeicherte
+Untergrenze korrigierte Uhr eskalieren. Historie niemals still löschen und neu
+enrollen. Weitere Install-/Admit-/Attest-Wege, vollständige Dependency-Durchsetzung
+und Kundenplattformabnahme bleiben gesonderte Arbeit.
+
+
 ### `peer`: föderierte Peer-Registry fest hinterlegen (SPEC-0359)
 
 ```bash
@@ -477,9 +542,10 @@ nicht verjüngen; die Fail-open-Regel für risikoarme Ausführung erlaubt keine
 veraltete Installation. Explizite Prüfpunkte und Notfalldateien werden weiter
 geprüft.
 
-Diese lokale Bundle-Prüfung verwendet die aktuelle Systemuhr. Dauerhafter Schutz
-vor Uhr-/Epoch-Rücklauf und dieselbe Durchsetzung auf anderen Installationswegen
-sind noch nicht implementiert; diese Prüfung allein belegt keine Enterprise-Reife.
+Verwaltete lokale Bundles benötigen zusätzlich vorheriges explizites `trust state enroll`.
+Die dauerhafte lokale Beobachtung erkennt unbeabsichtigten Uhr-/Epoch-Rücklauf
+im unter `trust state` beschriebenen lokalen Betreibermodell. Andere Installationswege
+und Kundenabnahme bleiben offen; diese Prüfung allein belegt keine Enterprise-Reife.
 
 | Flag | Zweck |
 |------|---------|
