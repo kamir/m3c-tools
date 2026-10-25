@@ -334,3 +334,16 @@ und ohne Zutun der betroffenen Maschine.
 | [Incident Response](ops-incident-response.de.md) | ein Schlüssel oder ein Registry ist kompromittiert |
 | [Registry-Backup und Restore](ops-registry-backup-restore.de.md) | Sicherung je Backend, mit Wiederherstellungsprobe |
 | [Monitoring und Alarmierung](ops-monitoring.de.md) | was heute beobachtbar ist, und was nicht |
+
+## Origin-Bindung der ER1-Gerätetokens
+
+Neue Geräteanmeldungen speichern die gewählte HTTPS-Origin als lokale
+Client-Provenienz. Sync prüft vor dem Speicherzugriff den unabhängigen Pin
+`ER1_DEVICE_TOKEN_ORIGIN` und danach den gespeicherten Eintrag. Alte oder
+abweichende Einträge verlangen eine erneute Anmeldung. Weder beim Start noch
+nach der Anmeldung erfolgt ein globaler Bearer-Export. Bisherige Befehlsfamilien
+benötigen explizite externe Credentials, bis ihre eigene gebundene
+Anfrageintegration abgeschlossen ist. Dies ist keine authentifizierte
+Aussteller-/Mandantenprüfung. `m3c-tools token --print` verlangt passende HTTPS
+`ER1_API_URL`, unabhängigen Pin und gespeicherte Bindung; Status und Logout
+bleiben Verwaltungsaktionen.

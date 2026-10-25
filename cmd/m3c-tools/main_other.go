@@ -31,6 +31,7 @@ import (
 	"github.com/kamir/m3c-tools/pkg/auth"
 	"github.com/kamir/m3c-tools/pkg/config"
 	"github.com/kamir/m3c-tools/pkg/er1"
+	"github.com/kamir/m3c-tools/pkg/er1login"
 	"github.com/kamir/m3c-tools/pkg/impression"
 	"github.com/kamir/m3c-tools/pkg/plaud"
 	"github.com/kamir/m3c-tools/pkg/tracking"
@@ -73,19 +74,6 @@ func main() {
 		// owns. It only counts with an explicit M3C_DOTENV=1 opt-in.
 		_ = er1.LoadDotenvUntrusted(".env")
 
-		// Load saved device token if available (SPEC-0127).
-		// This enables uploads via Bearer auth without API key.
-		if cfg := er1.LoadConfig(); cfg.ContextID != "" {
-			if dt, err := auth.Load(auth.DeviceID(), strings.SplitN(cfg.ContextID, "___", 2)[0]); err == nil && dt != nil && !dt.IsExpired() {
-				if err := os.Setenv("ER1_DEVICE_TOKEN", dt.Token); err != nil {
-					log.Fatalf("[auth] cannot apply device token: %v", err)
-				}
-				if err := os.Setenv("ER1_CONTEXT_ID", dt.ContextID); err != nil {
-					log.Fatalf("[auth] cannot apply device context: %v", err)
-				}
-				log.Printf("[auth] device token loaded for user=%s", truncateForLog(dt.UserID, 20))
-			}
-		}
 	}
 
 	switch os.Args[1] {
@@ -1006,11 +994,21 @@ func cmdCheckER1() {
 // opens the browser to /v2/signin, waits for the callback with context_id
 // and device token. Same flow as the tray menubar login but for headless CLI use.
 func cmdLogin() {
+	baseURL, targetErr := er1login.LoginBase(loginAPIURL())
+	if targetErr != nil {
+		fmt.Fprintln(os.Stderr, "Invalid HTTPS login target.")
+		os.Exit(1)
+	}
 	cfg := er1.LoadConfig()
-	baseURL := trayER1BaseURL(cfg.APIURL)
 	if baseURL == "" {
 		fmt.Fprintln(os.Stderr, "Error: cannot derive ER1 base URL from ER1_API_URL")
 		fmt.Fprintln(os.Stderr, "Run 'm3c-tools setup' first or set ER1_API_URL in your profile.")
+		os.Exit(1)
+	}
+
+	binding, err := auth.NewLoginBinding(baseURL)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Invalid login target: use HTTPS without credentials, query or fragment.")
 		os.Exit(1)
 	}
 
@@ -1132,6 +1130,7 @@ h2{color:#7c3aed}p{color:#94a3b8}</style></head>
 			if result.DeviceToken != "" {
 				dt := &auth.DeviceToken{
 					Token:     result.DeviceToken,
+					Binding:   binding,
 					UserID:    result.UserID,
 					ContextID: ctxID,
 					UserName:  result.UserName,
@@ -1142,10 +1141,6 @@ h2{color:#7c3aed}p{color:#94a3b8}</style></head>
 				if err := auth.Save(dt); err != nil {
 					log.Printf("[auth] save device token failed: %v", err)
 				} else {
-					if err := os.Setenv("ER1_DEVICE_TOKEN", result.DeviceToken); err != nil {
-						fmt.Fprintf(os.Stderr, "Error: cannot apply device token: %v\n", err)
-						os.Exit(1)
-					}
 					fmt.Printf("Device token saved for user=%s device=%s\n", truncateForLog(result.UserID, 20), auth.DeviceID())
 				}
 			}

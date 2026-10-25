@@ -375,6 +375,15 @@ m3c-tools token [--print]
 
 Shows whether a device token is loaded.
 
+Startup and login do not export saved tokens into the environment. Explicit
+`--print` requires HTTPS `ER1_API_URL`, independently assigned matching
+`ER1_DEVICE_TOKEN_ORIGIN`, and a non-expired native record with matching versioned
+login-origin metadata. Legacy entries require a fresh login; they are never
+silently rebound. This metadata records the selected login target, not verified
+issuer or tenant authority. Status remains a management operation and does not
+establish permission for any destination. Exported credentials must be handled
+by the operator under the consumer's origin rules.
+
 | Flag | Argument | Default | Meaning |
 |------|----------|---------|---------|
 | `--print` | n/a | n/a | Emit the Bearer token to stdout (for shell capture) |

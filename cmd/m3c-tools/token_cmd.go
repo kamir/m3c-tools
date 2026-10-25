@@ -1,11 +1,6 @@
 // token_cmd.go: "m3c-tools token" device-token inspection + emission.
 //
-// SPEC-0267 FR-0267.12 follow-up: the /plm-export skill (and any shell tooling)
-// needs the Bearer device token to call PLM endpoints, but the token is stored
-// encrypted at rest with no way to retrieve it for `curl`. `m3c-tools token
-// --print` emits just the token so a skill can do:
-//
-//	export ER1_DEVICE_TOKEN=$(m3c-tools token --print)
+// Explicit export requires a matching destination, independent pin and saved binding.
 package main
 
 import (
@@ -16,6 +11,7 @@ import (
 
 	"github.com/kamir/m3c-tools/pkg/auth"
 	"github.com/kamir/m3c-tools/pkg/er1"
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 )
 
 // cmdToken implements `m3c-tools token [--print]`.
@@ -23,27 +19,30 @@ import (
 //	(no flag)  human-readable status (configured? user, expiry): never prints
 //	           the raw token.
 //	--print    emits ONLY the Bearer token value to stdout (nothing else), for
-//	           shell capture. Exit 0 only when a non-expired token exists.
+//	           shell capture. Exit 0 requires a matching destination, pin and non-expired record.
 func cmdToken(args []string) {
 	fs := flag.NewFlagSet("token", flag.ExitOnError)
 	doPrint := fs.Bool("print", false, "emit only the Bearer device token to stdout (for shell capture)")
 	_ = fs.Parse(args)
 
-	userPart := strings.SplitN(er1.LoadConfig().ContextID, "___", 2)[0]
-	token, expired := auth.PersistedBearer(userPart)
-
 	if *doPrint {
-		if token == "" {
-			if expired {
-				fmt.Fprintln(os.Stderr, "device token expired, run: m3c-tools login")
-			} else {
-				fmt.Fprintln(os.Stderr, "no device token, run: m3c-tools login")
-			}
+		base, pin := os.Getenv("ER1_API_URL"), os.Getenv("ER1_DEVICE_TOKEN_ORIGIN")
+		resolved, err := httpsafe.ResolveCredential(base, false, httpsafe.DeferredSecret{
+			Binding: httpsafe.CredentialBinding{Version: httpsafe.CredentialBindingVersion, Kind: httpsafe.CredentialDeviceBearer, Origin: pin, Source: "explicit-token-export"},
+			Read: func() ([]byte, error) {
+				value, err := auth.BoundBearerReadOnly(pin, "")
+				return []byte(value), err
+			},
+		})
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "token export refused: require matching ER1_API_URL, ER1_DEVICE_TOKEN_ORIGIN and a bound, non-expired native token; run login again for legacy entries.")
 			os.Exit(1)
 		}
-		fmt.Println(token) // ONLY the token on stdout
+		fmt.Println(string(resolved.Secret))
 		return
 	}
+	userPart := strings.SplitN(er1.LoadConfig().ContextID, "___", 2)[0]
+	token, expired := auth.PersistedBearer(userPart)
 
 	// Status mode: metadata only, never the raw token.
 	switch {

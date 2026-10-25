@@ -45,6 +45,7 @@ import (
 	"github.com/kamir/m3c-tools/pkg/auth"
 	"github.com/kamir/m3c-tools/pkg/config"
 	"github.com/kamir/m3c-tools/pkg/er1"
+	"github.com/kamir/m3c-tools/pkg/er1login"
 	"github.com/kamir/m3c-tools/pkg/importer"
 	"github.com/kamir/m3c-tools/pkg/impression"
 	"github.com/kamir/m3c-tools/pkg/menubar"
@@ -121,16 +122,6 @@ func main() {
 		// directory the CLI was started in, which is not necessarily one the user
 		// owns. It only counts with an explicit M3C_DOTENV=1 opt-in.
 		_ = er1.LoadDotenvUntrusted(".env")
-
-		// Load saved device token if available (SPEC-0127).
-		// This enables uploads via Bearer auth without API key.
-		if cfg := er1.LoadConfig(); cfg.ContextID != "" {
-			if dt, err := auth.Load(auth.DeviceID(), strings.SplitN(cfg.ContextID, "___", 2)[0]); err == nil && dt != nil && !dt.IsExpired() {
-				os.Setenv("ER1_DEVICE_TOKEN", dt.Token)   //nolint:errcheck // in-process env propagation; the durable device-token store is the source of truth and the key is a constant
-				os.Setenv("ER1_CONTEXT_ID", dt.ContextID) //nolint:errcheck // in-process env propagation; the durable device-token store is the source of truth and the key is a constant
-				log.Printf("[auth] device token loaded for user=%s", truncateForLog(dt.UserID, 20))
-			}
-		}
 
 	}
 
@@ -2975,10 +2966,19 @@ func fileCreationTime(path string) string {
 }
 
 func menubarLoginER1(app *menubar.App) {
+	baseURL, targetErr := er1login.LoginBase(loginAPIURL())
+	if targetErr != nil {
+		app.Notify("ER1 Login", "Invalid HTTPS login target.")
+		return
+	}
 	cfg := er1.LoadConfig()
-	baseURL := er1BaseURL(cfg.APIURL)
 	if baseURL == "" {
 		app.Notify("ER1 Login", "Could not derive ER1 base URL from ER1_API_URL.")
+		return
+	}
+
+	if _, err := auth.NewLoginBinding(baseURL); err != nil {
+		app.Notify("ER1 Login", "Invalid login target: use HTTPS without credentials, query or fragment.")
 		return
 	}
 
@@ -3045,7 +3045,7 @@ func menubarLoginER1(app *menubar.App) {
 				// Fallback 2: use ER1_CONTEXT_ID from config if ER1 tabs are open.
 				ctxID = configFallback()
 			}
-			if completeER1Login(app, ctxID, &result) {
+			if completeER1Login(app, ctxID, &result, baseURL) {
 				return
 			}
 			log.Printf("[auth] callback received but no context_id yet; continuing tab polling")
@@ -3054,13 +3054,13 @@ func menubarLoginER1(app *menubar.App) {
 			if ctxID == "" {
 				ctxID = configFallback()
 			}
-			if completeER1Login(app, ctxID, nil) {
+			if completeER1Login(app, ctxID, nil, baseURL) {
 				return
 			}
 		case <-deadline.C:
 			// Final attempt: try config fallback before giving up.
 			if ctxID := configFallback(); ctxID != "" {
-				if completeER1Login(app, ctxID, nil) {
+				if completeER1Login(app, ctxID, nil, baseURL) {
 					return
 				}
 			}
@@ -3072,7 +3072,7 @@ func menubarLoginER1(app *menubar.App) {
 	}
 }
 
-func completeER1Login(app *menubar.App, contextID string, result *loginCallbackResult) bool {
+func completeER1Login(app *menubar.App, contextID string, result *loginCallbackResult, loginBase string) bool {
 	ctxID := strings.TrimSpace(contextID)
 	if ctxID == "" {
 		return false
@@ -3085,8 +3085,14 @@ func completeER1Login(app *menubar.App, contextID string, result *loginCallbackR
 
 	// Save device token if received from aims-core callback (SPEC-0127).
 	if result != nil && result.DeviceToken != "" {
+		binding, err := auth.NewLoginBinding(loginBase)
+		if err != nil {
+			log.Printf("[auth] invalid login binding; device token was not saved")
+			return false
+		}
 		dt := &auth.DeviceToken{
 			Token:     result.DeviceToken,
+			Binding:   binding,
 			UserID:    result.UserID,
 			ContextID: ctxID,
 			UserName:  result.UserName,
@@ -3098,8 +3104,6 @@ func completeER1Login(app *menubar.App, contextID string, result *loginCallbackR
 			log.Printf("[auth] save device token failed: %v", err)
 		} else {
 			log.Printf("[auth] device token saved for user=%s device=%s", truncateForLog(result.UserID, 20), auth.DeviceID())
-			// Set the token as the active API key so uploads use Bearer auth.
-			os.Setenv("ER1_DEVICE_TOKEN", result.DeviceToken) //nolint:errcheck // in-process env propagation; auth.Save above is the checked durable write and the key is a constant
 		}
 	}
 
@@ -3151,11 +3155,21 @@ type loginCallbackResult struct {
 // cmdLogin provides a CLI-only login flow (no menubar required).
 // Reuses the callback server pattern from menubarLoginER1 but prints to stdout.
 func cmdLogin() {
+	baseURL, targetErr := er1login.LoginBase(loginAPIURL())
+	if targetErr != nil {
+		fmt.Fprintln(os.Stderr, "Invalid HTTPS login target.")
+		os.Exit(1)
+	}
 	cfg := er1.LoadConfig()
-	baseURL := er1BaseURL(cfg.APIURL)
 	if baseURL == "" {
 		fmt.Fprintln(os.Stderr, "Error: cannot derive ER1 base URL from ER1_API_URL")
 		fmt.Fprintln(os.Stderr, "Run 'm3c-tools setup' first or set ER1_API_URL in your profile.")
+		os.Exit(1)
+	}
+
+	binding, err := auth.NewLoginBinding(baseURL)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Invalid login target: use HTTPS without credentials, query or fragment.")
 		os.Exit(1)
 	}
 
@@ -3220,6 +3234,7 @@ func cmdLogin() {
 			if result.DeviceToken != "" {
 				dt := &auth.DeviceToken{
 					Token:     result.DeviceToken,
+					Binding:   binding,
 					UserID:    result.UserID,
 					ContextID: ctxID,
 					UserName:  result.UserName,
@@ -3230,7 +3245,6 @@ func cmdLogin() {
 				if err := auth.Save(dt); err != nil {
 					log.Printf("[auth] save device token failed: %v", err)
 				} else {
-					os.Setenv("ER1_DEVICE_TOKEN", result.DeviceToken) //nolint:errcheck // in-process env propagation; auth.Save above is the checked durable write and the key is a constant
 					fmt.Printf("Device token saved for user=%s device=%s\n", truncateForLog(result.UserID, 20), auth.DeviceID())
 				}
 			}

@@ -29,14 +29,9 @@ func main() {
 	// the seam nil (pre-D2 set-only behaviour).
 	fetchRevocationHeadFn = fetchRevocationHeadOnline
 
-	// FR-0043: for ER1-bound commands, auto-load the device token persisted by
-	// `skillctl login` / `m3c-tools login` so users need not export it by hand.
-	// Gated to networkCommands so offline commands never touch the OS keychain.
-	if networkCommands[os.Args[1]] {
-		autoloadDeviceToken(os.Stderr)
-	}
+	// Persisted credentials are resolved only by destination-bound consumers.
 	switch os.Args[1] {
-	// === FR-0043: device login (browser pairing) + token autoload ===
+	// === FR-0043: device login (browser pairing) ===
 	case "login":
 		os.Exit(runLogin(os.Args[2:], os.Stdout, os.Stderr))
 	// === END FR-0043 ===

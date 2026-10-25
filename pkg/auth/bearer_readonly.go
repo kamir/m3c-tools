@@ -19,6 +19,11 @@ func persistedBearerReadOnly(store TokenStore, deviceID, userID string) (string,
 	if err != nil {
 		return "", err
 	}
+	return deviceBearerValue(token)
+}
+
+// deviceBearerValue validates an already selected native entry without I/O.
+func deviceBearerValue(token *DeviceToken) (string, error) {
 	if token == nil {
 		return "", errors.New("auth: saved bearer unavailable")
 	}

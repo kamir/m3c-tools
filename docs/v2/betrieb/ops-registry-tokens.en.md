@@ -328,3 +328,14 @@ without action by the affected machine.
 | [Incident Response](ops-incident-response.en.md) | A key or registry is compromised |
 | [Registry backup and restore](ops-registry-backup-restore.en.md) | Backup per backend, with restoration rehearsal |
 | [Monitoring and alerting](ops-monitoring.en.md) | What is observable today and what is not |
+
+## ER1 device-token origin binding
+
+New device logins save the selected HTTPS origin as local client provenance.
+Sync checks its independent `ER1_DEVICE_TOKEN_ORIGIN` pin before reading storage,
+then validates the saved record. Legacy or mismatched records require a fresh
+login. No automatic global Bearer export occurs at startup or after login.
+Legacy command families require explicit external credentials until their own
+bound request integration is complete. This is not authenticated issuer/tenant
+verification. `m3c-tools token --print` requires a matching HTTPS `ER1_API_URL`,
+independent pin and saved binding; status and logout remain management operations.

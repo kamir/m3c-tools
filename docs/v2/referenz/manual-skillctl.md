@@ -2069,9 +2069,9 @@ backend selection also precede those reads.
 
 An explicit nonempty `$ER1_DEVICE_TOKEN` wins. An invalid selected value does
 not fall back to storage. Otherwise, after binding, sync reads the existing
-native OS credential store without migration, Save or Clear operations. This does
+native OS credential store and checks its saved login-origin metadata without migration, Save or Clear operations. This does
 not rewrite environment variables or add issuer, audience or tenant metadata;
-remaining ER1 commands retain their existing autoload behavior; `attest` uses
+global stored-token autoload is disabled; `attest` uses
 its separate registry credentials. Values are captured
 for this sync invocation, without claiming that the exported ingest-client
 fields are immutable. HTTPS remains mandatory even with `--insecure`. Automated store tests use
@@ -2489,8 +2489,25 @@ skillctl login --status | --logout
 ```
 
 Browser device-pairing against ER1; persists its token only in the native OS
-credential store shared with `m3c-tools`. The legacy ER1 command families use
-that stored token; separately bound registry credentials remain distinct.
+credential store shared with `m3c-tools`. Login validates the selected HTTPS
+URL before starting its callback and saves versioned client-observed origin
+metadata. This local metadata does not authenticate the issuer or tenant.
+
+Global token autoload is disabled in both programs. Sync uses a saved token only
+after validating the final endpoint against `ER1_DEVICE_TOKEN_ORIGIN`, then
+checking the saved binding. Legacy records without binding, unknown versions
+and mismatched origins require a fresh login, without automatic rebinding.
+Legacy ER1 command families require explicit external credentials until their
+request contexts support bound storage reads. Their existing external-token
+behavior is not a universal origin-isolation guarantee. Separately bound
+registry credentials remain distinct. Owner context comes only from explicit
+`ER1_USER_ID` or `ER1_CONTEXT_ID`, never an unrelated stored token.
+
+Explicit `m3c-tools token --print` export requires HTTPS `ER1_API_URL`, a matching
+independent `ER1_DEVICE_TOKEN_ORIGIN` and a matching, non-expired saved record.
+An exported token is thereafter the operator's responsibility. Status and logout
+remain available as management operations; stored-token status does not prove
+that a particular destination is authorized.
 
 Device-token storage accepts `$M3C_TOKEN_STORE` unset, `keychain` or `auto`;
 `auto` now means native-only. The former `file` value and unknown values are
@@ -2507,7 +2524,7 @@ and backup copies through your controlled credential-cleanup procedure; their
 old identifier-derived encryption is not strong offline protection. Logout
 clears only the native device token and does not remove externally supplied
 credentials. Native-store failure remains an error. Other credential families
-and versioned issuer/origin metadata are separate work; the shared Capture
+and authenticated issuer/tenant enforcement are separate work; the shared Capture
 login may still report context-login success after token-persistence failure,
 which does not prove a durable token was saved.
 
@@ -2678,7 +2695,7 @@ The client snapshots target and credential for health and import, retaining its
 redirect guard. HTTP errors show status only; a successful response message
 containing the selected key in cleartext is rejected. This checks the displayed
 message, not arbitrary credentials or additional encodings. Import does not
-load native device-token stores; other clients and native autoload are separate.
+load native device-token stores; other clients remain separately scoped.
 
 **`menubar`**: launch the macOS menu-bar skill monitor (interactive, long-running).
 

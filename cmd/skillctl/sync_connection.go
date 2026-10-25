@@ -36,11 +36,11 @@ func syncBearerSource(getenv func(string) string, readStored httpsafe.SecretRead
 	}
 }
 
-func readSyncStoredBearer() ([]byte, error) {
+func readSyncStoredBearer(origin string) ([]byte, error) {
 	userID := strings.TrimSpace(os.Getenv("ER1_USER_ID"))
 	if userID == "" {
 		userID = strings.SplitN(os.Getenv("ER1_CONTEXT_ID"), "___", 2)[0]
 	}
-	token, err := auth.PersistedBearerReadOnly(userID)
+	token, err := auth.BoundBearerReadOnly(origin, userID)
 	return []byte(token), err
 }

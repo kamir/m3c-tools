@@ -2,88 +2,9 @@ package main
 
 import (
 	"bytes"
-	"os"
+	"strings"
 	"testing"
-	"time"
-
-	"github.com/kamir/m3c-tools/pkg/auth"
-	keyring "github.com/zalando/go-keyring"
 )
-
-// FR-0043: ER1-bound commands autoload the persisted token into the env.
-
-func TestAutoloadDeviceToken_FromStore(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	keyring.MockInit()
-	t.Setenv("M3C_TOKEN_STORE", "keychain")
-	t.Setenv("ER1_DEVICE_TOKEN", "")
-	t.Setenv("ER1_USER_ID", "")
-	t.Setenv("ER1_CONTEXT_ID", "testsub___mft") // → userID hint "testsub"
-
-	dt := &auth.DeviceToken{
-		Token:    "auto-tok",
-		UserID:   "testsub",
-		DeviceID: auth.DeviceID(),
-		SavedAt:  time.Now().UTC().Format(time.RFC3339),
-	}
-	if err := auth.Save(dt); err != nil {
-		t.Fatalf("save: %v", err)
-	}
-
-	var errb bytes.Buffer
-	autoloadDeviceToken(&errb)
-	if got := os.Getenv("ER1_DEVICE_TOKEN"); got != "auto-tok" {
-		t.Fatalf("ER1_DEVICE_TOKEN = %q, want auto-tok (stderr=%q)", got, errb.String())
-	}
-}
-
-func TestAutoloadDeviceToken_RespectsExplicitEnv(t *testing.T) {
-	t.Setenv("ER1_DEVICE_TOKEN", "explicit")
-	autoloadDeviceToken(&bytes.Buffer{})
-	if got := os.Getenv("ER1_DEVICE_TOKEN"); got != "explicit" {
-		t.Fatalf("autoload overwrote an explicit token: %q", got)
-	}
-}
-
-func TestAutoloadDeviceToken_ExpiredWarns(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	keyring.MockInit()
-	t.Setenv("M3C_TOKEN_STORE", "keychain")
-	t.Setenv("ER1_DEVICE_TOKEN", "")
-	t.Setenv("ER1_USER_ID", "testsub")
-
-	dt := &auth.DeviceToken{
-		Token:     "stale",
-		UserID:    "testsub",
-		DeviceID:  auth.DeviceID(),
-		ExpiresAt: time.Now().Add(-time.Hour).UTC().Format(time.RFC3339),
-	}
-	if err := auth.Save(dt); err != nil {
-		t.Fatalf("save: %v", err)
-	}
-
-	var errb bytes.Buffer
-	autoloadDeviceToken(&errb)
-	if got := os.Getenv("ER1_DEVICE_TOKEN"); got != "" {
-		t.Fatalf("expired token must not be exported, got %q", got)
-	}
-	if !bytes.Contains(errb.Bytes(), []byte("expired")) {
-		t.Fatalf("expected an 'expired' warning, got %q", errb.String())
-	}
-}
-
-func TestNetworkCommandsGating(t *testing.T) {
-	if !networkCommands["pull"] || !networkCommands["publish"] {
-		t.Fatal("pull/publish must be gated as network commands")
-	}
-	if networkCommands["keygen"] || networkCommands["version"] || networkCommands["sign"] {
-		t.Fatal("offline commands must NOT trigger the keychain autoload")
-	}
-}
 
 func TestResolveLoginBase(t *testing.T) {
 	// default → public SaaS (the Alice bug: was localhost)
@@ -101,5 +22,21 @@ func TestResolveLoginBase(t *testing.T) {
 	// flag beats env
 	if got := resolveLoginBase("https://onboarding.guide", "https://127.0.0.1:8081/upload_2"); got != "https://onboarding.guide" {
 		t.Fatalf("flag should beat env, got %q", got)
+	}
+}
+
+func TestLoginRejectsInvalidTargetBeforeCallback(t *testing.T) {
+	for _, raw := range []string{"http://remote.example", "https://synthetic:secret@a.example", "https://a.example/upload_2?synthetic-secret", "https://a.example/upload_2#synthetic-secret", "https://a.example/\\evil"} {
+		t.Run(raw, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			t.Setenv("USERPROFILE", home)
+			t.Setenv("ER1_API_URL", raw)
+			var out, errb bytes.Buffer
+			code := runLogin([]string{"--no-browser", "--timeout", "1ms"}, &out, &errb)
+			if code != 1 || out.Len() != 0 || strings.Contains(errb.String(), "synthetic-secret") {
+				t.Fatalf("exit=%d stdout=%q stderr=%q", code, out.String(), errb.String())
+			}
+		})
 	}
 }
