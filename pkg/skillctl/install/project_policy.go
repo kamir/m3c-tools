@@ -32,20 +32,20 @@ func validateProjectSelection(policy *projectpolicy.Policy, root *verify.TrustRo
 	return nil
 }
 
-func prepareProjectDependencies(ctx context.Context, policy *projectpolicy.Policy, blob []byte, verified *verify.VerifyResult, name, expectedVersion string, session *mutationstate.Session) (func() error, error) {
+func prepareProjectDependencies(ctx context.Context, policy *projectpolicy.Policy, blob []byte, verified *verify.VerifyResult, name, expectedVersion string, session *mutationstate.Session, snapshot *verify.SnapshotResult) (func() error, error) {
 	if policy == nil {
 		return nil, nil
 	}
 	if session == nil {
 		return nil, fmt.Errorf("install: enterprise mutation session required: %w", verify.ErrRevocationStale)
 	}
-	if verified == nil {
+	if verified == nil || snapshot == nil || snapshot.Verification != verified {
 		return nil, verify.ErrDigestMismatch
 	}
 	if err := verifyInstallSnapshot(blob, verified, verified.Digest); err != nil {
 		return nil, err
 	}
-	manifest, err := projectManifest(blob)
+	manifest, err := projectRootManifest(blob, snapshot)
 	if err != nil {
 		return nil, fmt.Errorf("install: invalid retained manifest: %w", verify.ErrDepsUnsatisfied)
 	}
@@ -144,6 +144,32 @@ func prepareProjectDependencies(ctx context.Context, policy *projectpolicy.Polic
 		})
 		return err
 	}, nil
+}
+
+// The managed snapshot already decoded this manifest from its private retained
+// bytes. Keep the install-specific UTF-8 and canonical field checks without a
+// second unpack. Unmanaged callers retain their existing parser.
+func projectRootManifest(blob []byte, snapshot *verify.SnapshotResult) (map[string]any, error) {
+	if snapshot == nil {
+		return projectManifest(blob)
+	}
+	if snapshot.Verification == nil {
+		return nil, verify.ErrDigestMismatch
+	}
+	found := false
+	for _, entry := range snapshot.Entries {
+		if entry.Rel != "bundle.json" {
+			continue
+		}
+		if found || entry.IsDir || !utf8.Valid(entry.Content) {
+			return nil, verify.ErrDigestMismatch
+		}
+		found = true
+	}
+	if !found {
+		return nil, verify.ErrDigestMismatch
+	}
+	return validateProjectManifest(snapshot.Manifest)
 }
 
 // Parse exactly the retained digest-verified bytes, never a reopened stage path.

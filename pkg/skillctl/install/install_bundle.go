@@ -146,7 +146,7 @@ func InstallBundle(opts BundleOpts) (result *Result, resultErr error) {
 	// IdentityFetcher is deliberately nil: pinned mode, no network. A nil fetcher
 	// is not a weaker check, it is what makes the check independent of the party
 	// who sent the file.
-	verRes, err := verify.Verify(verify.VerifyOpts{
+	verRes, snapshot, err := verifyRootInput(verify.VerifyOpts{
 		BundlePath:      opts.BundlePath,
 		BundleMeta:      opts.Meta,
 		TrustRoot:       opts.TrustRoot,
@@ -157,7 +157,7 @@ func InstallBundle(opts BundleOpts) (result *Result, resultErr error) {
 		IgnoreDeps:      opts.IgnoreDeps,
 		Tenant:          opts.Tenant,
 		Logger:          opts.Logger,
-	})
+	}, blob, opts.ProjectPolicy != nil)
 	if err != nil {
 		return nil, err
 	}
@@ -204,7 +204,7 @@ func InstallBundle(opts BundleOpts) (result *Result, resultErr error) {
 	// This is the same class of defect as the git-backend event identity: never
 	// take an identity from an unsigned projection when the signed original is
 	// right there.
-	signedManifest, err := projectManifest(blob)
+	signedManifest, err := projectRootManifest(blob, snapshot)
 	if err != nil {
 		return nil, fmt.Errorf("install: read signed bundle.json: %w", err)
 	}
@@ -229,7 +229,7 @@ func InstallBundle(opts BundleOpts) (result *Result, resultErr error) {
 		return nil, err
 	}
 	defer closeManagedInstall(session, &resultErr)
-	preCommit, err := prepareProjectDependencies(ctx, opts.ProjectPolicy, blob, verRes, name, "", session)
+	preCommit, err := prepareProjectDependencies(ctx, opts.ProjectPolicy, blob, verRes, name, "", session, snapshot)
 	if err != nil {
 		return nil, err
 	}
