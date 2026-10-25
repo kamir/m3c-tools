@@ -37,6 +37,8 @@ Agent Skills durchsuchen, abfragen, importieren und nachverfolgen kann.
 | Registrierung | `~/.claude/mcp.json` |
 | Bindet ein | die Go-CLI `skillctl` und die aims-core-REST-API |
 
+Verwaltetes `skill_install` verwendet ein vom Betreiber gebundenes Enterprise-Projektprofil, ein explizites Projekt-Arbeitsverzeichnis und die echte CLI. Siehe [Installationsprofil](v2/referenz/manual-skillctl.de.md#enterprise-projektauswahl-für-installationen). Toolanfragen dürfen die gebundene Trust-Policy nicht austauschen.
+
 ## 3. rag-mcp-server für Claude Code
 
 Lokale, vom Netz isolierte semantische Suche über einen GitHub-gestützten

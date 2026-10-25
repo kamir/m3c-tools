@@ -23,10 +23,12 @@ import (
 	"github.com/kamir/m3c-tools/pkg/skillctl/auditevent"
 	"github.com/kamir/m3c-tools/pkg/skillctl/install"
 	"github.com/kamir/m3c-tools/pkg/skillctl/mutationstate"
+	"github.com/kamir/m3c-tools/pkg/skillctl/projectpolicy"
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
 )
 
 type installBundleParams struct {
+	projectPolicy  *projectpolicy.Policy
 	result         *bundleVerifyResult
 	bundlePath     string
 	metaPath       string
@@ -50,12 +52,16 @@ type installBundleParams struct {
 
 func runInstallBundle(p installBundleParams, stdout, stderr io.Writer) (code int) {
 	// One lifecycle audit event for this run, on every path that reached a trust
-	// decision. Registered first so no early refusal escapes the record; the
+	// decision. Only enabled after root and profile selection. The
 	// skill name is filled in once the SIGNED name is known, and stays empty when
 	// the run never got that far, which is itself the honest reading.
 	var audErr error
 	var audName, audDigest string
+	auditSelectionReady := false
 	defer func() {
+		if !auditSelectionReady {
+			return
+		}
 		appendLifecycleEvent(auditHomeOf(p.homeOverride), auditevent.LifecycleEvent{
 			Op:       auditevent.OpInstall,
 			Skill:    audName,
@@ -81,12 +87,18 @@ func runInstallBundle(p installBundleParams, stdout, stderr io.Writer) (code int
 		return exitGeneric
 	}
 
-	tr, root, err := loadAndPickRootFromPath(p.trustRootsPath, p.registryURL)
+	tr, root, err := installProjectTrustRoots(p.projectPolicy, p.trustRootsPath, p.registryURL)
 	if err != nil {
 		audErr = err
 		fmt.Fprintln(stderr, err)
 		return exitGeneric
 	}
+
+	if root.IsManaged() && p.projectPolicy == nil {
+		fmt.Fprintln(stderr, "managed install requires --enterprise-profile")
+		return 12
+	}
+	auditSelectionReady = true
 
 	// Same refusal as verify --bundle, and for the same reason: with no fetcher
 	// the author key can only come from a local pin. A from-registry root would
@@ -175,6 +187,7 @@ func runInstallBundle(p installBundleParams, stdout, stderr io.Writer) (code int
 	}
 
 	res, err := install.InstallBundle(install.BundleOpts{
+		ProjectPolicy: p.projectPolicy,
 		BundlePath:    p.bundlePath,
 		Meta:          meta,
 		TrustRoot:     root,

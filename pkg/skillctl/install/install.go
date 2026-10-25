@@ -34,6 +34,7 @@ import (
 
 	"github.com/kamir/m3c-tools/pkg/httpsafe"
 	"github.com/kamir/m3c-tools/pkg/skillbundle"
+	"github.com/kamir/m3c-tools/pkg/skillctl/projectpolicy"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
 )
@@ -58,6 +59,8 @@ const installRoot = ".claude/skills"
 // Opts is the input bag for Install. The CLI populates this from flags;
 // tests supply a temp HomeDir, an injected Client, and a fake clock.
 type Opts struct {
+	// ProjectPolicy is mandatory for managed installations.
+	ProjectPolicy *projectpolicy.Policy
 	// Name is the bundle name to install (e.g. "fetch-contract").
 	// Required.
 	Name string
@@ -169,6 +172,23 @@ func Install(opts Opts) (result *Result, resultErr error) {
 	if err := validateOpts(&opts); err != nil {
 		return nil, err
 	}
+	homeDir, err := resolveHomeDir(opts.HomeDir)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateProjectSelection(opts.ProjectPolicy, opts.TrustRoot, homeDir, opts.Client.BaseURL, opts.IgnoreDeps, opts.AllowYellow, opts.GovernanceMin, opts.Tenant); err != nil {
+		return nil, err
+	}
+	if opts.ProjectPolicy != nil {
+		opts.TrustRoot = opts.ProjectPolicy.TrustRoot()
+		opts.Tenant = opts.ProjectPolicy.TrustRoots().TenantScope
+		client := *opts.Client
+		if client.HTTPClient != nil {
+			transport := *client.HTTPClient
+			client.HTTPClient = &transport
+		}
+		opts.Client = &client
+	}
 	ctx := opts.Ctx
 	if ctx == nil {
 		ctx = context.Background()
@@ -212,10 +232,6 @@ func Install(opts Opts) (result *Result, resultErr error) {
 	logStep(opts.Logger, "resolved", "digest=%s version=%s", digest, resolvedVersion)
 
 	// ----- stage -----
-	homeDir, err := resolveHomeDir(opts.HomeDir)
-	if err != nil {
-		return nil, err
-	}
 	stagingDir, err := makeStagingDir(homeDir, opts.Name, digest)
 	if err != nil {
 		return nil, err
@@ -256,6 +272,13 @@ func Install(opts Opts) (result *Result, resultErr error) {
 		return nil, fmt.Errorf("install: fetch meta: %w", err)
 	}
 
+	if opts.ProjectPolicy != nil {
+		meta, err = snapshotProjectMeta(meta)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// ----- verify -----
 	verifyOpts := verify.VerifyOpts{
 		BundlePath:      blobPath,
@@ -286,8 +309,13 @@ func Install(opts Opts) (result *Result, resultErr error) {
 		return nil, err
 	}
 	defer closeManagedInstall(session, &resultErr)
+	preCommit, err := prepareProjectDependencies(ctx, opts.ProjectPolicy, blob, verRes, opts.Name, resolvedVersion, session)
+	if err != nil {
+		return nil, err
+	}
 
 	res, err := finishInstall(finishOpts{
+		preCommit:  preCommit,
 		blob:       blob,
 		blobPath:   blobPath,
 		stagingDir: stagingDir,
@@ -311,6 +339,7 @@ func Install(opts Opts) (result *Result, resultErr error) {
 
 // finishOpts is the input to the shared post-verification sequence.
 type finishOpts struct {
+	preCommit  func() error
 	blob       []byte
 	blobPath   string
 	stagingDir string
@@ -375,6 +404,11 @@ func finishInstall(o finishOpts) (*Result, error) {
 		return nil, err
 	}
 	target := filepath.Join(o.homeDir, installRoot, canonName)
+	if o.preCommit != nil {
+		if err := o.preCommit(); err != nil {
+			return nil, err
+		}
+	}
 	archivedPath, err := atomicInstall(extractDir, target, o.homeDir, canonName, o.digest)
 	if err != nil {
 		return nil, err

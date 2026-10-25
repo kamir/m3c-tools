@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,6 +38,37 @@ func mutationCLIList(t *testing.T, f installableFixture, name string, epoch int,
 
 func mutationCLI(t *testing.T, binary string, f installableFixture, want int, args ...string) []byte {
 	t.Helper()
+	if len(args) > 0 && args[0] == "install" && f.trPath != "" {
+		matchingRoots, explicitProfile := false, false
+		rootFlags, equalsRoots := 0, false
+		for i := 1; i < len(args); i++ {
+			if args[i] == "--enterprise-profile" || strings.HasPrefix(args[i], "--enterprise-profile=") {
+				explicitProfile = true
+			}
+			if args[i] == "--trust-roots" {
+				rootFlags++
+				matchingRoots = i+1 < len(args) && args[i+1] == f.trPath
+			}
+			if strings.HasPrefix(args[i], "--trust-roots=") {
+				equalsRoots = true
+			}
+		}
+		roots, rootErr := verify.Load(f.trPath)
+		if rootFlags == 1 && !equalsRoots && matchingRoots && !explicitProfile && rootErr == nil && len(roots.Roots) == 1 && roots.Roots[0].IsManaged() {
+			selection := enterpriseInstallFixtureArgs(t, f)
+			// Only replace a valid managed fixture's explicitly selected roots.
+			// Missing, foreign, repeated and equals-form flags reach the real CLI.
+			filtered := []string{args[0]}
+			for i := 1; i < len(args); i++ {
+				if args[i] == "--trust-roots" && i+1 < len(args) {
+					i++
+					continue
+				}
+				filtered = append(filtered, args[i])
+			}
+			args = append(append([]string{filtered[0]}, selection...), filtered[1:]...)
+		}
+	}
 	cmd := exec.Command(binary, args...)
 	cmd.Env = append(os.Environ(), "HOME="+f.home, "USERPROFILE="+f.home, "M3C_TOKEN_STORE=file", "M3C_TEST_KEYCHAIN=0", "M3C_ER1_KEYCHAIN=off")
 	var stdout, stderr bytes.Buffer
@@ -136,7 +168,15 @@ func TestMutationStateCLIMissingHistoryDeniesThenEnrollmentEnablesInstall(t *tes
 		t.Fatal(err)
 	}
 	target := filepath.Join(f.home, ".claude", "skills", "revo-demo")
-	if !installed.OK || installed.ExitCode != 0 || installed.InstallPath != target || installed.Digest != f.digest {
+	canonicalTarget, pathErr := filepath.EvalSymlinks(target)
+	if pathErr != nil {
+		t.Fatal(pathErr)
+	}
+	canonicalInstalled, pathErr := filepath.EvalSymlinks(installed.InstallPath)
+	if pathErr != nil {
+		t.Fatal(pathErr)
+	}
+	if !installed.OK || installed.ExitCode != 0 || canonicalInstalled != canonicalTarget || installed.Digest != f.digest {
 		t.Fatalf("enrolled install contract differs: %+v", installed)
 	}
 	if body, err := os.ReadFile(filepath.Join(target, "SKILL.md")); err != nil || len(body) == 0 {
@@ -210,4 +250,33 @@ func TestMutationStateCLIAdoptionFloorsPersist(t *testing.T) {
 		t.Fatal("new CLI process lost adopted history")
 	}
 	assertMutationTargetAbsent(t, f)
+}
+
+// Repeated flags must preserve the real parser's last-value selection instead
+// of being rewritten to a successful Enterprise profile by the test fixture.
+func TestMutationCLIRepeatedTrustRootsPreserveActualSelection(t *testing.T) {
+	binary := skillctlBin(t)
+	f := newMutationStateCLIFixture(t)
+	list := mutationCLIList(t, f, "fresh-repeat", 7, time.Now().UTC().Add(-time.Hour))
+	enrollStateCLI(t, binary, f, list)
+	foreign := filepath.Join(f.dir, "intentionally-missing-foreign-roots.yaml")
+	prefix := []string{"install", "--json", "--bundle", f.skbPath, "--home", f.home, "--revocations", list}
+	cases := map[string][]string{
+		"repeated-plain": {"--trust-roots", f.trPath, "--trust-roots", foreign},
+		"last-equals":    {"--trust-roots", f.trPath, "--trust-roots=" + foreign},
+		"first-equals":   {"--trust-roots=" + f.trPath, "--trust-roots", foreign},
+	}
+	for name, flags := range cases {
+		t.Run(name, func(t *testing.T) {
+			raw := mutationCLI(t, binary, f, 1, append(append([]string{}, prefix...), flags...)...)
+			var result bundleVerifyResult
+			if err := json.Unmarshal(raw, &result); err != nil {
+				t.Fatal(err)
+			}
+			if result.OK || result.ExitCode != 1 || result.InstallPath != "" || !strings.Contains(result.Error, foreign) {
+				t.Fatalf("foreign last roots were replaced or their original error hidden: %+v", result)
+			}
+			assertMutationTargetAbsent(t, f)
+		})
+	}
 }

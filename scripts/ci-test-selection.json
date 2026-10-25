@@ -75,6 +75,29 @@
           "TestSiteTreeGoldenAndBounds",
           "TestWindowsVenvSiteClassification",
           "TestGraphAggregateBudget"
+        ],
+        "./pkg/skillctl/projectpolicy": [
+          "TestProjectProfileSnapshotsAndSelection",
+          "TestProjectProfileStrictInputs",
+          "TestProjectProfilePinnedRolesAndYAML"
+        ],
+        "./pkg/skillctl/mutationstate": [
+          "TestSessionRecheckFreshClockFloorAndOriginalBinding",
+          "TestSessionRecheckStaleFloorPreventsClockRecovery",
+          "TestSessionRecheckRevokedAdditionalSubjectPersistsClock",
+          "TestSessionRecheckInvalidInputsDoNotWrite",
+          "TestSessionRecheckRejectsHistoryReplacement",
+          "TestSessionRecheckPersistenceUncertaintyInvalidatesSession",
+          "TestSessionRecheckCloseAndDecisionConcurrent"
+        ],
+        "./pkg/skillctl/install": [
+          "TestProjectManagedInstallRequiresPolicyBeforeIO",
+          "TestProjectSignedDependenciesCannotBeHidden",
+          "TestProjectSignedTopLevelDependencyAliases",
+          "TestProjectManagedInstallActualSignedRoutes",
+          "TestProjectRuntimeRecheckBeforeArchive",
+          "TestProjectMetadataSnapshotBudget",
+          "TestProjectRequestedVersionBindsSignedManifest"
         ]
       }
     },
@@ -151,6 +174,34 @@
           "TestSiteTreeGoldenAndBounds",
           "TestWindowsVenvSiteClassification",
           "TestGraphAggregateBudget"
+        ],
+        "./pkg/skillctl/projectpolicy": [
+          "TestProjectProfileSnapshotsAndSelection",
+          "TestProjectProfileStrictInputs",
+          "TestProjectProfilePinnedRolesAndYAML"
+        ],
+        "./pkg/skillctl/mutationstate": [
+          "TestSessionRecheckFreshClockFloorAndOriginalBinding",
+          "TestSessionRecheckStaleFloorPreventsClockRecovery",
+          "TestSessionRecheckRevokedAdditionalSubjectPersistsClock",
+          "TestSessionRecheckInvalidInputsDoNotWrite",
+          "TestSessionRecheckRejectsHistoryReplacement",
+          "TestSessionRecheckPersistenceUncertaintyInvalidatesSession",
+          "TestSessionRecheckCloseAndDecisionConcurrent"
+        ],
+        "./pkg/skillctl/install": [
+          "TestProjectManagedInstallRequiresPolicyBeforeIO",
+          "TestProjectSignedDependenciesCannotBeHidden",
+          "TestProjectSignedTopLevelDependencyAliases",
+          "TestProjectManagedInstallActualSignedRoutes",
+          "TestProjectRuntimeRecheckBeforeArchive",
+          "TestProjectMetadataSnapshotBudget",
+          "TestProjectRequestedVersionBindsSignedManifest"
+        ],
+        "./cmd/skillctl": [
+          "TestInstallEnterpriseProfileActualCLI",
+          "TestInstallEnterpriseProfileUsageBeforeReads",
+          "TestInstallEnterpriseProfileHTTPPreflightActualCLI"
         ]
       }
     },
@@ -228,7 +279,13 @@
       "kind": "pytest",
       "job": "python-gate",
       "directory": "mcp-skill-server",
-      "via": "scripts/check-python.sh"
+      "via": "scripts/check-python.sh",
+      "required_cases": [
+        {
+          "classname": "mcp-skill-server.test_enterprise_profile",
+          "name": "test_real_cli_enterprise_profile_and_stdio"
+        }
+      ]
     },
     "python-rag": {
       "kind": "pytest",

@@ -57,6 +57,39 @@ DEPENDENCY_CASES = (
     'TestGraphAggregateBudget',
 )
 REQUIRED.update({(DEPENDENCIES, name) for name in DEPENDENCY_CASES})
+# Fixed project-policy, held-session and actual CLI identities.
+PROJECT_CASES = {
+    'github.com/kamir/m3c-tools/pkg/skillctl/projectpolicy': (
+        'TestProjectProfileSnapshotsAndSelection',
+        'TestProjectProfileStrictInputs',
+        'TestProjectProfilePinnedRolesAndYAML',
+    ),
+    'github.com/kamir/m3c-tools/pkg/skillctl/mutationstate': (
+        'TestSessionRecheckFreshClockFloorAndOriginalBinding',
+        'TestSessionRecheckStaleFloorPreventsClockRecovery',
+        'TestSessionRecheckRevokedAdditionalSubjectPersistsClock',
+        'TestSessionRecheckInvalidInputsDoNotWrite',
+        'TestSessionRecheckRejectsHistoryReplacement',
+        'TestSessionRecheckPersistenceUncertaintyInvalidatesSession',
+        'TestSessionRecheckCloseAndDecisionConcurrent',
+    ),
+    'github.com/kamir/m3c-tools/pkg/skillctl/install': (
+        'TestProjectManagedInstallRequiresPolicyBeforeIO',
+        'TestProjectSignedDependenciesCannotBeHidden',
+        'TestProjectSignedTopLevelDependencyAliases',
+        'TestProjectManagedInstallActualSignedRoutes',
+        'TestProjectRuntimeRecheckBeforeArchive',
+        'TestProjectMetadataSnapshotBudget',
+        'TestProjectRequestedVersionBindsSignedManifest',
+    ),
+    'github.com/kamir/m3c-tools/cmd/skillctl': (
+        'TestInstallEnterpriseProfileActualCLI',
+        'TestInstallEnterpriseProfileUsageBeforeReads',
+        'TestInstallEnterpriseProfileHTTPPreflightActualCLI',
+    ),
+}
+for _package, _cases in PROJECT_CASES.items():
+    REQUIRED.update({(_package, name) for name in _cases})
 JOBS = {"linux": "drift-guard", "windows": "windows-trust"}
 # These are classifications outside REQUIRED, never waivers for required cases.
 CLASSIFIED_PARENTS = {

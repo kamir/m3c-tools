@@ -5,8 +5,8 @@
     {
       "de": "docs/component-index.de.md",
       "en": "docs/component-index.md",
-      "de_sha256": "1386465abc0a20af6980c6001b917241099f223d8c9480f384862622e8862266",
-      "en_sha256": "53ddb6bbad6a4696cc19a661fad84c585afd35a9f491e8e6f55ea092c7bc99c7"
+      "de_sha256": "a8803bac934cfb7ac01461db90f3528d564c542511086eb3f846af98b26d0961",
+      "en_sha256": "c01c2e0a5dbd95c77a3df902bcefc460b2635f0fce5b3878d0ab3bfb4d526876"
     },
     {
       "de": "docs/index.md",
@@ -23,8 +23,8 @@
     {
       "de": "docs/service-index.de.md",
       "en": "docs/service-index.md",
-      "de_sha256": "0c88a55c4561e0c9f5ff0b48757089cf7e73fa9b551b3cbe45b776104ffd1f36",
-      "en_sha256": "e67c66ec70adef5b7e4b11f435443f2b6fbb114b16619cd8b9567c2e2ba9000a"
+      "de_sha256": "cde5f0f4eace9054e3fd5af07b1178109ba633e01385a80b2948b2e18f07355a",
+      "en_sha256": "217f553e57b6fef2089851a3198a94b2d13483da7720434172c55497a8dcbd86"
     },
     {
       "de": "docs/v2/betrieb/ops-incident-response.de.md",
@@ -179,8 +179,8 @@
     {
       "de": "docs/v2/referenz/manual-skillctl.de.md",
       "en": "docs/v2/referenz/manual-skillctl.md",
-      "de_sha256": "e92db25cdd642cdc85ff34744995facbcb8395333bc72a762c628304d1ccf53c",
-      "en_sha256": "76300dfffebf3b31c24636402c3bfcf8ed95412e3d35a43c3095ba3dedba6a24"
+      "de_sha256": "8faad48d36202304d22f1c17a29de4c7707c109c09a9e9644b9b8efb6c508119",
+      "en_sha256": "ce4d318423219b99f078f8a620de947fae01d07665c71e6d7126d5031e066eb3"
     },
     {
       "de": "docs/v2/sicherheit/audit-spur.de.md",

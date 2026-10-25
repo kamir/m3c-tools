@@ -37,6 +37,36 @@ DEPENDENCY_TESTS = (
     'TestWindowsVenvSiteClassification',
     'TestGraphAggregateBudget',
 )
+PROJECT_TESTS = {
+    'github.com/kamir/m3c-tools/pkg/skillctl/projectpolicy': (
+        'TestProjectProfileSnapshotsAndSelection',
+        'TestProjectProfileStrictInputs',
+        'TestProjectProfilePinnedRolesAndYAML',
+    ),
+    'github.com/kamir/m3c-tools/pkg/skillctl/mutationstate': (
+        'TestSessionRecheckFreshClockFloorAndOriginalBinding',
+        'TestSessionRecheckStaleFloorPreventsClockRecovery',
+        'TestSessionRecheckRevokedAdditionalSubjectPersistsClock',
+        'TestSessionRecheckInvalidInputsDoNotWrite',
+        'TestSessionRecheckRejectsHistoryReplacement',
+        'TestSessionRecheckPersistenceUncertaintyInvalidatesSession',
+        'TestSessionRecheckCloseAndDecisionConcurrent',
+    ),
+    'github.com/kamir/m3c-tools/pkg/skillctl/install': (
+        'TestProjectManagedInstallRequiresPolicyBeforeIO',
+        'TestProjectSignedDependenciesCannotBeHidden',
+        'TestProjectSignedTopLevelDependencyAliases',
+        'TestProjectManagedInstallActualSignedRoutes',
+        'TestProjectRuntimeRecheckBeforeArchive',
+        'TestProjectMetadataSnapshotBudget',
+        'TestProjectRequestedVersionBindsSignedManifest',
+    ),
+    'github.com/kamir/m3c-tools/cmd/skillctl': (
+        'TestInstallEnterpriseProfileActualCLI',
+        'TestInstallEnterpriseProfileUsageBeforeReads',
+        'TestInstallEnterpriseProfileHTTPPreflightActualCLI',
+    ),
+}
 COMMIT = "c" * 40
 
 
@@ -65,7 +95,13 @@ def successful_report():
     for name in DEPENDENCY_TESTS:
         dependency_rows.extend([event(name, "run", DEPENDENCY_PACKAGE), event(name, package=DEPENDENCY_PACKAGE)])
     dependency_rows.append(event(package=DEPENDENCY_PACKAGE))
-    return dependency_rows + rows + [event(PARENT), event()]
+    integration_rows = []
+    for package, names in PROJECT_TESTS.items():
+        integration_rows.append(event(action="start", package=package))
+        for name in names:
+            integration_rows.extend([event(name, "run", package), event(name, package=package)])
+        integration_rows.append(event(package=package))
+    return integration_rows + dependency_rows + rows + [event(PARENT), event()]
 
 
 def exception(**changes):
@@ -120,8 +156,8 @@ class ParityContracts(unittest.TestCase):
     def test_same_required_cases_pass_with_denominator(self):
         result = self.run_reports()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("linux lane=trust required=30 pass=30 skip=0 missing=0 exceptions=0", result.stdout)
-        self.assertIn("windows lane=trust required=30 pass=30 skip=0 missing=0 exceptions=0", result.stdout)
+        self.assertIn("linux lane=trust required=50 pass=50 skip=0 missing=0 exceptions=0", result.stdout)
+        self.assertIn("windows lane=trust required=50 pass=50 skip=0 missing=0 exceptions=0", result.stdout)
         self.assertIn("UNBOUND", result.stdout)
 
     def test_dependency_python_skip_or_missing_cannot_hide_behind_package_pass(self):
@@ -146,6 +182,20 @@ class ParityContracts(unittest.TestCase):
                         next(r for r in rows if r.get("Test") == "TestGraphAggregateBudget" and r["Action"] == "pass")["Action"] = "skip"
                     self.reject(self.run_reports(**{platform: rows}), "is " + ("missing" if status == "missing" else "skip"))
 
+    def test_project_policy_session_install_and_cli_are_mandatory(self):
+        for package, names in PROJECT_TESTS.items():
+            for status in ("skip", "missing"):
+                for platform in ("linux", "windows"):
+                    with self.subTest(package=package, status=status, platform=platform):
+                        rows = successful_report()
+                        selected = names[0]
+                        if status == "missing":
+                            rows = [r for r in rows if (r.get("Package"), r.get("Test")) != (package, selected)]
+                        else:
+                            next(r for r in rows if r.get("Package") == package and r.get("Test") == selected
+                                 and r["Action"] == "pass")["Action"] = "skip"
+                        self.reject(self.run_reports(**{platform: rows}, bound=True), "is " + status)
+
     def test_equal_counts_disjoint_ids_rejected(self):
         rows = successful_report()
         for row in rows:
@@ -160,7 +210,7 @@ class ParityContracts(unittest.TestCase):
                 row["Action"] = "skip"
         result = self.run_reports(windows=rows)
         self.reject(result, "is skip")
-        self.assertIn("windows lane=trust required=30 pass=0 skip=30", result.stdout)
+        self.assertIn("windows lane=trust required=50 pass=0 skip=50", result.stdout)
 
     def test_missing_or_skipped_subtest_with_passing_parent_rejected(self):
         for status in ("missing", "skip"):
@@ -236,7 +286,7 @@ class ParityContracts(unittest.TestCase):
         rows[-1:-1] = [event("TestOptional", "run"), event("TestOptional", "skip")]
         result = self.run_reports(windows=rows)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("observed pass=30 skip=1", result.stdout)
+        self.assertIn("observed pass=50 skip=1", result.stdout)
         self.assertIn("1 other identities outside reviewed parity scope", result.stdout)
 
     def test_bound_same_run_reports_pass(self):
@@ -267,7 +317,7 @@ class ParityContracts(unittest.TestCase):
         result = self.run_reports(windows=rows, exceptions=[exception()])
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("EXCEPTION (not PASS)", result.stdout)
-        self.assertIn("windows lane=trust required=30 pass=29 skip=0 missing=1 exceptions=1", result.stdout)
+        self.assertIn("windows lane=trust required=50 pass=49 skip=0 missing=1 exceptions=1", result.stdout)
         self.assertIn("not acceptance", result.stdout)
         self.reject(self.run_reports(linux=rows, exceptions=[exception()]), "linux: required")
 
@@ -320,7 +370,7 @@ class ParityContracts(unittest.TestCase):
         next(row for row in rows if row.get("Test") == CHILD and row["Action"] == "pass")["Action"] = "skip"
         result = self.run_reports(windows=rows, exceptions=[exception()])
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("pass=29 skip=1 missing=0 exceptions=1", result.stdout)
+        self.assertIn("pass=49 skip=1 missing=0 exceptions=1", result.stdout)
         today = datetime.now(timezone.utc).date().isoformat()
         self.reject(self.run_reports(windows=rows, exceptions=[exception(expires=today)]), "expired exception")
 

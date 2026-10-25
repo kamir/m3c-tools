@@ -60,6 +60,11 @@ override:
   - { path: '^pkg/skillctl/netguard$',    threshold: 100 } # measured 100.0
   - { path: '^pkg/skillctl/parser$',      threshold: 100 } # measured 100.0
   - { path: '^pkg/skillctl/semver$',      threshold: 100 } # measured 100.0
+  # Enterprise project selection and held mutation-session rechecks.
+  # Measured with Go 1.26.10, -race and -covermode=atomic on macOS arm64;
+  # package floors use floor(measured - 0.5), as for the trust packages below.
+  - { path: '^pkg/skillctl/mutationstate$', threshold: 85 } # measured 86.0 (382/444)
+  - { path: '^pkg/skillctl/projectpolicy$', threshold: 77 } # measured 77.7 (160/206)
   # Well-covered packages.
   - { path: '^pkg/skillctl/statemachine$', threshold: 97 } # measured 97.6
   - { path: '^pkg/skillctl/bodyscan$',     threshold: 96 } # measured 96.0

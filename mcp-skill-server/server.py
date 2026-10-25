@@ -8,6 +8,8 @@ Transport: stdio (standard for Claude Code)
 Registration: ~/.claude/mcp.json
 """
 import asyncio
+import hashlib
+from dataclasses import dataclass
 import json
 import logging
 import os
@@ -753,7 +755,7 @@ _REMEDIATION = {
     "author_sig_invalid": "Author signature does not verify against the bound identity public key. The bundle has been tampered with or the identity record is wrong.",
     "registry_not_trusted": "Registry signing key is not pinned in ~/.claude/skill-trust-roots.yaml. Run `skillctl trust add --registry <url> --pubkey <path>` to pin it, or refuse the install.",
     "governance_below_min": "Bundle governance level is below the trust-root minimum. Review the bundle's attestations or pass --allow-yellow if your policy allows it.",
-    "deps_unsatisfied": "One or more depends_on entries cannot be satisfied. Install the missing skill/package, or pass --ignore-deps to override (audited).",
+    "deps_unsatisfied": "Missing or unverified dependencies block this install. Enterprise profiles require preinstalled trust-verified skill/agent dependencies and a matching runtime profile; missing proof blocks the operation. --ignore-deps applies only to legacy unmanaged installs whose policy permits it.",
     "blob_missing": "Registry has metadata for the digest but the blob storage is unreachable. Try again or contact the registry operator.",
     "tenant_blocked": "The tenant policy blocked this bundle. Contact the tenant policy owner.",
     "source_policy_denied": "Source policy, identity revocation or bundle revocation denied this bundle. Inspect the verifier diagnostic.",
@@ -822,7 +824,61 @@ def _validate_safe_token(value: str, label: str) -> str | None:
     return None
 
 
-def _run_skillctl_blocking(argv: list[str], timeout: int = 120) -> dict:
+@dataclass(frozen=True)
+class _EnterpriseInstallBinding:
+    configured: bool = False
+    profile: str = ""
+    digest: str = ""
+    project: str = ""
+    home: str = ""
+    binary: str = ""
+    error: str = ""
+
+
+def _enterprise_profile_digest(path: str) -> str:
+    if not Path(path).is_file():
+        raise ValueError("enterprise profile is not a regular file")
+    with open(path, "rb") as stream:
+        raw = stream.read((64 << 10) + 1)
+    if not raw or len(raw) > 64 << 10:
+        raise ValueError("enterprise profile size is invalid")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _capture_enterprise_install_binding() -> _EnterpriseInstallBinding:
+    names = ("SKILLCTL_ENTERPRISE_PROFILE", "SKILLCTL_PROJECT_ROOT", "SKILLCTL_ARTIFACT_HOME")
+    if not any(name in os.environ for name in names):
+        return _EnterpriseInstallBinding()
+    try:
+        profile = os.environ.get(names[0], "")
+        project = os.environ.get(names[1], "")
+        home = os.environ.get(names[2], str(Path.home()))
+        for value in (profile, project, home):
+            if _validate_safe_token(value, "operator binding") or not Path(value).is_absolute():
+                raise ValueError("invalid operator binding")
+        profile = str(Path(profile).resolve(strict=True))
+        project = str(Path(project).resolve(strict=True))
+        home = str(Path(home).resolve(strict=True))
+        if not Path(project).is_dir() or not Path(home).is_dir():
+            raise ValueError("invalid operator directories")
+        digest = _enterprise_profile_digest(profile)
+        binary, error = _resolve_skillctl_bin()
+        if error:
+            raise ValueError("operator skillctl unavailable")
+        return _EnterpriseInstallBinding(True, profile, digest, project, home, str(Path(binary).resolve(strict=True)))
+    except (OSError, ValueError, RuntimeError):
+        return _EnterpriseInstallBinding(configured=True, error="Enterprise operator binding is invalid; configure profile, project root, artifact home and skillctl before starting the server.")
+
+
+_ENTERPRISE_INSTALL_BINDING = _capture_enterprise_install_binding()
+
+
+def _enterprise_install_failure(message: str) -> dict:
+    return {"ok": False, "exit_code": 12, "error_class": "registry_not_trusted", "stderr": message,
+            "remediation": "Ask the operator to configure the Enterprise project profile and restart the server; tool requests cannot replace it."}
+
+
+def _run_skillctl_blocking(argv: list[str], timeout: int = 120, *, cwd: str | None = None) -> dict:
     """Synchronous subprocess.run wrapper that returns a normalized dict.
 
     Returns:
@@ -839,8 +895,10 @@ def _run_skillctl_blocking(argv: list[str], timeout: int = 120) -> dict:
     surface mocks subprocess.run directly.
     """
     try:
+        location = {"cwd": cwd} if cwd is not None else {}
         completed = subprocess.run(
             argv,
+            **location,
             capture_output=True,
             text=True,
             timeout=timeout,
@@ -895,10 +953,13 @@ def _classify_failure(exit_code: int, stderr: str) -> dict:
     }
 
 
-def _do_install_or_verify(argv_tail: list[str], timeout: int) -> dict:
+def _do_install_or_verify(argv_tail: list[str], timeout: int, *, enterprise_binding: _EnterpriseInstallBinding | None = None) -> dict:
     """Shared exec + parse path for install and verify (same response shape
     minus install_path)."""
-    skillctl, err = _resolve_skillctl_bin()
+    if enterprise_binding is None:
+        skillctl, err = _resolve_skillctl_bin()
+    else:
+        skillctl, err = enterprise_binding.binary, None
     if err:
         return {
             "ok": False,
@@ -909,7 +970,10 @@ def _do_install_or_verify(argv_tail: list[str], timeout: int) -> dict:
         }
 
     argv = [skillctl] + argv_tail
-    result = _run_skillctl_blocking(argv, timeout=timeout)
+    if enterprise_binding is None:
+        result = _run_skillctl_blocking(argv, timeout=timeout)
+    else:
+        result = _run_skillctl_blocking(argv, timeout=timeout, cwd=enterprise_binding.project)
 
     if result["error"]:
         # Exec itself failed (timeout, missing binary). Surface as
@@ -997,6 +1061,7 @@ async def skill_install(
     allow_yellow: bool = False,
     ignore_deps: bool = False,
     timeout: int = 120,
+    enterprise_profile: str = "",
 ) -> dict:
     """Install a signed skill bundle from the registry, running the SPEC-0188
     §7 verifier (digest, author signature, registry signature, governance
@@ -1012,8 +1077,9 @@ async def skill_install(
             governance_minimum ("green" | "yellow").
         allow_yellow: Lower the gate from green to yellow for this install
             (audited).
-        ignore_deps: Skip depends_on resolution (audited).
+        ignore_deps: Legacy unmanaged override only (audited). Enterprise profiles forbid it.
         timeout: Per-call timeout in seconds (default 120).
+        enterprise_profile: Optional exact operator-bound profile path; requests cannot select another policy.
 
     Returns a JSON-serializable dict. On success: ok=True with digest,
     author_identity, registry_key_id, governance_level, chain_summary,
@@ -1031,9 +1097,27 @@ async def skill_install(
     if governance_min and governance_min not in _VALID_LEVELS:
         return {"ok": False, "exit_code": 2, "error_class": "validation_error", "stderr": f"governance_min must be one of {sorted(_VALID_LEVELS)}", "remediation": "Use 'green', 'yellow', or 'red'."}
 
+    binding = _ENTERPRISE_INSTALL_BINDING
+    if binding.configured:
+        if binding.error:
+            return _enterprise_install_failure(binding.error)
+        if enterprise_profile and enterprise_profile != binding.profile:
+            return _enterprise_install_failure("Enterprise profile request conflicts with the operator binding.")
+        if registry or governance_min or allow_yellow or ignore_deps:
+            return _enterprise_install_failure("Enterprise installs forbid request-selected registry, governance and dependency overrides.")
+        try:
+            if _enterprise_profile_digest(binding.profile) != binding.digest:
+                return _enterprise_install_failure("Enterprise profile bytes changed after server startup.")
+        except (OSError, ValueError):
+            return _enterprise_install_failure("Enterprise profile is unavailable after server startup.")
+    elif enterprise_profile:
+        return _enterprise_install_failure("The server has no operator-bound Enterprise profile.")
+
     # ----- assemble argv -----
     spec_arg = f"{name}@{version}" if version else name
     argv: list[str] = ["install", "--json"]
+    if binding.configured:
+        argv += ["--enterprise-profile", binding.profile, "--enterprise-profile-sha256", binding.digest, "--home", binding.home]
     if registry:
         argv += ["--registry", registry]
     if governance_min:
@@ -1044,7 +1128,7 @@ async def skill_install(
         argv.append("--ignore-deps")
 
     argv.extend(["--", spec_arg])
-    return _do_install_or_verify(argv, timeout=timeout)
+    return _do_install_or_verify(argv, timeout=timeout, enterprise_binding=binding if binding.configured else None)
 
 
 @mcp.tool()

@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from xml.etree import ElementTree as ET
 
 import yaml
 
@@ -59,8 +60,12 @@ class ArtifactContracts(unittest.TestCase):
                 meta["test_terminal_counts"] = {"pass": sum(e["Action"] == "pass" and "Test" in e for e in rows),
                                                 "skip": 0, "fail": 0}
             else:
-                raw.write_text('<testsuites><testsuite><testcase name="fixture"/></testsuite></testsuites>')
-                meta["test_counts"] = dict(total=1, skipped=0, failed=0)
+                suite = ET.Element("testsuite")
+                required = lane.get("required_cases") or [dict(classname="fixture", name="fixture")]
+                for identity in required:
+                    ET.SubElement(suite, "testcase", identity)
+                raw.write_bytes(ET.tostring(suite))
+                meta["test_counts"] = dict(total=len(required), skipped=0, failed=0)
             meta["result_sha256"] = hashlib.sha256(raw.read_bytes()).hexdigest()
             path = folder / (name + ".meta.json")
             path.write_text(json.dumps(meta))
@@ -78,6 +83,50 @@ class ArtifactContracts(unittest.TestCase):
 
     def test_all_expected_lanes_pass(self):
         self.assertEqual(set(self.run_gate()), set(self.config["lanes"]))
+
+    def test_required_python_case_cannot_hide_behind_passing_other_cases(self):
+        raw, meta_path = self.paths["python-mcp"]
+        original, metadata = raw.read_bytes(), meta_path.read_bytes()
+        identity = self.config["lanes"]["python-mcp"]["required_cases"][0]
+        for mode in ("missing", "skip", "duplicate", "foreign_class"):
+            with self.subTest(mode=mode):
+                suite = ET.Element("testsuite")
+                ET.SubElement(suite, "testcase", dict(classname="other", name="passing_control"))
+                if mode != "missing":
+                    attrs = dict(identity)
+                    if mode == "foreign_class":
+                        attrs["classname"] = "other"
+                    case = ET.SubElement(suite, "testcase", attrs)
+                    if mode == "skip":
+                        ET.SubElement(case, "skipped")
+                    if mode == "duplicate":
+                        ET.SubElement(suite, "testcase", attrs)
+                raw.write_bytes(ET.tostring(suite))
+                meta = json.loads(metadata)
+                meta["result_sha256"] = hashlib.sha256(raw.read_bytes()).hexdigest()
+                meta["test_counts"] = GATE.python_counts(raw.read_bytes())
+                meta_path.write_text(json.dumps(meta))
+                with self.assertRaisesRegex(ValueError, "required Python case"):
+                    self.run_gate()
+                command = [sys.executable, str(ROOT / "scripts/ci-test-artifacts.py"), str(self.root)]
+                for key, value in self.context.items():
+                    command.extend(["--" + key.replace("_", "-"), value])
+                environment = dict(os.environ, TEST_PRODUCER_RESULTS=json.dumps(self.needs))
+                result = subprocess.run(command, env=environment, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn("required Python case", result.stderr)
+        raw.write_bytes(original)
+        meta_path.write_bytes(metadata)
+        self.assertEqual(set(self.run_gate()), set(self.config["lanes"]))
+
+    def test_required_python_identity_configuration_is_strict(self):
+        valid = dict(classname="suite", name="case")
+        report = '<testsuite><testcase classname="suite" name="case"/></testsuite>'
+        for required in (False, {}, [None], [dict(name="case")], [dict(valid, extra="x")],
+                         [dict(valid, classname="")], [valid, valid]):
+            with self.subTest(required=required), self.assertRaisesRegex(ValueError, "Python identit"):
+                GATE.python_counts(report, required)
+        self.assertEqual(GATE.python_counts(report, [valid]), dict(total=1, skipped=0, failed=0))
 
     def test_missing_artifact_or_lane_file_rejected(self):
         for which in ("raw", "meta", "log", "folder"):
@@ -303,6 +352,40 @@ class ArtifactContracts(unittest.TestCase):
                     bad = subprocess.run(args, env=env, capture_output=True, text=True)
                     self.assertEqual(bad.returncode, 1, bad.stdout + bad.stderr)
                     self.assertIn("mandatory Go scenario", bad.stderr)
+                    raw.write_bytes(original_raw)
+                    metadata.write_bytes(original_metadata)
+
+    def test_project_guards_required_with_correct_rebound_metadata_actual_cli(self):
+        probes = (
+            ("unit", "TestSessionRecheckStaleFloorPreventsClockRecovery"),
+            ("unit", "TestProjectProfileSnapshotsAndSelection"),
+            ("unit", "TestProjectRuntimeRecheckBeforeArchive"),
+            ("security", "TestInstallEnterpriseProfileHTTPPreflightActualCLI"),
+        )
+        env = dict(os.environ, TEST_PRODUCER_RESULTS=json.dumps(self.needs))
+        args = [sys.executable, str(ROOT / "scripts/ci-test-artifacts.py"), str(self.root),
+                "--commit", self.context["commit"], "--run-id", "123", "--attempt", "2"]
+        for lane, name in probes:
+            raw, metadata = self.paths[lane]
+            original_raw, original_metadata = raw.read_bytes(), metadata.read_bytes()
+            for action in ("skip", "missing"):
+                with self.subTest(lane=lane, name=name, action=action):
+                    rows = [json.loads(line) for line in original_raw.splitlines()]
+                    if action == "missing":
+                        rows = [r for r in rows if r.get("Test") != name]
+                    else:
+                        next(r for r in rows if r.get("Test") == name and r["Action"] == "pass")["Action"] = "skip"
+                    raw.write_text("".join(json.dumps(r) + "\n" for r in rows))
+                    meta = json.loads(original_metadata)
+                    meta["result_sha256"] = hashlib.sha256(raw.read_bytes()).hexdigest()
+                    meta["test_terminal_counts"] = {
+                        status: sum(r["Action"] == status and "Test" in r for r in rows)
+                        for status in ("pass", "skip", "fail")
+                    }
+                    metadata.write_text(json.dumps(meta))
+                    result = subprocess.run(args, env=env, capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                    self.assertIn("mandatory Go scenario", result.stderr)
                     raw.write_bytes(original_raw)
                     metadata.write_bytes(original_metadata)
 

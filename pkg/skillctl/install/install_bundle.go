@@ -37,12 +37,15 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/skillctl/projectpolicy"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
 )
 
 // BundleOpts is the input to InstallBundle.
 type BundleOpts struct {
+	// ProjectPolicy is mandatory for managed installations.
+	ProjectPolicy *projectpolicy.Policy
 	// BundlePath is the .skb file on disk. It arrived over an untrusted
 	// transport; nothing about it is believed until the chain says so.
 	BundlePath string
@@ -117,6 +120,22 @@ func InstallBundle(opts BundleOpts) (result *Result, resultErr error) {
 		return nil, errors.New("install: a pinned trust root is required")
 	}
 
+	homeDir, err := resolveHomeDir(opts.HomeDir)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateProjectSelection(opts.ProjectPolicy, opts.TrustRoot, homeDir, "", opts.IgnoreDeps, opts.AllowYellow, opts.GovernanceMin, opts.Tenant); err != nil {
+		return nil, err
+	}
+	if opts.ProjectPolicy != nil {
+		opts.TrustRoot = opts.ProjectPolicy.TrustRoot()
+		opts.Tenant = opts.ProjectPolicy.TrustRoots().TenantScope
+		meta, err := snapshotProjectMeta(opts.Meta)
+		if err != nil {
+			return nil, err
+		}
+		opts.Meta = meta
+	}
 	blob, err := readLocalInstallSnapshot(opts.BundlePath)
 	if err != nil {
 		return nil, fmt.Errorf("install: read bundle %s: %w", opts.BundlePath, err)
@@ -149,10 +168,6 @@ func InstallBundle(opts BundleOpts) (result *Result, resultErr error) {
 
 	// Adopt explicit verified evidence before optional caller policy can deny a
 	// subject. Otherwise that refusal could discard a newly learned epoch floor.
-	homeDir, err := resolveHomeDir(opts.HomeDir)
-	if err != nil {
-		return nil, err
-	}
 	store, err := prepareManagedInstall(ctx, opts.TrustRoot, homeDir, opts.MutationEvidence)
 	if err != nil {
 		return nil, err
@@ -182,16 +197,14 @@ func InstallBundle(opts BundleOpts) (result *Result, resultErr error) {
 	// signature would verify, and the wrong thing would land.
 	//
 	// The name inside the archive's bundle.json IS covered, because it is part of
-	// the bytes the digest is taken over. ReadDigestVerifiedManifest is the
-	// repository's existing, single trust boundary for exactly this (it recomputes
-	// the digest and fails closed before returning anything), and it is used here
-	// rather than reimplemented, for the reason its own doc comment gives: a second
-	// reader of signed content is a second place to weaken the rule.
+	// the bytes the digest is taken over. The bounded retained snapshot
+	// parser below consumes the same bytes already
+	// bound to verRes.Digest above; the input path is not reopened.
 	//
 	// This is the same class of defect as the git-backend event identity: never
 	// take an identity from an unsigned projection when the signed original is
 	// right there.
-	signedManifest, err := verify.ReadDigestVerifiedManifest(opts.BundlePath, verRes.Digest)
+	signedManifest, err := projectManifest(blob)
 	if err != nil {
 		return nil, fmt.Errorf("install: read signed bundle.json: %w", err)
 	}
@@ -216,6 +229,10 @@ func InstallBundle(opts BundleOpts) (result *Result, resultErr error) {
 		return nil, err
 	}
 	defer closeManagedInstall(session, &resultErr)
+	preCommit, err := prepareProjectDependencies(ctx, opts.ProjectPolicy, blob, verRes, name, "", session)
+	if err != nil {
+		return nil, err
+	}
 
 	stagingDir, err := makeStagingDir(homeDir, name, verRes.Digest)
 	if err != nil {
@@ -254,6 +271,7 @@ func InstallBundle(opts BundleOpts) (result *Result, resultErr error) {
 	// offline-meta stash degrades to best-effort, exactly as it does when a
 	// registry call fails on the other path.
 	res, err := finishInstall(finishOpts{
+		preCommit:  preCommit,
 		blob:       blob,
 		blobPath:   blobPath,
 		stagingDir: stagingDir,

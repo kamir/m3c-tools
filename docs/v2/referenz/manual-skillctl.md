@@ -378,10 +378,10 @@ At the same epoch, a refresh must preserve the revoked set. Full-list input is
 limited to 1 MiB and must be a regular file, not a symlink.
 
 ```bash
-skillctl trust state enroll --trust-roots roots.yaml --registry https://registry.example/api/skills --home ./demo-home --revocations revocations.json --profile local-operator-v1 --confirm-local-trust
-skillctl trust state status --trust-roots roots.yaml --registry https://registry.example/api/skills --home ./demo-home
-skillctl trust state adopt --trust-roots roots.yaml --registry https://registry.example/api/skills --home ./demo-home --revocations revocations.json
-skillctl install --bundle demo@1.0.0.skb --trust-roots roots.yaml --registry https://registry.example/api/skills --home ./demo-home --revocations revocations.json
+skillctl trust state enroll --trust-roots roots.yaml --registry https://registry.example/api/skills --home /absolute/operator-home --revocations revocations.json --profile local-operator-v1 --confirm-local-trust
+skillctl trust state status --trust-roots roots.yaml --registry https://registry.example/api/skills --home /absolute/operator-home
+skillctl trust state adopt --trust-roots roots.yaml --registry https://registry.example/api/skills --home /absolute/operator-home --revocations revocations.json
+skillctl install --enterprise-profile /absolute/project/enterprise.json --bundle demo@1.0.0.skb --home /absolute/operator-home --revocations revocations.json
 ```
 
 Managed local `install --bundle` still requires `--revocations`. It retains one
@@ -417,8 +417,8 @@ dependency enforcement and customer-platform acceptance remain separate work.
 
 
 Managed HTTP `install <name>@<version>` now uses the same enrolled history and
-held publication lock as local bundles. Select the same `--trust-roots`, registry
-and `--home` used by `trust state enroll`; refresh retained evidence explicitly
+held publication lock as local bundles. Select `--enterprise-profile` with the same pinned root, registry
+and installation home used by `trust state enroll`; refresh retained evidence explicitly
 with `trust state adopt`. The registry route rejects `--meta`, `--revocations`,
 `--checkpoint` and `--emergency`, which belong to `--bundle`.
 
@@ -526,7 +526,7 @@ unversioned list is untrusted (`12`). A checkpoint cannot refresh that full
 list, and low-risk execution fail-open policy cannot allow a stale installation.
 Explicit checkpoints and emergency files still undergo verification.
 
-Managed local bundles also require explicit prior `trust state enroll`. The
+Managed local bundles also require an explicit `--enterprise-profile` and prior `trust state enroll`. The
 local durable observation detects unintended clock/epoch rollback under the
 local-operator model described in `trust state`. Other installation routes and
 customer acceptance remain open; this check alone does not establish Enterprise readiness.
@@ -536,10 +536,12 @@ customer acceptance remain open; this check alone does not establish Enterprise 
 | `-allow-yellow` | Lower the gate from green to yellow for this install (audited). |
 | `-bundle` | Install a standalone `.skb` file from an untrusted transport, fully offline against pinned trust-roots (SPEC-0406 D2). |
 | `-checkpoint` | Signed checkpoint with `--bundle`; verified but cannot refresh a managed install's full revocation list. Forged/untrusted → `12`. |
+| `-enterprise-profile` | Explicit project JSON, required for managed HTTP/local-bundle installation. Current directory and selected home must match its existing canonical directories. |
+| `-enterprise-profile-sha256` | Optional expected lowercase SHA-256 of that exact JSON file; requires `--enterprise-profile`. MCP supplies its operator startup pin. |
 | `-emergency` | Signed emergency deny-list (SPEC-0279 R5, with `--bundle`). Named digest → `17`; forged list → `12`. |
 | `-governance-min green\|yellow` | Override the trust-root's `governance_minimum`. Empty = use trust-root. |
 | `-home` | Override the install root (advanced; defaults to `$HOME`). |
-| `-ignore-deps` | Skip `depends_on` resolution (audited). |
+| `-ignore-deps` | Skip legacy `depends_on` resolution (audited); refused with an Enterprise project profile. |
 | `-json` | Emit a versioned machine trust result. Put `--json` first to include flag parsing failures. |
 | `-meta` | Path to the BundleMeta envelope JSON for `--bundle` (default: the sidecar `.skbmeta.json`). |
 | `-registry` | Registry base URL. Required only when trust-roots pins multiple registries. |
@@ -558,6 +560,61 @@ skillctl install --bundle demo@1.0.0.skb --trust-roots roots.yaml --revocations 
 Exit: `0`, `1`, `2`, plus every code `verify.ExitCode` maps out of the §7 chain that this path can actually raise: `10`–`17`, `20` (self-attested) and `22` (revocation snapshot stale). With `--bundle`, `17` also carries an emergency deny (see [Exit codes](#exit-codes)).
 
 `23` (log inclusion missing) is NOT in that set, although `verify.ExitCode` maps it: the only function that raises `ErrLogInclusionMissing`, `verify.CheckLogInclusion`, has no caller outside its own test file, so no `install` or `verify` run reaches it. `23` is reachable today through `translog verify` alone.
+
+---
+
+### Enterprise project selection for installation
+
+Run managed installs from the explicitly selected project directory. The profile
+pins existing public trust files and the runtime profile by their raw file SHA-256;
+relative references resolve beside the project JSON. It contains no credentials.
+The runtime profile must use schema `m3c.skillctl.runtime-profile/v1` and the same
+canonical `project_root`; it selects absolute Python/tool paths rather than PATH.
+Version constraints use the resolver's `numeric-release/v1` policy; unsupported version syntax is refused. The operator must review and explicitly supply package-tree baselines. Installing
+or observing packages never automatically approves a baseline.
+
+Example shape, replacing paths and hashes with reviewed values:
+
+```json
+{
+  "schema": "m3c.enterprise-project-profile/v1",
+  "project_root": "/absolute/project",
+  "artifact_home": "/absolute/operator-home",
+  "registry_url": "https://registry.example/api/skills",
+  "artifact_trust": {"path": "roots.yaml", "sha256": "<64 lowercase hex characters>"},
+  "revocation_trust": {"path": "roots.yaml", "sha256": "<64 lowercase hex characters>"},
+  "runtime": {"path": "runtime.json", "sha256": "<64 lowercase hex characters>"}
+}
+```
+
+This version supports one managed HTTP authority. Both role references are loaded
+and pinned independently and must select identical complete roots and tenant scope.
+Distinct authorities/keys, multiple registries and other trust formats are refused;
+they are not converted. `allow_loopback_http: true` is an explicit development-only
+opt-in for loopback HTTP; ordinary remote registries require HTTPS.
+
+With a profile, trust-file and tenant overrides, `--ignore-deps`, `--allow-yellow`
+and governance overrides are refused. Conflicting registry, home or project selection also
+fails before registry credentials or requests. The SDK enforces the profile even
+without a CLI callback. Signed retained `bundle.json` bytes determine runtime
+declarations. Python/system requirements are checked, then checked again before
+the first replacement of an installed skill. Retained signed revocation history
+and the actual clock are rechecked under the held lock after runtime probes.
+
+Skill/agent dependency declarations currently refuse installation with a concrete
+install/reinstall hint until the complete active retained-proof adapter is available.
+An existing directory or unsigned sidecar does not satisfy this gate. No dependency
+is automatically installed. These refusals do not constitute support completion or
+Enterprise acceptance; ER1/Git/self and admission/attestation integration remain open.
+Status and diagnosis do not require this installation profile.
+
+For MCP `skill_install`, the operator configures `SKILLCTL_ENTERPRISE_PROFILE`,
+`SKILLCTL_PROJECT_ROOT` and `SKILLCTL_ARTIFACT_HOME` before server startup, plus the
+intended `SKILLCTL_BIN`. The server captures the selected profile hash and paths
+and runs the actual CLI with the explicit project working directory and file pin.
+Partial/invalid configuration or subsequent profile-byte changes deny installation;
+restart after an intentional operator change. A tool request's `enterprise_profile`
+can only repeat the operator-bound path, never select another trust policy.
 
 ---
 

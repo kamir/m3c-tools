@@ -96,7 +96,9 @@ func managedEvidenceCheckpoint(t *testing.T, f installableFixture) string {
 
 func runManagedEvidenceInstall(t *testing.T, binary string, f installableFixture, want int, extra ...string) {
 	t.Helper()
-	args := append([]string{"install", "--json", "--bundle", f.skbPath, "--trust-roots", f.trPath, "--home", f.home}, extra...)
+	args := []string{"install", "--json", "--bundle", f.skbPath, "--home", f.home}
+	args = append(args, enterpriseInstallFixtureArgs(t, f)...)
+	args = append(args, extra...)
 	cmd := exec.Command(binary, args...)
 	cmd.Env = append(os.Environ(), "HOME="+f.home, "USERPROFILE="+f.home, "M3C_TOKEN_STORE=file", "M3C_TEST_KEYCHAIN=0", "M3C_ER1_KEYCHAIN=off")
 	var stdout, stderr bytes.Buffer
@@ -137,7 +139,15 @@ func runManagedEvidenceInstall(t *testing.T, binary string, f installableFixture
 		if err != nil || len(content) == 0 {
 			t.Fatalf("successful process did not install skill: %v", err)
 		}
-		if result.InstallPath != target || result.Digest != f.digest {
+		canonicalTarget, canonicalErr := filepath.EvalSymlinks(target)
+		if canonicalErr != nil {
+			t.Fatal(canonicalErr)
+		}
+		canonicalResult, resultErr := filepath.EvalSymlinks(result.InstallPath)
+		if resultErr != nil {
+			t.Fatal(resultErr)
+		}
+		if canonicalResult != canonicalTarget || result.Digest != f.digest {
 			t.Fatalf("successful install result differs: %+v", result)
 		}
 	}

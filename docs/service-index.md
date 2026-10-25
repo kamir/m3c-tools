@@ -38,6 +38,8 @@ query, import, and track skills.
 | Registration | `~/.claude/mcp.json` |
 | Wraps | the `skillctl` Go CLI + aims-core REST API |
 
+Managed `skill_install` uses an operator-bound Enterprise project profile, explicit project working directory and the actual CLI. See [installation profile selection](v2/referenz/manual-skillctl.md#enterprise-project-selection-for-installation). Tool requests cannot switch the bound trust policy.
+
 ## 3. rag-mcp-server (Claude Code MCP)
 
 Local, air-gapped semantic search over a GitHub-backed workspace (SPEC-0268):
