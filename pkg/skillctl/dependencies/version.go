@@ -10,7 +10,8 @@ var releaseRE = regexp.MustCompile(`^(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*)){0,3}$`)
 
 func release(s string) ([4]uint64, error) {
 	var out [4]uint64
-	if !releaseRE.MatchString(s) {
+	// Four uint64 components require at most 4*20 digits plus three dots.
+	if len(s) > 83 || !releaseRE.MatchString(s) {
 		return out, ErrInvalid
 	}
 	for i, p := range strings.Split(s, ".") {

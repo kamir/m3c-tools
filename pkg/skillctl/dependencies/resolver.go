@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/kamir/m3c-tools/pkg/skillbundle"
 )
@@ -78,6 +79,63 @@ func NewResolver(p Profile, s ArtifactSource) (*Resolver, error) {
 	}
 	return &Resolver{profile: copy, source: s}, nil
 }
+
+const (
+	maxCatalogPools        = 256
+	maxCatalogCandidates   = 4096
+	maxCatalogDeclarations = 16384
+	maxCatalogFieldBytes   = 4 << 20
+)
+
+// Catalog budgets include the root and every provider candidate, including
+// duplicate candidates and abandoned backtracking branches. They bound resolver
+// copies, not allocations already made by an external ArtifactSource.
+var errCatalogBudget = fmt.Errorf("artifact catalog budget exhausted: %w", ErrUnresolved)
+
+type catalogBudget struct {
+	pools, candidates, declarations, fieldBytes int
+}
+
+func (b *catalogBudget) reservePool() error {
+	if b.pools >= maxCatalogPools {
+		return errCatalogBudget
+	}
+	b.pools++
+	return nil
+}
+
+// reserveArtifact checks aggregate limits before copying or serializing fields.
+func (b *catalogBudget) reserveArtifact(a Artifact) error {
+	if b.candidates >= maxCatalogCandidates || len(a.Declarations) > maxCatalogDeclarations-b.declarations {
+		return errCatalogBudget
+	}
+	addField := func(value string) error {
+		if len(value) > maxCatalogFieldBytes-b.fieldBytes {
+			return errCatalogBudget
+		}
+		if !utf8.ValidString(value) {
+			return ErrInvalid
+		}
+		b.fieldBytes += len(value)
+		return nil
+	}
+	for _, field := range []string{a.Authority, a.Kind, a.Name, a.Version, a.Digest} {
+		if err := addField(field); err != nil {
+			return err
+		}
+	}
+	for _, declaration := range a.Declarations {
+		for _, field := range []string{declaration.Kind, declaration.Name, declaration.Constraint} {
+			if err := addField(field); err != nil {
+				return err
+			}
+		}
+	}
+	b.candidates++
+	b.declarations += len(a.Declarations)
+	return nil
+}
+
 func validateArtifact(a Artifact) error {
 	if (a.Kind != "skill" && a.Kind != "agent") || !validName(a.Name) || a.Authority == "" || len(a.Authority) > 512 {
 		return ErrInvalid
@@ -140,6 +198,10 @@ func cloneArtifact(a Artifact) Artifact {
 // A failure returns no complete lock. All candidates must belong to the root's
 // explicit namespace. Cross-namespace resolution needs a future explicit contract.
 func (r *Resolver) Resolve(ctx context.Context, root Artifact) (*Report, error) {
+	budget := catalogBudget{}
+	if e := budget.reserveArtifact(root); e != nil {
+		return nil, e
+	}
 	if e := validateArtifact(root); e != nil {
 		return nil, e
 	}
@@ -213,6 +275,9 @@ func (r *Resolver) Resolve(ctx context.Context, root Artifact) (*Report, error) 
 			if r.source == nil {
 				return nil, nil, ErrUnresolved
 			}
+			if e := budget.reservePool(); e != nil {
+				return nil, nil, e
+			}
 			raw, e := r.source.Candidates(ctx, requirement.Kind, requirement.Name)
 			if e != nil {
 				if ctx.Err() != nil {
@@ -220,11 +285,14 @@ func (r *Resolver) Resolve(ctx context.Context, root Artifact) (*Report, error) 
 				}
 				return nil, nil, fmt.Errorf("artifact source unavailable: %w", ErrUnresolved)
 			}
-			if len(raw) > 256 {
-				return nil, nil, ErrUnresolved
+			if len(raw) > 256 || len(raw) > maxCatalogCandidates-budget.candidates {
+				return nil, nil, errCatalogBudget
 			}
 			versions := map[[4]uint64]Artifact{}
 			for _, candidate := range raw {
+				if e := budget.reserveArtifact(candidate); e != nil {
+					return nil, nil, e
+				}
 				if validateArtifact(candidate) != nil || candidate.Kind != requirement.Kind || candidate.Name != requirement.Name || candidate.Authority != root.Authority {
 					return nil, nil, ErrInvalid
 				}
@@ -266,7 +334,7 @@ func (r *Resolver) Resolve(ctx context.Context, root Artifact) (*Report, error) 
 			if e == nil {
 				return result, observations, nil
 			}
-			if !errors.Is(e, ErrUnresolved) {
+			if errors.Is(e, errCatalogBudget) || !errors.Is(e, ErrUnresolved) {
 				return nil, nil, e
 			}
 		}

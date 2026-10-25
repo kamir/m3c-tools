@@ -446,3 +446,181 @@ func TestSiteTreeGoldenAndBounds(t *testing.T) {
 		}
 	}
 }
+
+// countingSource keeps provider calls observable without allocating unbounded data.
+type countingSource struct {
+	fixtureSource
+	calls int
+}
+
+func (s *countingSource) Candidates(ctx context.Context, kind, name string) ([]Artifact, error) {
+	s.calls++
+	return s.fixtureSource.Candidates(ctx, kind, name)
+}
+
+func TestGraphAggregateBudget(t *testing.T) {
+	isolated(t)
+	t.Run("retained-abandoned-pools", func(t *testing.T) {
+		for _, abandoned := range []int{254, 255} {
+			source := &countingSource{fixtureSource: fixtureSource{}}
+			for i := 0; i < abandoned; i++ {
+				name := fmt.Sprintf("leaf%d", i)
+				candidate := artifact("chooser", dep("skill", name, ""))
+				candidate.Version = fmt.Sprint(i + 2)
+				source.fixtureSource["skill:chooser"] = append(source.fixtureSource["skill:chooser"], candidate)
+				source.fixtureSource["skill:"+name] = []Artifact{artifact(name, dep("skill", "missing", ""))}
+			}
+			fallback := artifact("chooser")
+			fallback.Version = "1"
+			source.fixtureSource["skill:chooser"] = append(source.fixtureSource["skill:chooser"], fallback)
+			resolver, err := NewResolver(Profile{}, source)
+			if err != nil {
+				t.Fatal(err)
+			}
+			out, err := resolver.Resolve(context.Background(), artifact("root", dep("skill", "chooser", "")))
+			if abandoned == 254 {
+				if err != nil || out == nil || !out.Complete || len(out.Artifacts) != 1 || out.Artifacts[0].Version != "1" {
+					t.Fatalf("boundary fallback: report=%v err=%v", out, err)
+				}
+			} else if !errors.Is(err, ErrUnresolved) || out != nil {
+				t.Fatalf("abandoned pools authorized: report=%v err=%v", out, err)
+			}
+			if source.calls != maxCatalogPools {
+				t.Fatalf("provider calls=%d, want bounded %d", source.calls, maxCatalogPools)
+			}
+		}
+	})
+	t.Run("all-provider-candidates", func(t *testing.T) {
+		for _, finalCount := range []int{255, 256} {
+			source := fixtureSource{}
+			root := artifact("root")
+			for i := 0; i < 16; i++ {
+				name := fmt.Sprintf("leaf%d", i)
+				root.Declarations = append(root.Declarations, dep("skill", name, ""))
+				count := 256
+				if i == 15 {
+					count = finalCount
+				}
+				for j := 0; j < count; j++ {
+					candidate := artifact(name)
+					candidate.Version = fmt.Sprint(j + 1)
+					source["skill:"+name] = append(source["skill:"+name], candidate)
+				}
+			}
+			resolver, err := NewResolver(Profile{}, source)
+			if err != nil {
+				t.Fatal(err)
+			}
+			out, err := resolver.Resolve(context.Background(), root)
+			if finalCount == 255 {
+				if err != nil || out == nil || !out.Complete {
+					t.Fatalf("candidate boundary: %v", err)
+				}
+			} else if !errors.Is(err, ErrUnresolved) || out != nil {
+				t.Fatalf("candidate cap+1 authorized: %v", err)
+			}
+		}
+	})
+	t.Run("unselected-declaration-slots", func(t *testing.T) {
+		for _, finalCount := range []int{255, 256} {
+			source := fixtureSource{"skill:chooser": {artifact("chooser")}}
+			source["skill:chooser"][0].Version = "1000"
+			for i := 0; i < 64; i++ {
+				candidate := artifact("chooser")
+				candidate.Version = fmt.Sprint(i + 1)
+				count := 256
+				if i == 63 {
+					count = finalCount
+				}
+				for j := 0; j < count; j++ {
+					candidate.Declarations = append(candidate.Declarations, dep("skill", fmt.Sprintf("unused%d", j), ""))
+				}
+				source["skill:chooser"] = append(source["skill:chooser"], candidate)
+			}
+			resolver, err := NewResolver(Profile{}, source)
+			if err != nil {
+				t.Fatal(err)
+			}
+			out, err := resolver.Resolve(context.Background(), artifact("root", dep("skill", "chooser", "")))
+			if finalCount == 255 {
+				if err != nil || out == nil || !out.Complete {
+					t.Fatalf("declaration boundary: %v", err)
+				}
+			} else if !errors.Is(err, ErrUnresolved) || out != nil {
+				t.Fatalf("declaration cap+1 authorized: %v", err)
+			}
+		}
+	})
+	t.Run("all-unselected-field-bytes", func(t *testing.T) {
+		for _, count := range []int{25, 26} {
+			source := fixtureSource{"skill:chooser": {artifact("chooser")}}
+			source["skill:chooser"][0].Version = "1000"
+			for i := 0; i < count; i++ {
+				candidate := artifact("chooser")
+				candidate.Version = fmt.Sprint(i + 1)
+				for j := 0; j < 256; j++ {
+					candidate.Declarations = append(candidate.Declarations, dep("python", fmt.Sprintf("p%0127d", j), strings.Repeat("x", 512)))
+				}
+				source["skill:chooser"] = append(source["skill:chooser"], candidate)
+			}
+			resolver, err := NewResolver(Profile{}, source)
+			if err != nil {
+				t.Fatal(err)
+			}
+			out, err := resolver.Resolve(context.Background(), artifact("root", dep("skill", "chooser", "")))
+			if count == 25 {
+				if err != nil || out == nil || !out.Complete {
+					t.Fatalf("bounded field pool: %v", err)
+				}
+			} else if !errors.Is(err, ErrUnresolved) || out != nil {
+				t.Fatalf("unselected fields escaped byte cap: %v", err)
+			}
+		}
+	})
+	t.Run("field-byte-boundary-and-invalid-utf8", func(t *testing.T) {
+		a := artifact("root", dep("python", "demo", ">=1"))
+		used := len(a.Authority) + len(a.Kind) + len(a.Name) + len(a.Version) + len(a.Digest)
+		for _, d := range a.Declarations {
+			used += len(d.Kind) + len(d.Name) + len(d.Constraint)
+		}
+		boundary := catalogBudget{fieldBytes: maxCatalogFieldBytes - used}
+		if err := boundary.reserveArtifact(a); err != nil || boundary.fieldBytes != maxCatalogFieldBytes {
+			t.Fatalf("field boundary: %v", err)
+		}
+		over := catalogBudget{fieldBytes: maxCatalogFieldBytes - used + 1}
+		if err := over.reserveArtifact(a); !errors.Is(err, ErrUnresolved) {
+			t.Fatalf("field cap+1: %v", err)
+		}
+		for _, bad := range []Artifact{
+			{Authority: strings.Repeat("x", maxCatalogFieldBytes+1)},
+			{Authority: string([]byte{0xff})},
+		} {
+			resolver, err := NewResolver(Profile{}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if out, err := resolver.Resolve(context.Background(), bad); err == nil || out != nil {
+				t.Fatalf("malformed or oversized fields authorized: %v", err)
+			}
+		}
+	})
+	t.Run("duplicate-candidates-charged-before-clone", func(t *testing.T) {
+		budget := catalogBudget{candidates: maxCatalogCandidates - 1}
+		a := artifact("duplicate")
+		if err := budget.reserveArtifact(a); err != nil {
+			t.Fatal(err)
+		}
+		if err := budget.reserveArtifact(a); !errors.Is(err, ErrUnresolved) {
+			t.Fatalf("duplicate escaped candidate budget: %v", err)
+		}
+	})
+	t.Run("version-byte-cap", func(t *testing.T) {
+		maximum := strings.Repeat("18446744073709551615.", 3) + "18446744073709551615"
+		if _, err := release(maximum); err != nil {
+			t.Fatalf("maximum uint64 tuple rejected: %v", err)
+		}
+		if _, err := release(maximum + "0"); !errors.Is(err, ErrInvalid) {
+			t.Fatalf("overlong version accepted: %v", err)
+		}
+	})
+}
