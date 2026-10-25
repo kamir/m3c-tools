@@ -391,6 +391,16 @@ m3c-tools token [--print]
 
 Zeigt an, ob ein Geräte-Token geladen ist.
 
+Start und Anmeldung exportieren gespeicherte Tokens nicht in die Umgebung.
+Ein explizites `--print` verlangt HTTPS `ER1_API_URL`, unabhängig zugewiesenes
+passendes `ER1_DEVICE_TOKEN_ORIGIN` und einen nicht abgelaufenen nativen Eintrag
+mit passenden versionierten Login-Origin-Metadaten. Alte Einträge verlangen eine
+erneute Anmeldung; es gibt keine stille Neuzuordnung. Die Metadaten dokumentieren
+das gewählte Login-Ziel, keine verifizierte Aussteller- oder Mandantenautorität.
+Status bleibt eine Verwaltungsaktion und beweist keine Freigabe eines Ziels.
+Exportierte Credentials muss der Betreiber nach den Origin-Regeln des
+Verbrauchers behandeln.
+
 | Flag | Argument | Standard | Bedeutung |
 |------|----------|---------|---------|
 | `--print` | n/a | n/a | Bearer-Token auf stdout ausgeben (zur Übernahme in der Shell) |

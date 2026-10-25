@@ -100,7 +100,14 @@ var syncResolveDevicePub = func(home, keyID string) (ed25519.PublicKey, bool) {
 // --- entry point --------------------------------------------------------------
 
 func runSync(args []string, stdout, stderr io.Writer) int {
-	return runSyncWithReaders(args, stdout, stderr, os.Getenv, readSyncStoredBearer)
+	pin := os.Getenv("ER1_DEVICE_TOKEN_ORIGIN")
+	getenv := func(name string) string {
+		if name == "ER1_DEVICE_TOKEN_ORIGIN" {
+			return pin
+		}
+		return os.Getenv(name)
+	}
+	return runSyncWithReaders(args, stdout, stderr, getenv, func() ([]byte, error) { return readSyncStoredBearer(pin) })
 }
 
 func runSyncWithReaders(args []string, stdout, stderr io.Writer, getenv func(string) string, readStored httpsafe.SecretReader) int {

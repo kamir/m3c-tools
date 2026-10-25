@@ -125,9 +125,6 @@ func TestSyncCredentialSelectionSnapshot(t *testing.T) {
 }
 
 func TestSyncBoundCLIEntryPoint(t *testing.T) {
-	if networkCommands["sync"] {
-		t.Fatal("sync still eagerly autoloads native token")
-	}
 	binary := skillctlBin(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)

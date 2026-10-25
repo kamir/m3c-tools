@@ -2263,10 +2263,11 @@ Default-off und unbekannte Backend-Auswahl liegen ebenfalls vor diesen Reads.
 
 Ein expliziter nichtleerer `$ER1_DEVICE_TOKEN` gewinnt. Ein ungültiger gewählter
 Wert fällt nicht auf den Store zurück. Andernfalls liest Sync nach der Bindung
-den nativen OS-Credential-Store ohne Migration, Save oder Clear.
+den nativen OS-Credential-Store und prüft seine gespeicherten Login-Origin-Metadaten
+ohne Migration, Save oder Clear.
 Dies schreibt weder Umgebungsvariablen um noch ergänzt es Aussteller-,
-Audience- oder Mandantenmetadaten; die übrigen ER1-Befehle behalten ihr
-bestehendes Autoload-Verhalten. `attest` verwendet seine separaten
+Audience- oder Mandantenmetadaten; das globale Autoload gespeicherter Tokens
+ist deaktiviert. `attest` verwendet seine separaten
 Registry-Zugangsdaten. Werte werden für diesen Sync-Aufruf festgehalten, ohne
 die exportierten Ingest-Client-Felder als unveränderlich zu bezeichnen.
 HTTPS bleibt auch mit `--insecure` verpflichtend. Automatisierte Storetests
@@ -2703,8 +2704,27 @@ skillctl login --status | --logout
 
 Browsergestützte Gerätekopplung mit ER1. Speichert den Token ausschließlich
 im nativen OS-Credential-Store, den sich `skillctl` und `m3c-tools` teilen.
-Die bisherigen ER1-Befehlsfamilien verwenden diesen gespeicherten Token;
-separat gebundene Registry-Zugangsdaten bleiben davon getrennt.
+Die Anmeldung validiert die gewählte HTTPS-URL vor dem Start des Rückrufs und
+speichert versionierte, vom Client beobachtete Origin-Metadaten. Diese lokalen
+Metadaten authentifizieren weder Aussteller noch Mandanten.
+
+Das globale Token-Autoload ist in beiden Programmen deaktiviert. Sync verwendet
+einen gespeicherten Token erst nach Abgleich des endgültigen Endpunkts mit
+`ER1_DEVICE_TOKEN_ORIGIN` und anschließender Prüfung der gespeicherten Bindung.
+Alte Einträge ohne Bindung, unbekannte Versionen und abweichende Origins verlangen
+eine erneute Anmeldung, ohne automatische Neuzuordnung. Bisherige ER1-
+Befehlsfamilien benötigen explizite externe Credentials, bis ihre Anfragekontexte
+gebundene Speicherzugriffe unterstützen. Deren bisheriges Verhalten mit externen
+Tokens ist keine allgemeine Garantie für Origin-Isolation. Separat gebundene
+Registry-Zugangsdaten bleiben getrennt. Der Besitzerkontext stammt ausschließlich
+aus explizitem `ER1_USER_ID` oder `ER1_CONTEXT_ID`, niemals aus einem fremden
+gespeicherten Token.
+
+Der explizite Export `m3c-tools token --print` verlangt HTTPS `ER1_API_URL`, ein
+passendes unabhängiges `ER1_DEVICE_TOKEN_ORIGIN` und einen passenden, nicht
+abgelaufenen gespeicherten Eintrag. Für den exportierten Token ist anschließend
+der Betreiber verantwortlich. Status und Logout bleiben als Verwaltungsaktionen
+verfügbar; der Speicherstatus beweist keine Freigabe eines bestimmten Ziels.
 
 Der Gerätetokenspeicher akzeptiert `$M3C_TOKEN_STORE` ungesetzt, `keychain` oder
 `auto`; `auto` bedeutet jetzt ausschließlich nativ. Der bisherige Wert `file`
@@ -2724,7 +2744,7 @@ Token extern bereit. Entfernen Sie stillgelegte Dateien und Backup-Kopien
 Kennungen abgeleitete Verschlüsselung bietet keinen starken Offline-Schutz.
 Logout löscht nur den nativen Gerätetoken, keine extern bereitgestellten
 Credentials. Fehler des nativen Stores bleiben Fehler. Andere Credential-
-Familien und versionierte Aussteller-/Origin-Metadaten sind getrennte Arbeit.
+Familien und authentifizierte Aussteller-/Mandantenprüfung sind getrennte Arbeit.
 Die gemeinsame Capture-Anmeldung kann nach einem Token-Persistenzfehler
 weiterhin einen erfolgreichen Context-Login melden; das beweist keinen
 dauerhaft gespeicherten Token.
@@ -2900,8 +2920,8 @@ Der Client hält Ziel und Credential für Healthcheck und Import fest und behäl
 die Redirectprüfung. HTTP-Fehler zeigen nur den Status; eine erfolgreiche
 Antwortnachricht mit dem gewählten Key im Klartext wird abgelehnt. Geprüft wird
 die angezeigte Nachricht, nicht beliebige Credentials oder weitere Kodierungen.
-Import lädt keine nativen Gerätetoken-Stores; andere Clients und natives
-Autoload sind getrennte Pfade.
+Import lädt keine nativen Gerätetoken-Stores; andere Clients bleiben getrennte
+Prüfbereiche.
 
 **`menubar`**: macOS-Menüleistenmonitor für Skills starten; interaktiv und dauerhaft laufend.
 

@@ -1,18 +1,6 @@
 package main
 
-// `skillctl login` + the device-token autoload bootstrap: FR-0043.
-//
-// Problem (the reported bug): `m3c-tools login` persisted a device token, but
-// skillctl only ever read ER1_DEVICE_TOKEN from the environment, so a user who
-// had logged in still got 401s unless they manually `export ER1_DEVICE_TOKEN`.
-//
-// Fix, two halves:
-//   - login:    `skillctl login` runs the browser device-pairing flow itself
-//               (so a box with only the skillctl binary, e.g. Alice's. Is
-//               self-sufficient) and persists the token via pkg/auth.
-//   - autoload: before any ER1-bound command, if ER1_DEVICE_TOKEN is unset, load
-//               the persisted token and export it for the process. Mirroring
-//               what cmd/m3c-tools/main.go already does for the product binary.
+// Login persists a native token for consumers that validate its saved origin.
 
 import (
 	"flag"
@@ -26,46 +14,6 @@ import (
 	"github.com/kamir/m3c-tools/pkg/er1login"
 )
 
-// networkCommands is the legacy eager ER1 device-token autoload allowlist.
-// Membership triggers the startup bootstrap before command parsing. Attest uses
-// its separately bound registry credentials; sync resolves its credential after
-// validation.
-var networkCommands = map[string]bool{
-	"publish":   true,
-	"pull":      true,
-	"registry":  true,
-	"revoke":    true,
-	"awareness": true,
-	"session":   true,
-	"room":      true,
-	"runbook":   true,
-	"install":   true,
-}
-
-// autoloadDeviceToken implements the read-back half of FR-0043. If
-// ER1_DEVICE_TOKEN is already set it is left untouched (explicit wins). The
-// keychain backend ignores the userID; the encrypted-file backend derives its
-// key from it, so we pass ER1_USER_ID, or the sub parsed from ER1_CONTEXT_ID,
-// as a best-effort hint for headless/file-backed hosts.
-func autoloadDeviceToken(stderr io.Writer) {
-	if os.Getenv("ER1_DEVICE_TOKEN") != "" {
-		return
-	}
-	uid := strings.TrimSpace(os.Getenv("ER1_USER_ID"))
-	if uid == "" {
-		if ctx := os.Getenv("ER1_CONTEXT_ID"); ctx != "" {
-			uid = strings.SplitN(ctx, "___", 2)[0]
-		}
-	}
-	token, expired := auth.PersistedBearer(uid)
-	switch {
-	case token != "":
-		_ = os.Setenv("ER1_DEVICE_TOKEN", token)
-	case expired:
-		fmt.Fprintln(stderr, "[skillctl] your saved device token has expired: run 'skillctl login' to refresh.")
-	}
-}
-
 // publicER1Base is the default login target. `skillctl login` is the publisher
 // pairing flow against the public SaaS, NOT the local dev server. A local
 // developer overrides via --base-url or by setting ER1_API_URL.
@@ -78,7 +26,11 @@ func resolveLoginBase(baseFlag, apiURLEnv string) string {
 		return strings.TrimRight(b, "/")
 	}
 	if a := strings.TrimSpace(apiURLEnv); a != "" {
-		return er1login.BaseURL(a)
+		base, err := er1login.LoginBase(a)
+		if err != nil {
+			return a
+		}
+		return base
 	}
 	return publicER1Base
 }
@@ -126,8 +78,9 @@ func runLogin(args []string, stdout, stderr io.Writer) int {
 	}
 
 	base := resolveLoginBase(*baseFlag, os.Getenv("ER1_API_URL"))
-	if base == "" {
-		fmt.Fprintln(stderr, "login: cannot determine ER1 base URL: set ER1_API_URL or pass --base-url.")
+	binding, err := auth.NewLoginBinding(base)
+	if err != nil {
+		fmt.Fprintln(stderr, "login: invalid login target; use an HTTPS URL without credentials, query or fragment.")
 		return 1
 	}
 
@@ -143,6 +96,7 @@ func runLogin(args []string, stdout, stderr io.Writer) int {
 
 	dt := &auth.DeviceToken{
 		Token:     res.DeviceToken,
+		Binding:   binding,
 		UserID:    res.UserID,
 		ContextID: res.ContextID,
 		UserName:  res.UserName,
@@ -154,7 +108,7 @@ func runLogin(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "login: token received but could not be saved: %v\n", err)
 		return 1
 	}
-	fmt.Fprintf(stdout, "✓ Logged in as %s: device token saved (%s). skillctl will use it automatically.\n",
+	fmt.Fprintf(stdout, "✓ Logged in as %s: device token saved (%s). Bound consumers can use it; legacy commands require explicit external credentials.\n",
 		firstNonEmpty(res.UserEmail, res.UserID, res.ContextID, "unknown"), auth.ActiveStoreName())
 	return 0
 }

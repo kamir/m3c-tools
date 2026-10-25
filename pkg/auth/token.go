@@ -9,18 +9,24 @@ package auth
 import (
 	"os"
 	"time"
+
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 )
 
 // DeviceToken holds the token and metadata received from aims-core after login.
 type DeviceToken struct {
-	Token     string `json:"token"`
-	UserID    string `json:"user_id"`
-	ContextID string `json:"context_id"`
-	UserName  string `json:"user_name,omitempty"`
-	UserEmail string `json:"user_email,omitempty"`
-	DeviceID  string `json:"device_id"`
-	ExpiresAt string `json:"expires_at,omitempty"`
-	SavedAt   string `json:"saved_at"`
+	// Binding is client-observed login provenance, not authenticated issuer or
+	// tenant authority. Absent metadata remains legacy and cannot be used by
+	// BoundBearerReadOnly until an explicit new login replaces the entry.
+	Binding   *httpsafe.CredentialBinding `json:"credential_binding,omitempty"`
+	Token     string                      `json:"token"`
+	UserID    string                      `json:"user_id"`
+	ContextID string                      `json:"context_id"`
+	UserName  string                      `json:"user_name,omitempty"`
+	UserEmail string                      `json:"user_email,omitempty"`
+	DeviceID  string                      `json:"device_id"`
+	ExpiresAt string                      `json:"expires_at,omitempty"`
+	SavedAt   string                      `json:"saved_at"`
 }
 
 // IsExpired returns true if the token has passed its expiration time.

@@ -18,6 +18,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 )
 
 // Result is the data delivered by the aims-core login redirect.
@@ -41,16 +43,43 @@ func BaseURL(apiURL string) string {
 	return strings.TrimRight(u, "/")
 }
 
+// LoginBase validates the original API URL before removing an upload suffix.
+// It performs no credential reads or network access.
+func LoginBase(raw string) (string, error) {
+	base, err := httpsafe.ParseAPIBase(strings.TrimSpace(raw), false)
+	if err != nil {
+		return "", httpsafe.ErrInvalidAPIBase
+	}
+	u, err := neturl.Parse(base.URL)
+	if err != nil {
+		return "", httpsafe.ErrInvalidAPIBase
+	}
+	path := strings.TrimRight(u.EscapedPath(), "/")
+	for _, suffix := range []string{"/upload_2", "/upload"} {
+		if strings.HasSuffix(path, suffix) {
+			path = strings.TrimSuffix(path, suffix)
+			break
+		}
+	}
+	u.Path, err = neturl.PathUnescape(path)
+	if err != nil {
+		return "", httpsafe.ErrInvalidAPIBase
+	}
+	u.RawPath = path
+	return u.String(), nil
+}
+
 // DeviceLogin runs the browser device-pairing flow: it starts a localhost
 // callback server, points the browser at <baseURL>/v2/signin?next=<callback>,
 // and blocks until the redirect delivers the device token (or the timeout
 // elapses). Progress is written to out. When openBrowser is false the URL is
 // only printed (for headless / SSH sessions).
 func DeviceLogin(baseURL string, openBrowser bool, out io.Writer, timeout time.Duration) (*Result, error) {
-	baseURL = strings.TrimRight(strings.TrimSpace(baseURL), "/")
-	if baseURL == "" {
-		return nil, fmt.Errorf("empty ER1 base URL (set ER1_API_URL or pass --base-url)")
+	base, err := httpsafe.ParseAPIBase(baseURL, false)
+	if err != nil {
+		return nil, httpsafe.ErrInvalidAPIBase
 	}
+	baseURL = strings.TrimRight(base.URL, "/")
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
