@@ -17,6 +17,26 @@ SCRIPT = ROOT / "scripts/windows-trust-parity.py"
 PACKAGE = "github.com/kamir/m3c-tools/pkg/skillctl/verify"
 PARENT = "TestExitCode_Sentinels"
 CHILD = PARENT + "/digest_mismatch"
+DEPENDENCY_PACKAGE = "github.com/kamir/m3c-tools/pkg/skillctl/dependencies"
+DEPENDENCY_TESTS = (
+    'TestReleaseConstraints',
+    'TestProfileStrict',
+    'TestGraphAndLock',
+    'TestGraphDenials',
+    'TestSelectedSystemRuntime',
+    'TestProbeLimitsAndCancellation',
+    'TestProfileSnapshotAndCaps',
+    'TestCatalogVersionBacktracking',
+    'TestProfileByteBoundary',
+    'TestPythonRuntimeFixture',
+    'TestPythonCanonicalDeclarationIdentity',
+    'TestTypedProfilePreMarshalBounds',
+    'TestSiteTreeContract',
+    'TestRuntimeReportWireField',
+    'TestSiteTreeGoldenAndBounds',
+    'TestWindowsVenvSiteClassification',
+    'TestGraphAggregateBudget',
+)
 COMMIT = "c" * 40
 
 
@@ -41,7 +61,11 @@ def successful_report():
         "intent_inconsistent", "identity_mismatch",
     ):
         rows.extend([event(PARENT + "/" + name, "run"), event(PARENT + "/" + name)])
-    return rows + [event(PARENT), event()]
+    dependency_rows = [event(action="start", package=DEPENDENCY_PACKAGE)]
+    for name in DEPENDENCY_TESTS:
+        dependency_rows.extend([event(name, "run", DEPENDENCY_PACKAGE), event(name, package=DEPENDENCY_PACKAGE)])
+    dependency_rows.append(event(package=DEPENDENCY_PACKAGE))
+    return dependency_rows + rows + [event(PARENT), event()]
 
 
 def exception(**changes):
@@ -96,9 +120,31 @@ class ParityContracts(unittest.TestCase):
     def test_same_required_cases_pass_with_denominator(self):
         result = self.run_reports()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("linux lane=trust required=13 pass=13 skip=0 missing=0 exceptions=0", result.stdout)
-        self.assertIn("windows lane=trust required=13 pass=13 skip=0 missing=0 exceptions=0", result.stdout)
+        self.assertIn("linux lane=trust required=30 pass=30 skip=0 missing=0 exceptions=0", result.stdout)
+        self.assertIn("windows lane=trust required=30 pass=30 skip=0 missing=0 exceptions=0", result.stdout)
         self.assertIn("UNBOUND", result.stdout)
+
+    def test_dependency_python_skip_or_missing_cannot_hide_behind_package_pass(self):
+        for status in ("skip", "missing"):
+            for platform in ("linux", "windows"):
+                with self.subTest(status=status, platform=platform):
+                    rows = successful_report()
+                    if status == "missing":
+                        rows = [r for r in rows if r.get("Test") != "TestPythonRuntimeFixture"]
+                    else:
+                        next(r for r in rows if r.get("Test") == "TestPythonRuntimeFixture" and r["Action"] == "pass")["Action"] = "skip"
+                    self.reject(self.run_reports(**{platform: rows}), "is " + ("missing" if status == "missing" else "skip"))
+
+    def test_dependency_graph_budget_skip_or_missing_cannot_hide_behind_package_pass(self):
+        for status in ("skip", "missing"):
+            for platform in ("linux", "windows"):
+                with self.subTest(status=status, platform=platform):
+                    rows = successful_report()
+                    if status == "missing":
+                        rows = [r for r in rows if r.get("Test") != "TestGraphAggregateBudget"]
+                    else:
+                        next(r for r in rows if r.get("Test") == "TestGraphAggregateBudget" and r["Action"] == "pass")["Action"] = "skip"
+                    self.reject(self.run_reports(**{platform: rows}), "is " + ("missing" if status == "missing" else "skip"))
 
     def test_equal_counts_disjoint_ids_rejected(self):
         rows = successful_report()
@@ -114,7 +160,7 @@ class ParityContracts(unittest.TestCase):
                 row["Action"] = "skip"
         result = self.run_reports(windows=rows)
         self.reject(result, "is skip")
-        self.assertIn("windows lane=trust required=13 pass=0 skip=13", result.stdout)
+        self.assertIn("windows lane=trust required=30 pass=0 skip=30", result.stdout)
 
     def test_missing_or_skipped_subtest_with_passing_parent_rejected(self):
         for status in ("missing", "skip"):
@@ -182,7 +228,7 @@ class ParityContracts(unittest.TestCase):
     def test_wrong_package_does_not_satisfy_identity(self):
         rows = successful_report()
         for row in rows:
-            row["Package"] = "other/verify"
+            row["Package"] = "other/" + row["Package"]
         self.reject(self.run_reports(windows=rows), "is missing")
 
     def test_unselected_skips_are_reported_not_passes(self):
@@ -190,7 +236,7 @@ class ParityContracts(unittest.TestCase):
         rows[-1:-1] = [event("TestOptional", "run"), event("TestOptional", "skip")]
         result = self.run_reports(windows=rows)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("observed pass=13 skip=1", result.stdout)
+        self.assertIn("observed pass=30 skip=1", result.stdout)
         self.assertIn("1 other identities outside reviewed parity scope", result.stdout)
 
     def test_bound_same_run_reports_pass(self):
@@ -221,7 +267,7 @@ class ParityContracts(unittest.TestCase):
         result = self.run_reports(windows=rows, exceptions=[exception()])
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("EXCEPTION (not PASS)", result.stdout)
-        self.assertIn("windows lane=trust required=13 pass=12 skip=0 missing=1 exceptions=1", result.stdout)
+        self.assertIn("windows lane=trust required=30 pass=29 skip=0 missing=1 exceptions=1", result.stdout)
         self.assertIn("not acceptance", result.stdout)
         self.reject(self.run_reports(linux=rows, exceptions=[exception()]), "linux: required")
 
@@ -274,7 +320,7 @@ class ParityContracts(unittest.TestCase):
         next(row for row in rows if row.get("Test") == CHILD and row["Action"] == "pass")["Action"] = "skip"
         result = self.run_reports(windows=rows, exceptions=[exception()])
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("pass=12 skip=1 missing=0 exceptions=1", result.stdout)
+        self.assertIn("pass=29 skip=1 missing=0 exceptions=1", result.stdout)
         today = datetime.now(timezone.utc).date().isoformat()
         self.reject(self.run_reports(windows=rows, exceptions=[exception(expires=today)]), "expired exception")
 
