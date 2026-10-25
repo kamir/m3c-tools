@@ -67,6 +67,9 @@ DEPENDENCY_CASES = (
 REQUIRED.update({(DEPENDENCIES, name) for name in DEPENDENCY_CASES})
 # Fixed project-policy, held-session and actual CLI identities.
 PROJECT_CASES = {
+    'github.com/kamir/m3c-tools/pkg/httpsafe': (
+        'TestGETBoundaryContract',
+    ),
     'github.com/kamir/m3c-tools/pkg/skillbundle': (
         'TestUnpackInflatedBudget',
     ),
@@ -89,6 +92,8 @@ PROJECT_CASES = {
         'TestBoundIdentityReaderResponses',
         'TestBoundIdentityReaderPhases',
         'TestBoundIdentityReaderTransport',
+        'TestManagedClientBoundary',
+        'TestManagedClientSnapshotAndLifecycle',
     ),
     'github.com/kamir/m3c-tools/pkg/skillctl/install': (
         'TestProjectManagedInstallRequiresPolicyBeforeIO',
@@ -114,6 +119,8 @@ PROJECT_CASES = {
         'TestProjectRegistryIdentitySnapshot',
         'TestProjectRegistryIdentityFinalRecheck',
         'TestRegistryIdentityGovernancePolicy',
+        'TestManagedRegistryTransportRedirectBoundary',
+        'TestManagedRegistryTransportSnapshotAndErrors',
     ),
     'github.com/kamir/m3c-tools/cmd/skillctl': (
         'TestInstallEnterpriseProfileActualCLI',
@@ -127,6 +134,7 @@ PROJECT_CASES = {
         'TestInstallInstalledSkillDependenciesRevokedActualCLI',
         'TestInstallRetainedRootSnapshotActualCLI',
         'TestInstallRegistryIdentityActualCLI',
+        'TestInstallManagedTransportActualCLI',
     ),
 }
 for _package, _cases in PROJECT_CASES.items():

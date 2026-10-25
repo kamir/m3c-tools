@@ -182,12 +182,13 @@ func Install(opts Opts) (result *Result, resultErr error) {
 	if opts.ProjectPolicy != nil {
 		opts.TrustRoot = opts.ProjectPolicy.TrustRoot()
 		opts.Tenant = opts.ProjectPolicy.TrustRoots().TenantScope
-		client := *opts.Client
-		if client.HTTPClient != nil {
-			transport := *client.HTTPClient
-			client.HTTPClient = &transport
+		client, cleanup, err := registry.NewManagedClient(opts.Client, opts.ProjectPolicy.RegistryURL(), strings.HasPrefix(opts.ProjectPolicy.RegistryURL(), "http://"))
+		if err != nil {
+			return nil, fmt.Errorf("install: invalid managed registry boundary: %w", verify.ErrRegistryNotTrusted)
 		}
-		opts.Client = &client
+		opts.Client = client
+		defer cleanup()
+		defer func() { resultErr = redactManagedInstallError(resultErr, client.Token) }()
 	}
 	ctx := opts.Ctx
 	if ctx == nil {

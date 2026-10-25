@@ -3,6 +3,7 @@ package install
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
@@ -34,4 +35,23 @@ func (p projectIdentityProof) recheck(ctx context.Context, source *installedSkil
 		return projectIdentityError{cause: verify.ErrAuthorSigInvalid}
 	}
 	return nil
+}
+
+type managedInstallError struct {
+	cause     error
+	uncertain bool
+}
+
+func (e managedInstallError) Error() string {
+	if e.uncertain {
+		return "install: managed operation failed; installation may already have completed"
+	}
+	return "install: managed registry operation refused"
+}
+func (e managedInstallError) Unwrap() error { return e.cause }
+func redactManagedInstallError(err error, token string) error {
+	if err == nil || token == "" || !strings.Contains(err.Error(), token) {
+		return err
+	}
+	return managedInstallError{cause: err, uncertain: strings.Contains(err.Error(), "may already have completed") || strings.Contains(err.Error(), "inspect installation status")}
 }

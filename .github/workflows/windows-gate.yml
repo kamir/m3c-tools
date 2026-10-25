@@ -8,7 +8,7 @@ name: Windows Gate
 # The `windows-trust` job below runs the WHOLE trust-layer test surface on
 # windows-latest:
 #
-#     ./pkg/skillctl/...  ./pkg/skillbundle/...  ./cmd/skillctl/...  ./evaluation/...
+#     ./pkg/httpsafe/...  ./pkg/skillctl/...  ./pkg/skillbundle/...  ./cmd/skillctl/...  ./evaluation/...
 #
 # It runs them WHOLE-PACKAGE. There is NO `-run "TestA|TestB|…"` allow-list.
 # That is the durability guarantee: every trust test we ship (today and forever)
@@ -100,7 +100,7 @@ jobs:
       - name: Test-compile the whole trust surface for Windows
         run: |
           set -e
-          for pkg in $(go list ./pkg/skillctl/... ./pkg/skillbundle/... ./cmd/skillctl/... ./evaluation/... ./pkg/testutil/...); do
+          for pkg in $(go list ./pkg/httpsafe/... ./pkg/skillctl/... ./pkg/skillbundle/... ./cmd/skillctl/... ./evaluation/... ./pkg/testutil/...); do
             GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go test -c -o /dev/null "$pkg"
           done
           echo "All trust-surface packages test-compile for windows/amd64."
@@ -127,7 +127,7 @@ jobs:
             build/skillctl-windows-amd64.exe
 
   # ── Phase 3: Whole trust surface on the real Windows runner (OPT-OUT) ──────
-  # This is the durable guarantee. It runs ./pkg/skillctl/... ./pkg/skillbundle/... ./cmd/skillctl/...
+  # This is the durable guarantee. It runs ./pkg/httpsafe/... ./pkg/skillctl/... ./pkg/skillbundle/... ./cmd/skillctl/...
   # ./evaluation/... WHOLE-PACKAGE, env-clean. No -run allow-list: see the
   # OPT-OUT CONTRACT at the top of this file. External-service tests self-skip
   # because M3C_TEST_* are unset; platform-incompatible code is build-tagged out.
@@ -169,7 +169,7 @@ jobs:
         # test set. The Linux parity run needs no tag: non-Windows honors $HOME.
         run: |
           go test -tags allow_home_override_test -json -count=1 -timeout=300s `
-            ./pkg/skillctl/... ./pkg/skillbundle/... ./cmd/skillctl/... ./evaluation/... `
+            ./pkg/httpsafe/... ./pkg/skillctl/... ./pkg/skillbundle/... ./cmd/skillctl/... ./evaluation/... `
             | Tee-Object -FilePath win-trust.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
         shell: pwsh
@@ -267,7 +267,7 @@ jobs:
           trust_home="$(mktemp -d)"
           export HOME="$trust_home" USERPROFILE="$trust_home"
           go test -json -count=1 -timeout=300s \
-            ./pkg/skillctl/... ./pkg/skillbundle/... ./cmd/skillctl/... ./evaluation/... \
+            ./pkg/httpsafe/... ./pkg/skillctl/... ./pkg/skillbundle/... ./cmd/skillctl/... ./evaluation/... \
             | tee lin-trust.json
 
       - name: Bind Linux parity evidence

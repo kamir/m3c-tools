@@ -118,7 +118,9 @@
           "TestRetainedRootManifestAndAdoption",
           "TestProjectRegistryIdentitySnapshot",
           "TestProjectRegistryIdentityFinalRecheck",
-          "TestRegistryIdentityGovernancePolicy"
+          "TestRegistryIdentityGovernancePolicy",
+          "TestManagedRegistryTransportRedirectBoundary",
+          "TestManagedRegistryTransportSnapshotAndErrors"
         ],
         "./pkg/skillctl/verify": [
           "TestSnapshotSameBytesScopes",
@@ -132,7 +134,12 @@
         "./pkg/skillctl/registry": [
           "TestBoundIdentityReaderResponses",
           "TestBoundIdentityReaderPhases",
-          "TestBoundIdentityReaderTransport"
+          "TestBoundIdentityReaderTransport",
+          "TestManagedClientBoundary",
+          "TestManagedClientSnapshotAndLifecycle"
+        ],
+        "./pkg/httpsafe": [
+          "TestGETBoundaryContract"
         ]
       }
     },
@@ -185,7 +192,8 @@
       "job": "skillctl-race",
       "selectors": [
         "./cmd/skillctl/...",
-        "./pkg/skillctl/..."
+        "./pkg/skillctl/...",
+        "./pkg/httpsafe/..."
       ],
       "race": true,
       "step_if": "steps.classify.outputs.code == 'true'",
@@ -252,7 +260,9 @@
           "TestRetainedRootManifestAndAdoption",
           "TestProjectRegistryIdentitySnapshot",
           "TestProjectRegistryIdentityFinalRecheck",
-          "TestRegistryIdentityGovernancePolicy"
+          "TestRegistryIdentityGovernancePolicy",
+          "TestManagedRegistryTransportRedirectBoundary",
+          "TestManagedRegistryTransportSnapshotAndErrors"
         ],
         "./cmd/skillctl": [
           "TestInstallEnterpriseProfileActualCLI",
@@ -265,7 +275,8 @@
           "TestInstallInstalledSkillDependenciesTamperActualCLI",
           "TestInstallInstalledSkillDependenciesRevokedActualCLI",
           "TestInstallRetainedRootSnapshotActualCLI",
-          "TestInstallRegistryIdentityActualCLI"
+          "TestInstallRegistryIdentityActualCLI",
+          "TestInstallManagedTransportActualCLI"
         ],
         "./pkg/skillctl/verify": [
           "TestSnapshotSameBytesScopes",
@@ -276,7 +287,12 @@
         "./pkg/skillctl/registry": [
           "TestBoundIdentityReaderResponses",
           "TestBoundIdentityReaderPhases",
-          "TestBoundIdentityReaderTransport"
+          "TestBoundIdentityReaderTransport",
+          "TestManagedClientBoundary",
+          "TestManagedClientSnapshotAndLifecycle"
+        ],
+        "./pkg/httpsafe": [
+          "TestGETBoundaryContract"
         ]
       }
     },

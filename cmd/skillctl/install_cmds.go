@@ -204,7 +204,7 @@ func runInstall(args []string, stdout, stderr io.Writer) (code int) {
 	// Build a registry HTTP client targeting the matched trust root.
 	httpClient := install.HTTPClientOf(*timeout)
 	var c *registry.Client
-	if policy != nil && root.IdentityKeysAuthorized == "from-registry" {
+	if policy != nil {
 		c, err = newManagedRegistryClient(root.RegistryURL, httpClient)
 		if err != nil {
 			fmt.Fprintln(stderr, "install: registry credential assignment requires a matching approved origin")
