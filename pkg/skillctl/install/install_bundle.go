@@ -59,16 +59,22 @@ type BundleOpts struct {
 	Name string
 
 	// PostVerify, when set, runs AFTER the trust chain passed and BEFORE
-	// anything is staged or written. A non-nil error aborts the install and is
+	// skill content is staged or published. Explicit managed evidence may already
+	// have advanced trust history. A non-nil error aborts the install and is
 	// returned verbatim, so the caller keeps control of its exit-code mapping.
 	//
-	// This is the seam the CLI uses to enforce the offline revocation list and
+	// Managed history enforcement is mandatory in this library, independently
+	// of this optional callback. This seam lets the CLI apply additional list and
 	// the SPEC-0279 freshness contract on `install --bundle`, the same checks
 	// `verify --bundle` runs. Without it, the two paths could not stay
 	// mirror-equal: the revocation verdict must bind to the digest of the very
 	// blob this call verified, not to a digest computed in a separate earlier
 	// pass over a file that may have changed in between.
 	PostVerify func(*verify.VerifyResult) error
+
+	// MutationEvidence is an optional newer full signed list; managed installs
+	// still require enrolled, authenticated, fresh retained history without it.
+	MutationEvidence []byte
 
 	HomeDir           string
 	GovernanceMin     string
@@ -88,7 +94,11 @@ type BundleOpts struct {
 // it to the same numbered SPEC-0188 §11 code the registry path produces. A
 // caller must not invent its own codes here: an operator comparing two machines
 // has to see the same number for the same cause.
-func InstallBundle(opts BundleOpts) (*Result, error) {
+func InstallBundle(opts BundleOpts) (result *Result, resultErr error) {
+	if err := validateMutationEvidenceSize(opts.MutationEvidence); err != nil {
+		return nil, err
+	}
+	opts.MutationEvidence = append([]byte(nil), opts.MutationEvidence...)
 	ctx := opts.Ctx
 	if ctx == nil {
 		ctx = context.Background()
@@ -137,7 +147,18 @@ func InstallBundle(opts BundleOpts) (*Result, error) {
 		return nil, err
 	}
 
-	// ----- caller's post-verify gate, still BEFORE any write -----
+	// Adopt explicit verified evidence before optional caller policy can deny a
+	// subject. Otherwise that refusal could discard a newly learned epoch floor.
+	homeDir, err := resolveHomeDir(opts.HomeDir)
+	if err != nil {
+		return nil, err
+	}
+	store, err := prepareManagedInstall(ctx, opts.TrustRoot, homeDir, opts.MutationEvidence)
+	if err != nil {
+		return nil, err
+	}
+
+	// ----- caller's post-verify gate, before skill staging/publication -----
 	//
 	// Revocation and freshness are part of the trust decision, so they belong on
 	// this side of the staging line: a revoked bundle must leave the target
@@ -190,10 +211,12 @@ func InstallBundle(opts BundleOpts) (*Result, error) {
 	name := signedName
 
 	// ----- stage -----
-	homeDir, err := resolveHomeDir(opts.HomeDir)
+	session, err := beginManagedInstall(ctx, store, verRes.Digest)
 	if err != nil {
 		return nil, err
 	}
+	defer closeManagedInstall(session, &resultErr)
+
 	stagingDir, err := makeStagingDir(homeDir, name, verRes.Digest)
 	if err != nil {
 		return nil, err

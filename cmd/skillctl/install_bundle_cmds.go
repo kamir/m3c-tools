@@ -14,7 +14,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -111,7 +110,6 @@ func runInstallBundle(p installBundleParams, stdout, stderr io.Writer) (code int
 	// Checkpoints still undergo verification but cannot refresh that snapshot.
 	mutationCtx, cancelMutation := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancelMutation()
-	var mutationSession *mutationstate.Session
 	var gateCode int
 	var gateFresh *freshnessOutcome
 	postVerify := func(res *verify.VerifyResult) error {
@@ -173,18 +171,6 @@ func runInstallBundle(p installBundleParams, stdout, stderr io.Writer) (code int
 			}
 		}
 
-		if root.IsManaged() {
-			if managedStore == nil {
-				gateCode = verify.ExitRevocationStale
-				return mutationstate.ErrNotEnrolled
-			}
-			var stateErr error
-			mutationSession, stateErr = managedStore.Begin(mutationCtx, verify.MutationInstall, res.Digest)
-			if stateErr != nil {
-				gateCode = mutationStateExitCode(stateErr)
-				return fmt.Errorf("managed install state: %w", stateErr)
-			}
-		}
 		return nil
 	}
 
@@ -201,13 +187,6 @@ func runInstallBundle(p installBundleParams, stdout, stderr io.Writer) (code int
 		PostVerify:    postVerify,
 		Ctx:           context.Background(),
 	})
-	if mutationSession != nil {
-		if closeErr := mutationSession.Close(); closeErr != nil {
-			// State adoption already committed; installation may also have
-			// completed. Report uncertain completion, never claim rollback.
-			err = errors.Join(err, fmt.Errorf("managed install lock close failed; inspect installation status: %w", closeErr))
-		}
-	}
 	if err != nil {
 		audErr = err
 		fmt.Fprintln(stderr, err)
