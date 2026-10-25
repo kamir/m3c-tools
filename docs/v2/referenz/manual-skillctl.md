@@ -208,6 +208,16 @@ keygen → pack → sign → verify-sig      # author, locally, fully offline
 
 ---
 
+### Bounded bundle decoding
+
+The shared gzip/tar reader limits extracted payload and names to 100 MiB and
+10,000 surfaced entries by default. A separate stream ceiling also counts hidden
+PAX metadata, headers, padding and trailing decompressed bytes before the tar
+parser can consume them. With the defaults this ceiling is `100 MiB + 10,000 *
+1,024 bytes + 1 MiB`. Exceeding a limit or an invalid gzip checksum rejects the
+bundle. Existing payload and path checks still apply. These are decoder resource
+limits; they do not establish the authenticity of a bundle or isolate its execution.
+
 ### `runtime fingerprint`: observe a runtime tree
 
 ```bash

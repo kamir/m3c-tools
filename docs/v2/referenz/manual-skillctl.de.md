@@ -221,6 +221,17 @@ keygen → pack → sign → verify-sig      # author, locally, fully offline
 
 ---
 
+### Begrenztes Entpacken von Bundles
+
+Der gemeinsame gzip/tar-Reader begrenzt entpackte Nutzdaten und Namen standardmäßig
+auf 100 MiB und 10.000 sichtbare Einträge. Eine eigene Streamgrenze zählt auch
+versteckte PAX-Metadaten, Header, Padding und nachfolgende entpackte Bytes, bevor
+der tar-Parser sie verarbeiten kann. Mit den Standardwerten beträgt sie `100 MiB +
+10.000 * 1.024 Bytes + 1 MiB`. Eine überschrittene Grenze oder eine ungültige
+gzip-Prüfsumme führt zur Ablehnung. Die bisherigen Nutzdaten- und Pfadprüfungen
+gelten weiterhin. Diese Grenzen beschränken Decoder-Ressourcen; sie belegen weder
+die Authentizität eines Bundles noch isolieren sie dessen Ausführung.
+
 ### `runtime fingerprint`: einen Runtime-Baum beobachten
 
 ```bash

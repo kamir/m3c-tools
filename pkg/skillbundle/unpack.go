@@ -28,10 +28,12 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
+	"math"
 	"os"
 	"path"
 	"path/filepath"
@@ -71,6 +73,37 @@ type UnpackOptions struct {
 	CanonicalizeMD bool  // rename a root-level skill.md/Skill.md → SKILL.md
 }
 
+// UnpackUsage reports actual inflated stream bytes and returned tar headers.
+// Bytes include hidden PAX records and tar padding, not just file bodies.
+// A violated byte cap reports at most cap+1 bytes; Entries counts headers
+// surfaced by tar, while hidden extension records are covered by the byte cap.
+type UnpackUsage struct {
+	InflatedBytes int64 `json:"inflated_bytes"`
+	Entries       int   `json:"entries"`
+}
+
+// ErrInflatedLimit marks invalid, unrepresentable or exhausted stream budgets.
+var ErrInflatedLimit = errors.New("skillbundle: inflated stream budget exceeded")
+
+func unpackInflatedCap(opts UnpackOptions) (int64, error) {
+	maxBytes, maxFiles := opts.MaxBytes, opts.MaxFiles
+	if maxBytes <= 0 {
+		maxBytes = DefaultMaxExtractedBytes
+	}
+	if maxFiles <= 0 {
+		maxFiles = DefaultMaxExtractedFiles
+	}
+	const overhead int64 = 1 << 20
+	if maxBytes > math.MaxInt64-overhead || int64(maxFiles) > (math.MaxInt64-maxBytes-overhead)/1024 {
+		return 0, ErrInflatedLimit
+	}
+	limit := maxBytes + int64(maxFiles)*1024 + overhead
+	if limit == math.MaxInt64 {
+		return 0, ErrInflatedLimit
+	}
+	return limit, nil
+}
+
 // Unpack decompresses + walks the gzip+tar archive exactly ONCE and returns the
 // validated entry list. It enforces the byte ceiling and file-count cap, refuses
 // absolute / `..`-escaping / volume-prefixed / backslash / NUL paths, refuses
@@ -78,6 +111,70 @@ type UnpackOptions struct {
 // common top-level wrapper dir and canonicalises the skill anchor. It does not
 // write anything, callers decide (ExtractTo writes; the comparator hashes).
 func Unpack(archive []byte, opts UnpackOptions) ([]Entry, error) {
+	limit, err := unpackInflatedCap(opts)
+	if err != nil {
+		return nil, err
+	}
+	entries, _, err := UnpackBounded(context.Background(), archive, opts, limit)
+	return entries, err
+}
+
+// UnpackBounded enforces a positive total inflated-stream cap before tar parses
+// headers, including hidden extended headers. It returns usage even on failure.
+func UnpackBounded(ctx context.Context, archive []byte, opts UnpackOptions, maxInflatedBytes int64) ([]Entry, UnpackUsage, error) {
+	var usage UnpackUsage
+	if ctx == nil {
+		return nil, usage, errors.New("skillbundle: context required")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, usage, err
+	}
+	derived, err := unpackInflatedCap(opts)
+	if err != nil || maxInflatedBytes <= 0 || maxInflatedBytes == math.MaxInt64 {
+		return nil, usage, ErrInflatedLimit
+	}
+	if maxInflatedBytes > derived {
+		maxInflatedBytes = derived
+	}
+	entries, err := unpackEntries(ctx, archive, opts, maxInflatedBytes, &usage)
+	if err == nil {
+		if canceled := ctx.Err(); canceled != nil {
+			return nil, usage, canceled
+		}
+	}
+	return entries, usage, err
+}
+
+type inflatedReader struct {
+	ctx    context.Context
+	reader io.Reader
+	limit  int64
+	usage  *UnpackUsage
+}
+
+func (r *inflatedReader) Read(p []byte) (int, error) {
+	if err := r.ctx.Err(); err != nil {
+		return 0, err
+	}
+	if len(p) == 0 {
+		return 0, nil
+	}
+	remaining := r.limit - r.usage.InflatedBytes
+	if remaining < 0 {
+		return 0, ErrInflatedLimit
+	}
+	if int64(len(p)) > remaining && remaining < int64(len(p))-1 {
+		p = p[:remaining+1]
+	}
+	n, err := r.reader.Read(p)
+	r.usage.InflatedBytes += int64(n)
+	if r.usage.InflatedBytes > r.limit {
+		return n, ErrInflatedLimit
+	}
+	return n, err
+}
+
+func unpackEntries(ctx context.Context, archive []byte, opts UnpackOptions, limit int64, usage *UnpackUsage) ([]Entry, error) {
 	maxBytes := opts.MaxBytes
 	if maxBytes <= 0 {
 		maxBytes = DefaultMaxExtractedBytes
@@ -92,7 +189,8 @@ func Unpack(archive []byte, opts UnpackOptions) ([]Entry, error) {
 		return nil, fmt.Errorf("skillbundle: gzip reader: %w", err)
 	}
 	defer gz.Close()
-	tr := tar.NewReader(gz)
+	meter := &inflatedReader{ctx: ctx, reader: gz, limit: limit, usage: usage}
+	tr := tar.NewReader(meter)
 
 	var entries []Entry
 	var written int64
@@ -106,6 +204,7 @@ func Unpack(archive []byte, opts UnpackOptions) ([]Entry, error) {
 			return nil, fmt.Errorf("skillbundle: read tar header: %w", err)
 		}
 		count++
+		usage.Entries = count
 		if count > maxFiles {
 			return nil, fmt.Errorf("skillbundle: tar entry count exceeds %d (likely a tar bomb)", maxFiles)
 		}
@@ -159,6 +258,10 @@ func Unpack(archive []byte, opts UnpackOptions) ([]Entry, error) {
 			// Devices, fifos, etc.: refused.
 			return nil, fmt.Errorf("skillbundle: tar entry %q has unsupported type 0x%x", hdr.Name, hdr.Typeflag)
 		}
+	}
+
+	if _, err := io.Copy(io.Discard, meter); err != nil {
+		return nil, fmt.Errorf("skillbundle: finish inflated stream: %w", err)
 	}
 
 	if opts.StripWrapper {
