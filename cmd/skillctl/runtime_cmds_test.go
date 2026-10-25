@@ -155,7 +155,7 @@ func TestRuntimeFingerprintActualCLI(t *testing.T) {
 	b, _ := json.Marshal(before)
 	a, _ := json.Marshal(after)
 	if !bytes.Equal(b, a) {
-		t.Fatal("read-only diagnostic changed tree/home/profile/state inventory")
+		t.Fatal("read-only diagnostic changed the observed tree or persisted configuration inventory")
 	}
 }
 
