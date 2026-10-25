@@ -83,6 +83,7 @@ PROJECT_CASES = {
         'TestSessionRecheckRejectsHistoryReplacement',
         'TestSessionRecheckPersistenceUncertaintyInvalidatesSession',
         'TestSessionRecheckCloseAndDecisionConcurrent',
+        'TestStateRealProcessLock',
     ),
     'github.com/kamir/m3c-tools/pkg/skillctl/install': (
         'TestProjectManagedInstallRequiresPolicyBeforeIO',

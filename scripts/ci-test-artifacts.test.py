@@ -394,6 +394,8 @@ class ArtifactContracts(unittest.TestCase):
             ("unit", "TestUnpackInflatedBudget"),
             ("unit", "TestSnapshotRejectsPathReopen"),
             ("security", "TestSnapshotBoundedInputs"),
+            ("unit", "TestStateRealProcessLock"),
+            ("security", "TestStateRealProcessLock"),
             ('unit', 'TestInstalledSkillSourceSignedActiveProof'),
             ('unit', 'TestInstalledSkillSourceRejectsUnsignedAndLegacy'),
             ('unit', 'TestInstalledSkillSourceBindsIdentityVersionAndDeclarations'),

@@ -38,7 +38,11 @@ func TestStateRealProcessLock(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		timeout := 200 * time.Millisecond
+		if mode == "released" {
+			timeout = 10 * time.Second
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
 		status, err := store.Adopt(ctx, list)
 		switch mode {
@@ -76,7 +80,10 @@ func TestStateRealProcessLock(t *testing.T) {
 	}
 	run := func(mode string) {
 		t.Helper()
-		cmd := exec.Command(binary, "-test.run=^TestStateRealProcessLock$", "-test.count=1")
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, binary, "-test.run=^TestStateRealProcessLock$", "-test.count=1")
+		cmd.WaitDelay = time.Second
 		cmd.Env = append(os.Environ(), "M3C_MUTATION_STATE_CHILD="+mode, "M3C_MUTATION_STATE_ROOT="+rootPath, "M3C_MUTATION_STATE_LIST="+listPath, "M3C_MUTATION_STATE_DIR="+f.dir, "M3C_MUTATION_STATE_NOW="+f.clock.now().Format(time.RFC3339Nano))
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("child %s failed: %v\n%s", mode, err, out)

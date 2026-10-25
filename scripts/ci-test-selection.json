@@ -92,7 +92,8 @@
           "TestSessionRecheckInvalidInputsDoNotWrite",
           "TestSessionRecheckRejectsHistoryReplacement",
           "TestSessionRecheckPersistenceUncertaintyInvalidatesSession",
-          "TestSessionRecheckCloseAndDecisionConcurrent"
+          "TestSessionRecheckCloseAndDecisionConcurrent",
+          "TestStateRealProcessLock"
         ],
         "./pkg/skillctl/install": [
           "TestProjectManagedInstallRequiresPolicyBeforeIO",
@@ -214,7 +215,8 @@
           "TestSessionRecheckInvalidInputsDoNotWrite",
           "TestSessionRecheckRejectsHistoryReplacement",
           "TestSessionRecheckPersistenceUncertaintyInvalidatesSession",
-          "TestSessionRecheckCloseAndDecisionConcurrent"
+          "TestSessionRecheckCloseAndDecisionConcurrent",
+          "TestStateRealProcessLock"
         ],
         "./pkg/skillctl/install": [
           "TestProjectManagedInstallRequiresPolicyBeforeIO",
