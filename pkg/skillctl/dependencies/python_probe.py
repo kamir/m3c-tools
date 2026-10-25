@@ -43,8 +43,39 @@ def _classify_sites(selected_site, expected_root):
     return interpreter_root
 
 
-def main():
+def _windows_machine():
+    import ctypes
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    current_process = kernel.GetCurrentProcess
+    current_process.argtypes = []
+    current_process.restype = ctypes.c_void_p
+    process = current_process()
+    if not process:
+        raise ValueError()
+    machine_info = kernel.IsWow64Process2
+    machine_info.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint16), ctypes.POINTER(ctypes.c_uint16)]
+    machine_info.restype = ctypes.c_int32
+    process_machine, native_machine = ctypes.c_uint16(0xffff), ctypes.c_uint16(0xffff)
+    if not machine_info(process, ctypes.byref(process_machine), ctypes.byref(native_machine)):
+        raise ValueError()
+    machine = {0x014c: "x86", 0x01c0: "ARM", 0x01c4: "ARM", 0x0200: "ia64",
+               0x8664: "AMD64", 0xaa64: "ARM64"}.get(native_machine.value)
+    if not machine:
+        raise ValueError()
+    return machine
+
+
+def _marker_environment():
     from packaging.markers import default_environment
+
+    environment = default_environment()
+    if os.name == "nt":
+        environment["platform_machine"] = _windows_machine()
+    return environment
+
+
+def main():
     from packaging.requirements import Requirement
     from packaging.specifiers import SpecifierSet
     from packaging.utils import canonicalize_name
@@ -56,7 +87,7 @@ def main():
     interpreter_root = _classify_sites(selected_site, request["interpreter_root"])
     if not isinstance(roots, list) or len(roots) > 1024:
         raise ValueError()
-    environment = default_environment()
+    environment = _marker_environment()
     installed = {}
     # Duplicate distributions make importlib.metadata's first-match selection
     # ambiguous. Do not silently choose one from sys.path order.

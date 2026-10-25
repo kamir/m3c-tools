@@ -99,8 +99,18 @@ func TestPythonRuntimeFixture(t *testing.T) {
 			t.Fatalf("missing transitive observation %s", name)
 		}
 	}
-	if _, e := r.Recheck(context.Background(), root, out.LockDigest); e != nil {
-		t.Fatal(e)
+	for attempt := 0; attempt < 3; attempt++ {
+		if _, e := r.Recheck(context.Background(), root, out.LockDigest); e != nil {
+			observed, diagnostic := r.Resolve(context.Background(), root)
+			if diagnostic == nil {
+				for i, before := range out.Runtime {
+					if i >= len(observed.Runtime) || before != observed.Runtime[i] {
+						t.Fatalf("recheck %d: %v; runtime observation %d changed (kind=%s name=%s)", attempt, e, i, before.Kind, before.Name)
+					}
+				}
+			}
+			t.Fatalf("recheck %d: %v; repeat resolution error=%v", attempt, e, diagnostic)
+		}
 	}
 	if runtime.GOOS == "windows" {
 		altered := p
@@ -367,4 +377,117 @@ func TestWindowsVenvSiteClassification(t *testing.T) {
 		t.Fatal("root digest bypassed typed size budget")
 	}
 
+}
+
+const windowsMarkerFixture = `
+import ctypes,io,json,os,pathlib,platform,sys,types
+request=json.load(sys.stdin)
+namespace={'__name__':'marker_fixture'};exec(request['probe'],namespace)
+selected=request['site']
+# Site classification is tested separately; simulate Windows marker collection
+# against this real, temporary distribution inventory on every producer OS.
+namespace['_classify_sites']=lambda site,root:''
+class WindowsOS:
+ name='nt'
+ def __getattr__(self,key):return getattr(os,key)
+namespace['os']=WindowsOS()
+state={'native':0x8664,'process':0,'error':False,'write':True,'false':False,'missing':False}
+class CurrentProcess:
+ def __call__(self):
+  assert self.argtypes==[] and self.restype is ctypes.c_void_p
+  return 123
+class MachineInfo:
+ def __call__(self,process,process_machine,native_machine):
+  assert process==123 and self.restype is ctypes.c_int32
+  assert self.argtypes==[ctypes.c_void_p,ctypes.POINTER(ctypes.c_uint16),ctypes.POINTER(ctypes.c_uint16)]
+  if state['error']:raise OSError('synthetic API unavailable')
+  if state['write']:
+   process_machine._obj.value=state['process'];native_machine._obj.value=state['native']
+  return 0 if state['false'] else 1
+class Kernel:
+ GetCurrentProcess=CurrentProcess()
+ @property
+ def IsWow64Process2(self):
+  if state['missing']:raise AttributeError('synthetic API absent')
+  return MachineInfo()
+def dll(name,**kwargs):
+ assert name=='kernel32' and kwargs=={'use_last_error':True}
+ return Kernel()
+ctypes.WinDLL=dll
+os.environ['PROCESSOR_ARCHITECTURE']='poisoned'
+os.environ['PROCESSOR_ARCHITEW6432']='poisoned'
+checks=[]
+for code,want in [(0x014c,'x86'),(0x01c0,'ARM'),(0x01c4,'ARM'),(0x0200,'ia64'),(0x8664,'AMD64'),(0xaa64,'ARM64')]:
+ state['native']=code
+ assert namespace['_windows_machine']()==want
+ checks.append('native-'+want)
+for process,native,want in [(0x8664,0xaa64,'ARM64'),(0x014c,0x8664,'AMD64')]:
+ state.update(process=process,native=native)
+ assert namespace['_windows_machine']()==want
+ checks.append('emulation-'+want)
+for mode in ('unknown','unwritten','api-error','false','absent'):
+ state.update(native=0 if mode=='unknown' else 0x8664,write=mode!='unwritten',error=mode=='api-error',false=mode=='false',missing=mode=='absent')
+ try:namespace['_windows_machine']()
+ except (ValueError,OSError,AttributeError):checks.append(mode)
+ else:raise AssertionError(mode)
+state.update(native=0x8664,process=0,write=True,error=False,false=False,missing=False)
+from packaging import markers
+outputs=[]
+for wmi in ('AMD64',''):
+ platform.machine=lambda:wmi
+ markers._cached_default_environment.cache_clear()
+ payload={'declarations':[{'kind':'python','name':'demo-a','constraint':'>=1'}],'site_packages':selected,'interpreter_root':''}
+ sys.stdin=io.StringIO(json.dumps(payload));capture=io.StringIO();saved=sys.stdout;sys.stdout=capture
+ try:namespace['main']()
+ finally:sys.stdout=saved
+ outputs.append(json.loads(capture.getvalue()))
+assert outputs[0]==outputs[1]
+assert outputs[0]['environment']['platform_machine']=='AMD64'
+checks.append('full-probe-wmi-independent')
+# A missing dependency conditional on the actual architecture must never be
+# skipped just because WMI fails or ambient architecture variables are poisoned.
+metadata=next(pathlib.Path(selected).glob('demo_a-*.dist-info/METADATA'))
+metadata.write_text(metadata.read_text()+'Requires-Dist: missing-native; platform_machine == "AMD64"\n')
+for wmi in ('AMD64',''):
+ platform.machine=lambda:wmi
+ markers._cached_default_environment.cache_clear()
+ sys.stdin=io.StringIO(json.dumps(payload))
+ try:namespace['main']()
+ except ValueError:checks.append('conditional-missing-denied-'+('success' if wmi else 'failure'))
+ else:raise AssertionError('architecture marker bypass')
+print(json.dumps(checks))
+`
+
+func TestWindowsMarkerEnvironment(t *testing.T) {
+	home := isolated(t)
+	base := os.Getenv("M3C_DEPENDENCY_TEST_PYTHON")
+	if base == "" {
+		t.Skip("explicit fixture Python not selected")
+	}
+	setup, err := probe(context.Background(), Profile{ProjectRoot: home}, base, []string{"-I", "-B", "-c", pythonFixture, filepath.Join(home, "marker-env")}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		Path string `json:"path"`
+		Site string `json:"site"`
+	}
+	if strictJSON(setup, &fixture) != nil {
+		t.Fatal("fixture protocol")
+	}
+	input, err := json.Marshal(struct {
+		Probe string `json:"probe"`
+		Site  string `json:"site"`
+	}{pythonProbe, fixture.Site})
+	if err != nil {
+		t.Fatal(err)
+	}
+	output, err := probe(context.Background(), Profile{ProjectRoot: home}, fixture.Path, []string{"-I", "-B", "-c", windowsMarkerFixture}, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var checks []string
+	if strictJSON(output, &checks) != nil || len(checks) != 16 {
+		t.Fatalf("Windows marker simulation failed: %s", output)
+	}
 }

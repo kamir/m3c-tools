@@ -74,7 +74,8 @@
           "TestRuntimeReportWireField",
           "TestSiteTreeGoldenAndBounds",
           "TestWindowsVenvSiteClassification",
-          "TestGraphAggregateBudget"
+          "TestGraphAggregateBudget",
+          "TestWindowsMarkerEnvironment"
         ],
         "./pkg/skillctl/projectpolicy": [
           "TestProjectProfileSnapshotsAndSelection",
@@ -173,7 +174,8 @@
           "TestRuntimeReportWireField",
           "TestSiteTreeGoldenAndBounds",
           "TestWindowsVenvSiteClassification",
-          "TestGraphAggregateBudget"
+          "TestGraphAggregateBudget",
+          "TestWindowsMarkerEnvironment"
         ],
         "./pkg/skillctl/projectpolicy": [
           "TestProjectProfileSnapshotsAndSelection",

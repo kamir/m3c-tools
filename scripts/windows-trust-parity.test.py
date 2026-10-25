@@ -36,6 +36,7 @@ DEPENDENCY_TESTS = (
     'TestSiteTreeGoldenAndBounds',
     'TestWindowsVenvSiteClassification',
     'TestGraphAggregateBudget',
+    'TestWindowsMarkerEnvironment',
 )
 PROJECT_TESTS = {
     'github.com/kamir/m3c-tools/pkg/skillctl/projectpolicy': (
@@ -156,20 +157,21 @@ class ParityContracts(unittest.TestCase):
     def test_same_required_cases_pass_with_denominator(self):
         result = self.run_reports()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("linux lane=trust required=50 pass=50 skip=0 missing=0 exceptions=0", result.stdout)
-        self.assertIn("windows lane=trust required=50 pass=50 skip=0 missing=0 exceptions=0", result.stdout)
+        self.assertIn("linux lane=trust required=51 pass=51 skip=0 missing=0 exceptions=0", result.stdout)
+        self.assertIn("windows lane=trust required=51 pass=51 skip=0 missing=0 exceptions=0", result.stdout)
         self.assertIn("UNBOUND", result.stdout)
 
     def test_dependency_python_skip_or_missing_cannot_hide_behind_package_pass(self):
-        for status in ("skip", "missing"):
-            for platform in ("linux", "windows"):
-                with self.subTest(status=status, platform=platform):
-                    rows = successful_report()
-                    if status == "missing":
-                        rows = [r for r in rows if r.get("Test") != "TestPythonRuntimeFixture"]
-                    else:
-                        next(r for r in rows if r.get("Test") == "TestPythonRuntimeFixture" and r["Action"] == "pass")["Action"] = "skip"
-                    self.reject(self.run_reports(**{platform: rows}), "is " + ("missing" if status == "missing" else "skip"))
+        for selected in ("TestPythonRuntimeFixture", "TestWindowsMarkerEnvironment"):
+            for status in ("skip", "missing"):
+                for platform in ("linux", "windows"):
+                    with self.subTest(selected=selected, status=status, platform=platform):
+                        rows = successful_report()
+                        if status == "missing":
+                            rows = [r for r in rows if r.get("Test") != selected]
+                        else:
+                            next(r for r in rows if r.get("Test") == selected and r["Action"] == "pass")["Action"] = "skip"
+                        self.reject(self.run_reports(**{platform: rows}), "is " + ("missing" if status == "missing" else "skip"))
 
     def test_dependency_graph_budget_skip_or_missing_cannot_hide_behind_package_pass(self):
         for status in ("skip", "missing"):
@@ -210,7 +212,7 @@ class ParityContracts(unittest.TestCase):
                 row["Action"] = "skip"
         result = self.run_reports(windows=rows)
         self.reject(result, "is skip")
-        self.assertIn("windows lane=trust required=50 pass=0 skip=50", result.stdout)
+        self.assertIn("windows lane=trust required=51 pass=0 skip=51", result.stdout)
 
     def test_missing_or_skipped_subtest_with_passing_parent_rejected(self):
         for status in ("missing", "skip"):
@@ -286,7 +288,7 @@ class ParityContracts(unittest.TestCase):
         rows[-1:-1] = [event("TestOptional", "run"), event("TestOptional", "skip")]
         result = self.run_reports(windows=rows)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("observed pass=50 skip=1", result.stdout)
+        self.assertIn("observed pass=51 skip=1", result.stdout)
         self.assertIn("1 other identities outside reviewed parity scope", result.stdout)
 
     def test_bound_same_run_reports_pass(self):
@@ -317,7 +319,7 @@ class ParityContracts(unittest.TestCase):
         result = self.run_reports(windows=rows, exceptions=[exception()])
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("EXCEPTION (not PASS)", result.stdout)
-        self.assertIn("windows lane=trust required=50 pass=49 skip=0 missing=1 exceptions=1", result.stdout)
+        self.assertIn("windows lane=trust required=51 pass=50 skip=0 missing=1 exceptions=1", result.stdout)
         self.assertIn("not acceptance", result.stdout)
         self.reject(self.run_reports(linux=rows, exceptions=[exception()]), "linux: required")
 
@@ -370,7 +372,7 @@ class ParityContracts(unittest.TestCase):
         next(row for row in rows if row.get("Test") == CHILD and row["Action"] == "pass")["Action"] = "skip"
         result = self.run_reports(windows=rows, exceptions=[exception()])
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("pass=49 skip=1 missing=0 exceptions=1", result.stdout)
+        self.assertIn("pass=50 skip=1 missing=0 exceptions=1", result.stdout)
         today = datetime.now(timezone.utc).date().isoformat()
         self.reject(self.run_reports(windows=rows, exceptions=[exception(expires=today)]), "expired exception")
 

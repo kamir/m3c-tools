@@ -55,6 +55,7 @@ DEPENDENCY_CASES = (
     'TestSiteTreeGoldenAndBounds',
     'TestWindowsVenvSiteClassification',
     'TestGraphAggregateBudget',
+    'TestWindowsMarkerEnvironment',
 )
 REQUIRED.update({(DEPENDENCIES, name) for name in DEPENDENCY_CASES})
 # Fixed project-policy, held-session and actual CLI identities.
