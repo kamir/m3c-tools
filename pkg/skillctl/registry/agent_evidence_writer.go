@@ -177,7 +177,7 @@ func acquireAgentPublication(ctx context.Context, agents string, ops agentFileOp
 	anchor := filepath.Dir(parent)
 	// The caller selects the installation parent. Canonicalize only the anchor,
 	// leaving the actual parent/agents/evidence components ordinary and bound.
-	if e = os.MkdirAll(anchor, 0755); e != nil {
+	if e = os.MkdirAll(anchor, 0700); e != nil {
 		return nil, e
 	}
 	anchor, e = filepath.EvalSymlinks(anchor)

@@ -17,12 +17,16 @@ func writeAgentRecord(w io.Writer, h agentRecordHeader, archive, context []byte)
 		return ErrAgentEvidenceInvalid
 	}
 	header, err := json.Marshal(h)
-	if err != nil || len(header) > maxAgentHeader {
+	if err != nil {
+		return ErrAgentEvidenceInvalid
+	}
+	headerLen := len(header)
+	if headerLen < 1 || headerLen > maxAgentHeader {
 		return ErrAgentEvidenceInvalid
 	}
 	var prefix [12]byte
 	copy(prefix[:8], agentRecordMagic)
-	binary.BigEndian.PutUint32(prefix[8:], uint32(len(header)))
+	binary.BigEndian.PutUint32(prefix[8:], uint32(headerLen))
 	for _, part := range [][]byte{prefix[:], header, archive, context} {
 		for len(part) > 0 {
 			n := len(part)
