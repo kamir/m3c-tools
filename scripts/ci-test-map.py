@@ -249,7 +249,7 @@ def run_lane(root, name, lane, results):
         if go:
             record["test_terminal_counts"] = validate_go(raw, expected, lane)
         else:
-            record["test_counts"] = result_validators().python_counts(raw.read_bytes())
+            record["test_counts"] = result_validators().python_counts(raw.read_bytes(), lane.get("required_cases", []))
     except (ValueError, OSError, ET.ParseError) as error:
         record["validation_error"] = str(error)
         code = code or 1

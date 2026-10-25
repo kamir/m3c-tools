@@ -399,10 +399,10 @@ beibehalten. Vollständige Listen sind auf 1 MiB begrenzt und müssen reguläre
 Dateien statt Symlinks sein.
 
 ```bash
-skillctl trust state enroll --trust-roots roots.yaml --registry https://registry.example/api/skills --home ./demo-home --revocations revocations.json --profile local-operator-v1 --confirm-local-trust
-skillctl trust state status --trust-roots roots.yaml --registry https://registry.example/api/skills --home ./demo-home
-skillctl trust state adopt --trust-roots roots.yaml --registry https://registry.example/api/skills --home ./demo-home --revocations revocations.json
-skillctl install --bundle demo@1.0.0.skb --trust-roots roots.yaml --registry https://registry.example/api/skills --home ./demo-home --revocations revocations.json
+skillctl trust state enroll --trust-roots roots.yaml --registry https://registry.example/api/skills --home /absolute/operator-home --revocations revocations.json --profile local-operator-v1 --confirm-local-trust
+skillctl trust state status --trust-roots roots.yaml --registry https://registry.example/api/skills --home /absolute/operator-home
+skillctl trust state adopt --trust-roots roots.yaml --registry https://registry.example/api/skills --home /absolute/operator-home --revocations revocations.json
+skillctl install --enterprise-profile /absolute/project/enterprise.json --bundle demo@1.0.0.skb --home /absolute/operator-home --revocations revocations.json
 ```
 
 Verwaltetes lokales `install --bundle` benötigt weiterhin `--revocations`. Der
@@ -444,7 +444,7 @@ und Kundenplattformabnahme bleiben gesonderte Arbeit.
 
 Verwaltetes HTTP-`install <name>@<version>` verwendet jetzt dieselbe enrollte
 Historie und gehaltene Veröffentlichungssperre wie lokale Bundles. Dieselben
-`--trust-roots`, Registry und `--home` wie bei `trust state enroll` wählen;
+`--enterprise-profile` mit demselben gepinnten Anker, Registry und Installations-Home wie bei `trust state enroll` wählen;
 gespeicherte Evidenz ausdrücklich mit `trust state adopt` erneuern. Der
 Registry-Weg verweigert `--meta`, `--revocations`, `--checkpoint` und `--emergency`,
 die zum Weg mit `--bundle` gehören.
@@ -561,7 +561,7 @@ nicht verjüngen; die Fail-open-Regel für risikoarme Ausführung erlaubt keine
 veraltete Installation. Explizite Prüfpunkte und Notfalldateien werden weiter
 geprüft.
 
-Verwaltete lokale Bundles benötigen zusätzlich vorheriges explizites `trust state enroll`.
+Verwaltete lokale Bundles benötigen zusätzlich ein explizites `--enterprise-profile` und vorheriges `trust state enroll`.
 Die dauerhafte lokale Beobachtung erkennt unbeabsichtigten Uhr-/Epoch-Rücklauf
 im unter `trust state` beschriebenen lokalen Betreibermodell. Andere Installationswege
 und Kundenabnahme bleiben offen; diese Prüfung allein belegt keine Enterprise-Reife.
@@ -571,10 +571,12 @@ und Kundenabnahme bleiben offen; diese Prüfung allein belegt keine Enterprise-R
 | `-allow-yellow` | Mindeststufe für diese Installation von green auf yellow senken; wird protokolliert. |
 | `-bundle` | Eigenständige `.skb`-Datei aus nicht vertrauenswürdigem Transport vollständig offline gegen fest hinterlegte Vertrauensanker installieren (SPEC-0406 D2). |
 | `-checkpoint` | Signierter Prüfpunkt bei `--bundle`; wird geprüft, kann aber die vollständige Widerrufsliste einer verwalteten Installation nicht verjüngen. Gefälscht/nicht vertrauenswürdig → `12`. |
+| `-enterprise-profile` | Explizites Projekt-JSON; Pflicht für verwaltete HTTP-/lokale Bundle-Installationen. Arbeitsverzeichnis und gewähltes Home müssen dessen vorhandenen kanonischen Verzeichnissen entsprechen. |
+| `-enterprise-profile-sha256` | Optionaler erwarteter SHA-256 des exakten Projekt-JSONs in Kleinbuchstaben; benötigt `--enterprise-profile`. MCP übergibt den Betreiberpin vom Serverstart. |
 | `-emergency` | Signierte Notfall-Sperrliste (SPEC-0279 R5, mit `--bundle`). Genannter Digest → `17`; gefälschte Liste → `12`. |
 | `-governance-min green\|yellow` | `governance_minimum` des Vertrauensankers überschreiben; leer verwendet dessen Wert. |
 | `-home` | Installationswurzel überschreiben; fortgeschrittene Verwendung, Standard `$HOME`. |
-| `-ignore-deps` | Auflösung von `depends_on` überspringen; wird protokolliert. |
+| `-ignore-deps` | Legacy-Auflösung von `depends_on` überspringen; wird protokolliert. Mit Enterprise-Projektprofil verweigert. |
 | `-json` | Versioniertes maschinenlesbares Vertrauensergebnis ausgeben. `--json` zuerst setzen, damit auch Fehler beim Parsen der Flags enthalten sind. |
 | `-meta` | Pfad des BundleMeta-JSON-Umschlags bei `--bundle`; Standard ist die Begleitdatei `.skbmeta.json`. |
 | `-registry` | Registry-Basis-URL; nur erforderlich, wenn Vertrauensanker mehrere Registries festlegen. |
@@ -602,6 +604,66 @@ können `install` und `verify` diesen Code nicht erreichen. Aktuell ist `23`
 ausschließlich über `translog verify` erreichbar.
 
 ---
+### Enterprise-Projektauswahl für Installationen
+
+Verwaltete Installationen im explizit gewählten Projektverzeichnis ausführen. Das
+Profil pinnt vorhandene öffentliche Trust-Dateien und das Runtime-Profil über den
+SHA-256 ihrer exakten Dateibytes; relative Referenzen gelten neben dem Projekt-JSON.
+Es enthält keine Zugangsdaten. Das Runtime-Profil verwendet das Schema
+`m3c.skillctl.runtime-profile/v1` und dieselbe kanonische `project_root`; es wählt
+absolute Python-/Toolpfade statt PATH. Versionsbedingungen verwenden die Resolver-Policy `numeric-release/v1`; nicht unterstützte Syntax wird verweigert. Der Betreiber muss Paketbaum-Baselines
+prüfen und ausdrücklich vorgeben. Installation oder Beobachtung von Paketen erteilt
+keine automatische Baseline-Freigabe.
+
+Beispielform; Pfade und Hashes durch geprüfte Werte ersetzen:
+
+```json
+{
+  "schema": "m3c.enterprise-project-profile/v1",
+  "project_root": "/absolute/project",
+  "artifact_home": "/absolute/operator-home",
+  "registry_url": "https://registry.example/api/skills",
+  "artifact_trust": {"path": "roots.yaml", "sha256": "<64 lowercase hex characters>"},
+  "revocation_trust": {"path": "roots.yaml", "sha256": "<64 lowercase hex characters>"},
+  "runtime": {"path": "runtime.json", "sha256": "<64 lowercase hex characters>"}
+}
+```
+
+Diese Version unterstützt eine verwaltete HTTP-Autorität. Beide Rollenreferenzen
+werden getrennt geladen und gepinnt und müssen vollständig identische Anker und
+Mandantenbereiche wählen. Getrennte Autoritäten/Schlüssel, mehrere Registries und
+andere Trust-Formate werden verweigert und nicht umgedeutet. `allow_loopback_http: true`
+erlaubt ausdrücklich HTTP auf Loopback für die Entwicklung; entfernte Registries
+benötigen HTTPS.
+
+Mit Profil werden Trust-Datei- und Mandanten-Overrides sowie `--ignore-deps`,
+`--allow-yellow` und Governance-Overrides verweigert. Widersprüchliche Registry-, Home- oder
+Projektauswahl scheitert ebenfalls vor Registry-Zugangsdaten oder Anfragen. Der SDK
+verlangt das Profil auch ohne CLI-Callback. Die signierten, erhaltenen Bytes von
+`bundle.json` bestimmen die Runtime-Deklarationen. Python-/Systemanforderungen
+werden geprüft und vor dem ersten Austausch eines installierten Skills erneut
+geprüft. Danach prüft die gehaltene Sperre die signierte Widerrufshistorie und die
+tatsächliche Uhr erneut.
+
+Deklarierte Skill-/Agent-Abhängigkeiten verweigern aktuell mit konkretem
+Installations-/Neuinstallationshinweis, bis der vollständige Adapter für aktive,
+erhaltene Installationsnachweise verfügbar ist. Ein Verzeichnis oder eine unsignierte
+Begleitdatei erfüllt den Guard nicht. Abhängigkeiten werden nicht automatisch
+installiert. Diese Verweigerungen bedeuten keine vollständige Unterstützung oder
+Enterprise-Abnahme; ER1/Git/self und Admit-/Attest-Integration bleiben offen.
+Status und Diagnose benötigen dieses Installationsprofil nicht.
+
+Für MCP `skill_install` setzt der Betreiber `SKILLCTL_ENTERPRISE_PROFILE`,
+`SKILLCTL_PROJECT_ROOT` und `SKILLCTL_ARTIFACT_HOME` sowie das vorgesehene
+`SKILLCTL_BIN` vor dem Serverstart. Der Server hält Profilhash und Pfade fest und
+ruft die echte CLI mit explizitem Projekt-Arbeitsverzeichnis und Dateipin auf.
+Unvollständige/ungültige Konfiguration oder spätere Änderungen der Profilbytes
+sperren die Installation; nach absichtlichen Betreiberänderungen neu starten.
+`enterprise_profile` in einer Toolanfrage darf nur den Betreiberpfad wiederholen
+und keine andere Trust-Policy auswählen.
+
+---
+
 ### `verify`: Vertrauenskette erneut prüfen
 
 ```bash

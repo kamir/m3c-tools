@@ -39,7 +39,10 @@ func registryMutationFixture(t *testing.T) installableFixture {
 
 func registryMutationInstall(t *testing.T, binary string, f installableFixture, want int) {
 	t.Helper()
-	out := mutationCLI(t, binary, f, want, "install", "--json", "--trust-roots", f.trPath, "--registry", f.regURL, "fetch-contract")
+	args := []string{"install", "--json"}
+	args = append(args, enterpriseInstallFixtureArgs(t, f)...)
+	args = append(args, "--registry", f.regURL, "fetch-contract")
+	out := mutationCLI(t, binary, f, want, args...)
 	var result bundleVerifyResult
 	if err := json.Unmarshal(out, &result); err != nil {
 		t.Fatalf("CLI JSON: %v output=%s", err, out)

@@ -93,6 +93,9 @@ func TestManagedInstallLibraryMandatoryHistory(t *testing.T) {
 					root = mkTrustRoot(t, fx.regPub, srv.URL+"/api/skills", "green")
 				}
 				root.OfflinePolicy = &verify.OfflinePolicyBlock{Enterprise: true}
+				root.RegistryURL = srv.URL + "/api/skills"
+				policy := installProjectProfile(t, home, root)
+				root = policy.TrustRoot()
 				store := managedLibraryStore(t, home, root)
 				if state != "missing" {
 					raw := managedLibraryList(t, fx, root, time.Now().Add(-time.Hour), 1, state == "revoked")
@@ -119,9 +122,9 @@ func TestManagedInstallLibraryMandatoryHistory(t *testing.T) {
 				var err error
 				// No optional PostVerify callback is supplied in either public library path.
 				if route == "bundle" {
-					result, err = InstallBundle(BundleOpts{BundlePath: writeBundle(t, fx), Meta: sidecarMeta(t, fx, "fetch-contract"), TrustRoot: root, HomeDir: home})
+					result, err = InstallBundle(BundleOpts{BundlePath: writeBundle(t, fx), Meta: sidecarMeta(t, fx, "fetch-contract"), TrustRoot: root, HomeDir: home, ProjectPolicy: policy})
 				} else {
-					result, err = Install(Opts{Name: "fetch-contract", Client: registry.New(srv.URL+"/api/skills", srv.Client()), TrustRoot: root, HomeDir: home})
+					result, err = Install(Opts{Name: "fetch-contract", Client: registry.New(srv.URL+"/api/skills", srv.Client()), TrustRoot: root, HomeDir: home, ProjectPolicy: policy})
 				}
 				want := 22
 				if state == "fresh" {
@@ -168,6 +171,9 @@ func TestManagedInstallLibraryLearnsBeforeCallerDenial(t *testing.T) {
 	fx := mkBundleFixture(t)
 	root := pinnedRoot(t, fx)
 	root.OfflinePolicy = &verify.OfflinePolicyBlock{Enterprise: true}
+	root.RegistryURL = "https://registry.invalid/api/skills"
+	policy := installProjectProfile(t, home, root)
+	root = policy.TrustRoot()
 	store := managedLibraryStore(t, home, root)
 	old := managedLibraryList(t, fx, root, time.Now().Add(-2*time.Hour), 1, false)
 	newer := managedLibraryList(t, fx, root, time.Now().Add(-time.Hour), 2, false)
@@ -176,7 +182,7 @@ func TestManagedInstallLibraryLearnsBeforeCallerDenial(t *testing.T) {
 	}
 	denied := errors.New("synthetic caller refusal")
 	calls := 0
-	_, err := InstallBundle(BundleOpts{BundlePath: writeBundle(t, fx), Meta: sidecarMeta(t, fx, "fetch-contract"), TrustRoot: root, HomeDir: home, MutationEvidence: newer, PostVerify: func(*verify.VerifyResult) error { calls++; return denied }})
+	_, err := InstallBundle(BundleOpts{BundlePath: writeBundle(t, fx), Meta: sidecarMeta(t, fx, "fetch-contract"), TrustRoot: root, HomeDir: home, ProjectPolicy: policy, MutationEvidence: newer, PostVerify: func(*verify.VerifyResult) error { calls++; return denied }})
 	if !errors.Is(err, denied) || calls != 1 {
 		t.Fatalf("callback denial=%v calls=%d", err, calls)
 	}
@@ -184,7 +190,7 @@ func TestManagedInstallLibraryLearnsBeforeCallerDenial(t *testing.T) {
 	if err != nil || status.Epoch != 2 {
 		t.Fatalf("new floor lost: %+v %v", status, err)
 	}
-	_, err = InstallBundle(BundleOpts{BundlePath: writeBundle(t, fx), Meta: sidecarMeta(t, fx, "fetch-contract"), TrustRoot: root, HomeDir: home, MutationEvidence: old})
+	_, err = InstallBundle(BundleOpts{BundlePath: writeBundle(t, fx), Meta: sidecarMeta(t, fx, "fetch-contract"), TrustRoot: root, HomeDir: home, ProjectPolicy: policy, MutationEvidence: old})
 	if verify.ExitCode(err) != 22 {
 		t.Fatalf("rollback not denied: %v", err)
 	}

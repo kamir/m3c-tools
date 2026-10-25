@@ -74,7 +74,7 @@ Nach Domäne gegliedert:
 ## F. skillctl-Vertrauenssubsystem (`pkg/skillctl/*` und Nachbarpakete)
 
 Die offline prüfbare Skill-Vertrauensebene als Bibliothek hinter der
-[`skillctl`](program-index.de.md)-CLI. Es gibt 54 Unterpakete in `pkg/skillctl/`
+[`skillctl`](program-index.de.md)-CLI. Es gibt 55 Unterpakete in `pkg/skillctl/`
 und die am Abschnittsende genannten Nachbarpakete, gegliedert nach Rolle.
 `scripts/check-index.sh` prüft im Original sowohl Liste als auch Anzahl: Es gleicht
 `pkg/**` und `internal/**` in beiden Richtungen ab und zählt Verzeichnisse neu.
@@ -107,7 +107,8 @@ Die Prüfung läuft in `scripts/check-docs.sh` und dem Job `docs-gate` von `ci.y
 | Paket | Verantwortung |
 |---------|----------------|
 | `skillctl/install` | Client-Installationspipeline nach SPEC-0188 §7. |
-| `skillctl/dependencies` | Auflösung von Runtime-Abhängigkeiten mit explizit gewählten lokalen Profilen und durch den Aufrufer authentifizierten Artefakten; keine Bereitstellung oder automatische CLI-Durchsetzung. |
+| `skillctl/dependencies` | Runtime-Abhängigkeiten gegen explizite lokale Profile und vom Consumer authentisierte Artefakte auflösen; keine Bereitstellung. Verwaltete HTTP-/lokale Bundle-Installationen rufen dies über die Projektpolicy auf. |
+| `skillctl/projectpolicy` | Strenge unveränderliche Snapshots von Projekt, Installations-Home, HTTP-Autorität und Runtime mit expliziten Dateipins. Nicht unterstützte Trust-Zuordnungen werden verweigert. |
 | `skillctl/importer` | Zugriff auf die aims-core-Skill-Profil-API. |
 | `skillctl/registry` | HTTP-Client für das aims-core-Skill-Registry. |
 | `skillctl/awareness` | Zulassungsbrücke nach SPEC-0195. |

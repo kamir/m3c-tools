@@ -237,17 +237,51 @@ func (s *Store) adoptLocked(ctx context.Context, raw []byte) (record, error) {
 // Session holds the stable interprocess lock until Close. Callers must keep it
 // through their actual mutation, including its final commit or refusal.
 type Session struct {
+	mu       sync.Mutex
 	file     *os.File
+	store    *Store
+	history  record
+	action   verify.MutationAction
+	digest   string
 	decision verify.MutationFreshnessDecision
-	once     sync.Once
+	closed   bool
+	poisoned bool
 	closeErr error
 }
 
-// Decision returns a value copy of this session's evaluated freshness decision.
-func (s *Session) Decision() verify.MutationFreshnessDecision { return s.decision }
+// Decision returns a synchronized copy. It is an observation, not a permission
+// to skip a final Recheck. Closing or a failed recheck invalidates Allowed.
+func (s *Session) Decision() verify.MutationFreshnessDecision {
+	if s == nil {
+		return verify.MutationFreshnessDecision{Reason: "session_unavailable"}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.decision
+}
 
-// Close releases the lock. It is idempotent and reports the first close error.
-func (s *Session) Close() error { s.once.Do(func() { s.closeErr = s.file.Close() }); return s.closeErr }
+// Close serializes with Recheck and releases the lock once. It is idempotent
+// and reports the first close error, including uncertain completion.
+func (s *Session) Close() error {
+	if s == nil {
+		return ErrInvalidState
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return s.closeErr
+	}
+	s.closed = true
+	s.decision.Allowed = false
+	s.decision.Reason = "session_closed"
+	if s.file == nil {
+		s.closeErr = ErrInvalidState
+	} else {
+		s.closeErr = s.file.Close()
+		s.file = nil
+	}
+	return s.closeErr
+}
 
 // Begin verifies the persisted full list against real prior history and writes
 // the new clock floor durably before returning a held session. A denial never
@@ -275,7 +309,7 @@ func (s *Store) Begin(ctx context.Context, action verify.MutationAction, digest 
 	if err != nil {
 		return nil, errors.Join(err, held.Close())
 	}
-	return &Session{file: held, decision: dec}, nil
+	return &Session{file: held, store: s, history: r, action: action, digest: dec.SubjectDigest, decision: dec}, nil
 }
 
 func (s *Store) newRecord(raw []byte, list *verify.RevocationList, now time.Time) record {

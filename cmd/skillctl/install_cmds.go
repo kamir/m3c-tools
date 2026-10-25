@@ -58,6 +58,8 @@ func runInstall(args []string, stdout, stderr io.Writer) (code int) {
 	homeOverride := fs.String("home", "", "Override the install root (advanced; defaults to $HOME).")
 	bundlePath := fs.String("bundle", "", "Install a standalone .skb FILE that arrived over an untrusted transport (SPEC-0406). Offline, against pinned trust-roots. Requires a sidecar <file>.skbmeta.json (or --meta).")
 	metaPath := fs.String("meta", "", "Path to the BundleMeta envelope JSON for --bundle (default: the .skbmeta.json sidecar next to the .skb).")
+	enterpriseProfile := fs.String("enterprise-profile", "", "Explicit Enterprise project profile binding project, artifact home, trust and runtime.")
+	enterpriseProfileSHA := fs.String("enterprise-profile-sha256", "", "Expected lowercase SHA-256 of --enterprise-profile bytes, required by operator-bound MCP calls.")
 	trustRootsPath := fs.String("trust-roots", "", "Path to a trust-roots YAML to use instead of the default. Pair with --bundle for a portable verification kit.")
 	revocationsPath := fs.String("revocations", "", "Path to a signed revocation list (JSON) to enforce offline for --bundle. A revoked digest → exit 17; an untrusted/forged list → exit 12.")
 	checkpointPath := fs.String("checkpoint", "", "Path to a signed freshness checkpoint (SPEC-0279 R4) that can reset the staleness clock for --revocations without a full re-sync. A forged/stale/rollback checkpoint → exit 12.")
@@ -93,6 +95,19 @@ func runInstall(args []string, stdout, stderr io.Writer) (code int) {
 		return exitUsage
 	}
 
+	if (*bundlePath != "" && fs.NArg() != 0) || (*bundlePath == "" && fs.NArg() != 1) {
+		fs.Usage()
+		return exitUsage
+	}
+	policy, policyCode, policyErr := loadInstallProjectPolicy(*enterpriseProfile, *enterpriseProfileSHA, *homeOverride, *registryURL, *trustRootsPath, *governanceMin, *tenantFlag, *allowYellow, *ignoreDeps)
+	if policyErr != nil {
+		fmt.Fprintln(stderr, policyErr)
+		return policyCode
+	}
+	if policy != nil {
+		*homeOverride = policy.ArtifactHome()
+	}
+
 	// --bundle: install a local .skb, fully offline, against pinned trust-roots.
 	// The name positional is NOT accepted here: where the skill lands is decided
 	// by the signed bundle.json, never by the command line (see InstallBundle).
@@ -103,6 +118,7 @@ func runInstall(args []string, stdout, stderr io.Writer) (code int) {
 		}
 		return runInstallBundle(installBundleParams{
 			result:          machineTrustResult(*jsonOut, result),
+			projectPolicy:   policy,
 			bundlePath:      *bundlePath,
 			metaPath:        *metaPath,
 			trustRootsPath:  *trustRootsPath,
@@ -152,7 +168,11 @@ func runInstall(args []string, stdout, stderr io.Writer) (code int) {
 	// evidence log. Fire-and-forget, so nothing below can change `code`.
 	var audErr error
 	var audDigest string
+	auditSelectionReady := false
 	defer func() {
+		if !auditSelectionReady {
+			return
+		}
 		appendLifecycleEvent(auditHomeOf(*homeOverride), auditevent.LifecycleEvent{
 			Op:       auditevent.OpInstall,
 			Skill:    name,
@@ -163,11 +183,17 @@ func runInstall(args []string, stdout, stderr io.Writer) (code int) {
 		})
 	}()
 
-	tr, root, err := loadAndPickRootFromPath(*trustRootsPath, *registryURL)
+	tr, root, err := installProjectTrustRoots(policy, *trustRootsPath, *registryURL)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return exitGeneric
 	}
+
+	if root.IsManaged() && policy == nil {
+		fmt.Fprintln(stderr, "managed install requires --enterprise-profile before registry access")
+		return 12
+	}
+	auditSelectionReady = true
 
 	// Tenant resolution (SPEC-0188 §7 step 5.5, G-18 closure 2026-05-06):
 	// the CLI flag wins over the trust-roots `tenant_scope:` value. Empty
@@ -189,6 +215,7 @@ func runInstall(args []string, stdout, stderr io.Writer) (code int) {
 	}
 
 	res, err := install.Install(install.Opts{
+		ProjectPolicy: policy,
 		Name:          name,
 		Version:       version,
 		Client:        c,

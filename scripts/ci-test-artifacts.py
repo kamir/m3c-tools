@@ -74,7 +74,7 @@ def expected_lanes(config, needs):
     return lanes
 
 
-def python_counts(blob):
+def python_counts(blob, required_cases=None):
     root = ET.fromstring(blob)
     if root.tag not in {"testsuites", "testsuite"}:
         raise ValueError("unsupported JUnit root")
@@ -95,6 +95,21 @@ def python_counts(blob):
     failed = sum(c.find("failure") is not None or c.find("error") is not None for c in cases)
     if not cases or failed or len(cases) == skipped:
         raise ValueError("no successful Python tests or failed cases")
+    required_cases = [] if required_cases is None else required_cases
+    if not isinstance(required_cases, list) or len(required_cases) > 128:
+        raise ValueError("invalid required Python identities")
+    identities = set()
+    for required in required_cases:
+        if (not isinstance(required, dict) or set(required) != {"classname", "name"}
+                or any(not isinstance(v, str) or not v.strip() for v in required.values())):
+            raise ValueError("invalid required Python identity")
+        identity = required["classname"], required["name"]
+        if identity in identities:
+            raise ValueError("duplicate required Python identity")
+        identities.add(identity)
+        matched = [c for c in cases if (c.get("classname"), c.get("name")) == identity]
+        if len(matched) != 1 or any(matched[0].find(tag) is not None for tag in ("skipped", "failure", "error")):
+            raise ValueError("missing, duplicate or skipped required Python case: " + "::".join(identity))
     return dict(total=len(cases), skipped=skipped, failed=failed)
 
 
@@ -159,7 +174,7 @@ def verify_lane(folder, name, lane, context, parity):
         if metadata.get("test_terminal_counts") != counts:
             raise ValueError(name + ": inconsistent test counts")
     elif lane["kind"] == "pytest":
-        counts = python_counts(blob)
+        counts = python_counts(blob, lane.get("required_cases", []))
         if metadata.get("test_counts") != counts:
             raise ValueError(name + ": inconsistent Python counts")
     else:
