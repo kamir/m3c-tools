@@ -32,7 +32,7 @@ func validateProjectSelection(policy *projectpolicy.Policy, root *verify.TrustRo
 	return nil
 }
 
-func prepareProjectDependencies(ctx context.Context, policy *projectpolicy.Policy, blob []byte, verified *verify.VerifyResult, name, expectedVersion string, session *mutationstate.Session, snapshot *verify.SnapshotResult) (func() error, error) {
+func prepareProjectDependencies(ctx context.Context, policy *projectpolicy.Policy, blob []byte, verified *verify.VerifyResult, name, expectedVersion string, session *mutationstate.Session, snapshot *verify.SnapshotResult, identityProofs ...projectIdentityProof) (func() error, error) {
 	if policy == nil {
 		return nil, nil
 	}
@@ -80,16 +80,32 @@ func prepareProjectDependencies(ctx context.Context, policy *projectpolicy.Polic
 	}
 	root := dependencies.Artifact{Authority: policy.ProfileDigest(), Kind: kind, Name: manifestName, Version: version, Digest: verified.Digest, Declarations: assessment.Declarations}
 	resolve := func(expectedLock string, final func(*dependencies.Report) error) (*dependencies.Report, error) {
-		source := newInstalledSkillSource(policy)
+		var reader *registry.BoundIdentityReader
+		if len(identityProofs) == 1 {
+			reader = identityProofs[0].reader
+		}
+		source := newInstalledSkillSource(policy, reader)
 		resolver, err := dependencies.NewResolver(policy.Runtime(), source)
 		if err != nil {
 			return nil, errors.Join(verify.ErrDepsUnsatisfied, source.Close())
+		}
+		// Root refusal keeps its existing author classification even when a
+		// dependency uses the same author. Both use this fresh phase's cache.
+		if expectedLock != "" && len(identityProofs) == 1 {
+			if rootErr := identityProofs[0].recheck(ctx, source); rootErr != nil {
+				return nil, errors.Join(rootErr, source.Close())
+			}
 		}
 		var report *dependencies.Report
 		if expectedLock == "" {
 			report, err = resolver.Resolve(ctx, root)
 		} else {
 			report, err = resolver.Recheck(ctx, root, expectedLock)
+		}
+		if err == nil && expectedLock != "" && len(identityProofs) == 1 {
+			if rootErr := identityProofs[0].recheck(ctx, source); rootErr != nil {
+				return nil, errors.Join(rootErr, source.Close())
+			}
 		}
 		if err == nil {
 			err = source.validateProofs(ctx)

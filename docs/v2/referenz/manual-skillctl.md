@@ -678,7 +678,8 @@ optional caller or later dependency denial. The extracted tree and retained arch
 stash use the verified retained bytes.
 
 Skill dependencies can use an already active HTTP installation when the selected
-roots explicitly pin author keys. Exactly one regular retained `.skb` and a bounded
+roots explicitly pin author keys, or authorize live author identities from the
+selected HTTP registry. Exactly one regular retained `.skb` and a bounded
 `.skillctl-offline.json` envelope supply the retained proof. Archive digest and
 signatures are verified under the selected roots and existing verifier policy.
 Mutable envelope projections are not independently authenticated; governance remains
@@ -705,8 +706,36 @@ reserves 64 times stream bytes. Large otherwise valid archives may therefore be
 refused below the archive cap. Checks observe cancellation between I/O operations;
 they do not guarantee deadlines for blocked filesystem operations.
 
-Agents and retained proofs requiring registry-authorized author keys remain refused
-with an install/reinstall hint. An existing directory or unsigned
+For managed HTTP installs using registry-authorized keys, a bound reader freezes
+one profile-selected complete registry base and the selected credential context.
+Identity responses must match the requested author ID, provide a valid key and
+nonempty authentication source, and pass bounded strict JSON checks. Unsigned
+retained identity projections are ignored. Both supported public-key field names
+are accepted only when their decoded keys agree. Missing, malformed, revoked or
+unavailable dependency identities deny with `14`; no pinned-key or cached-evidence
+fallback is attempted. Managed CLI environment-token origin errors are surfaced
+rather than silently becoming anonymous requests.
+
+Each fresh identity phase permits at most 256 uncached identities, a 1 MiB response
+and JSON depth 32 with at most 4096 JSON tokens, with a 30-second deadline from its
+first lookup. Dependency
+lookups reserve eight times response-cap-plus-one within the existing 512 MiB
+phase work budget; usable lookup and archive capacity can be lower than individual
+caps. Successful identity observations are cached only inside that phase. All
+identity redirects are refused. Explicit loopback HTTP does not use ambient
+proxies; HTTPS retains the configured proxy behavior. Custom SDK transports remain
+trusted caller capabilities.
+
+Before target replacement, a fresh phase rechecks the verified root author and
+dependency authors. Root key changes deny with `11`, root identity revocation with
+`17`, before a dependency error can mask them. Fresh graph/runtime and filesystem
+checks precede the final held revocation-session check. This observes current
+keys; it does not authenticate historical registry origin, provide an atomic
+network snapshot or elevate advisory governance projections into signed review.
+Existing configured reviewer and independent-review rules remain in force.
+
+Agents and local/offline retained proofs requiring registry-authorized author keys
+remain refused with an install/reinstall hint. An existing directory or unsigned
 sidecar alone does not satisfy the guard. No dependency is automatically installed.
 These refusals do not constitute support completion or Enterprise acceptance;
 ER1/Git/self and admission/attestation integration remain open.

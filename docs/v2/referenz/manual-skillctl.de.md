@@ -728,7 +728,8 @@ Evidenz wird weiterhin vor einer optionalen Caller- oder späteren Abhängigkeit
 den verifizierten erhaltenen Bytes.
 
 Skill-Abhängigkeiten können eine bereits aktive HTTP-Installation verwenden, wenn
-die gewählten Vertrauensanker die Autorenschlüssel ausdrücklich pinnen. Genau eine
+die gewählten Vertrauensanker die Autorenschlüssel ausdrücklich pinnen oder aktuelle
+Autorenidentitäten von der gewählten HTTP-Registry autorisieren. Genau eine
 reguläre erhaltene `.skb` und ein begrenzter `.skillctl-offline.json`-Umschlag liefern
 den erhaltenen Nachweis. Archivdigest und Signaturen werden unter den gewählten
 Ankern und der bestehenden Verifier-Policy geprüft. Veränderliche Projektionen im
@@ -758,8 +759,39 @@ Große sonst gültige Archive können daher unterhalb des Archivlimits verweiger
 werden. Zwischen I/O-Operationen wird Abbruch geprüft; blockierte Dateisystemoperationen
 haben dadurch keine garantierte Frist.
 
-Agenten und erhaltene Nachweise, deren Autorenschlüssel von der Registry autorisiert
-werden müssen, bleiben mit Installations-/Neuinstallationshinweis gesperrt. Ein Verzeichnis oder eine unsignierte Begleitdatei allein
+Bei verwalteten HTTP-Installationen mit Registry-autorisierten Schlüsseln hält ein
+gebundener Reader die vollständige Registry-Basis aus dem Profil und den gewählten
+Zugangsdatenkontext fest. Identitätsantworten müssen exakt zur angefragten Autoren-ID
+passen, einen gültigen Schlüssel und eine nicht leere Authentisierungsquelle liefern
+sowie begrenzte strikte JSON-Prüfungen bestehen. Unsignierte erhaltene Identitätsprojektionen
+werden ignoriert. Beide unterstützten öffentlichen Schlüsselfeldnamen sind nur bei
+gleichen dekodierten Schlüsseln zulässig. Fehlende, fehlerhafte, widerrufene oder
+nicht verfügbare Abhängigkeitsidentitäten verweigern mit `14`; es gibt keinen Fallback
+auf gepinnte Schlüssel oder alte Nachweise. Die verwaltete CLI meldet Fehler der
+Origin-Bindung von Umgebungs-Tokens statt still anonym anzufragen.
+
+Jede frische Identitätsphase erlaubt höchstens 256 nicht zwischengespeicherte
+Identitäten, 1 MiB je Antwort, JSON-Tiefe 32 und höchstens 4096 JSON-Tokens.
+Ab ihrer ersten Abfrage gilt eine
+30-Sekunden-Frist. Abhängigkeitsabfragen reservieren das Achtfache von Antwortlimit
+plus einem Byte innerhalb des bestehenden Arbeitsbudgets von 512 MiB je Phase;
+nutzbare Abfrage- und Archivkapazität können unter den einzelnen Grenzen liegen.
+Erfolgreiche Beobachtungen gelten nur innerhalb dieser Phase. Alle Identitäts-Redirects
+werden verweigert. Explizites Loopback-HTTP verwendet keine Umgebungs-Proxys;
+HTTPS behält das konfigurierte Proxy-Verhalten. Eigene SDK-Transports bleiben
+vertrauenswürdige Caller-Fähigkeiten.
+
+Vor dem Zielaustausch prüft eine frische Phase den verifizierten Root-Autor und die
+Abhängigkeitsautoren erneut. Root-Schlüsselwechsel verweigern mit `11`, Widerruf der
+Root-Identität mit `17`, bevor ein Abhängigkeitsfehler sie überdecken kann. Frische
+Graph-/Runtime- und Dateisystemprüfungen erfolgen vor der letzten gehaltenen
+Widerrufssitzungsprüfung. Dies beobachtet aktuelle Schlüssel, authentifiziert aber
+keine historische Registry-Herkunft, bietet keinen atomaren Netzwerk-Snapshot und
+macht aus unverbindlichen Governance-Projektionen keinen signierten Review.
+Die konfigurierten Reviewer- und unabhängigen Review-Regeln gelten weiterhin.
+
+Agenten und lokale/offline Abhängigkeitsnachweise, deren Autorenschlüssel von der
+Registry autorisiert werden müssen, bleiben mit Installations-/Neuinstallationshinweis gesperrt. Ein Verzeichnis oder eine unsignierte Begleitdatei allein
 erfüllt den Guard nicht. Abhängigkeiten werden nicht automatisch installiert. Diese
 Verweigerungen bedeuten keine vollständige Unterstützung oder Enterprise-Abnahme;
 ER1/Git/self und Admit-/Attest-Integration bleiben offen.

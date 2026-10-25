@@ -85,6 +85,11 @@ PROJECT_CASES = {
         'TestSessionRecheckCloseAndDecisionConcurrent',
         'TestStateRealProcessLock',
     ),
+    'github.com/kamir/m3c-tools/pkg/skillctl/registry': (
+        'TestBoundIdentityReaderResponses',
+        'TestBoundIdentityReaderPhases',
+        'TestBoundIdentityReaderTransport',
+    ),
     'github.com/kamir/m3c-tools/pkg/skillctl/install': (
         'TestProjectManagedInstallRequiresPolicyBeforeIO',
         'TestProjectSignedDependenciesCannotBeHidden',
@@ -106,6 +111,9 @@ PROJECT_CASES = {
         'TestRetainedRootLocalSnapshot',
         'TestRetainedRootHTTPStagingSnapshot',
         'TestRetainedRootManifestAndAdoption',
+        'TestProjectRegistryIdentitySnapshot',
+        'TestProjectRegistryIdentityFinalRecheck',
+        'TestRegistryIdentityGovernancePolicy',
     ),
     'github.com/kamir/m3c-tools/cmd/skillctl': (
         'TestInstallEnterpriseProfileActualCLI',
@@ -118,6 +126,7 @@ PROJECT_CASES = {
         'TestInstallInstalledSkillDependenciesTamperActualCLI',
         'TestInstallInstalledSkillDependenciesRevokedActualCLI',
         'TestInstallRetainedRootSnapshotActualCLI',
+        'TestInstallRegistryIdentityActualCLI',
     ),
 }
 for _package, _cases in PROJECT_CASES.items():

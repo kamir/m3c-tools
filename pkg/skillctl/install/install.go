@@ -193,6 +193,14 @@ func Install(opts Opts) (result *Result, resultErr error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	var identityReader *registry.BoundIdentityReader
+	if opts.ProjectPolicy != nil && opts.TrustRoot.IdentityKeysAuthorized == "from-registry" {
+		identityReader, err = registry.NewBoundIdentityReader(opts.Client, opts.ProjectPolicy.RegistryURL(), strings.HasPrefix(opts.ProjectPolicy.RegistryURL(), "http://"))
+		if err != nil {
+			return nil, fmt.Errorf("install: invalid project identity authority: %w", verify.ErrRegistryNotTrusted)
+		}
+		defer identityReader.Close()
+	}
 	now := opts.Now
 	if now == nil {
 		now = time.Now
@@ -292,11 +300,27 @@ func Install(opts Opts) (result *Result, resultErr error) {
 		Tenant:          opts.Tenant,
 		Logger:          opts.Logger,
 	}
+	var rootIdentity *registry.IdentityPhase
+	if identityReader != nil {
+		rootIdentity = identityReader.NewPhase()
+		verifyOpts.IdentityFetcher = rootIdentity
+	}
 	verRes, snapshot, err := verifyRootInput(verifyOpts, blob, opts.ProjectPolicy != nil)
 	if err != nil {
+		if identityReader != nil {
+			return nil, projectIdentityError{cause: err}
+		}
 		return nil, err
 	}
 
+	var identityProofs []projectIdentityProof
+	if rootIdentity != nil {
+		author, err := rootIdentity.GetIdentity(ctx, verRes.AuthorIdentity)
+		if err != nil {
+			return nil, projectIdentityError{cause: verify.ErrAuthorSigInvalid}
+		}
+		identityProofs = append(identityProofs, projectIdentityProof{reader: identityReader, author: *author})
+	}
 	if err := verifyInstallSnapshot(blob, verRes, digest); err != nil {
 		return nil, err
 	}
@@ -309,11 +333,18 @@ func Install(opts Opts) (result *Result, resultErr error) {
 		return nil, err
 	}
 	defer closeManagedInstall(session, &resultErr)
-	preCommit, err := prepareProjectDependencies(ctx, opts.ProjectPolicy, blob, verRes, opts.Name, resolvedVersion, session, snapshot)
+	preCommit, err := prepareProjectDependencies(ctx, opts.ProjectPolicy, blob, verRes, opts.Name, resolvedVersion, session, snapshot, identityProofs...)
 	if err != nil {
 		return nil, err
 	}
 
+	var stashResolver identityResolver = opts.Client
+	if opts.ProjectPolicy != nil {
+		stashResolver = nil
+		if rootIdentity != nil {
+			stashResolver = rootIdentity
+		}
+	}
 	res, err := finishInstall(finishOpts{
 		preCommit:  preCommit,
 		blob:       blob,
@@ -323,7 +354,7 @@ func Install(opts Opts) (result *Result, resultErr error) {
 		name:       opts.Name,
 		digest:     digest,
 		meta:       meta,
-		resolver:   opts.Client,
+		resolver:   stashResolver,
 		verRes:     verRes,
 		maxBytes:   opts.MaxExtractedBytes,
 		logger:     opts.Logger,

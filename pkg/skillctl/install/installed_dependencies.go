@@ -18,18 +18,24 @@ import (
 )
 
 type installedSkillSource struct {
-	policy   *projectpolicy.Policy
-	limits   installedProofLimits
-	budget   installedProofBudget
-	anchors  []*installedProofRoot
-	active   map[string]*installedProofRoot
-	terminal error
-	closed   bool
+	policy       *projectpolicy.Policy
+	limits       installedProofLimits
+	budget       installedProofBudget
+	anchors      []*installedProofRoot
+	active       map[string]*installedProofRoot
+	terminal     error
+	closed       bool
+	identity     *registry.IdentityPhase
+	identitySeen map[string]bool
 }
 
-func newInstalledSkillSource(policy *projectpolicy.Policy) *installedSkillSource {
+func newInstalledSkillSource(policy *projectpolicy.Policy, readers ...*registry.BoundIdentityReader) *installedSkillSource {
 	s := &installedSkillSource{policy: policy, limits: defaultInstalledProofLimits, active: make(map[string]*installedProofRoot)}
 	s.budget.limits = &s.limits
+	if len(readers) == 1 && readers[0] != nil {
+		s.identity = readers[0].NewPhase()
+		s.identitySeen = make(map[string]bool)
+	}
 	return s
 }
 func (s *installedSkillSource) fail(kind, name string) ([]dependencies.Artifact, error) {
@@ -145,7 +151,7 @@ func (s *installedSkillSource) Candidates(ctx context.Context, kind, name string
 	if s.closed {
 		return s.fail(kind, name)
 	}
-	if kind != "skill" || s.policy == nil || s.policy.TrustRoot().IdentityKeysAuthorized != "pinned" {
+	if kind != "skill" || s.policy == nil || (s.policy.TrustRoot().IdentityKeysAuthorized != "pinned" && s.identity == nil) {
 		return s.fail(kind, name)
 	}
 	p, err := s.openActive(ctx, name)
@@ -196,6 +202,11 @@ func (s *installedSkillSource) Candidates(ctx context.Context, kind, name string
 		return s.fail(kind, name)
 	}
 	allowance := s.limits.WorkBytes - s.budget.work
+	// Keep a full response/decode reservation available while Snapshot holds
+	// its independent inflation reservation. Cache hits only reduce actual cost.
+	if s.identity != nil {
+		allowance -= registry.IdentityDecodeWork
+	}
 	if allowance <= 1 {
 		return s.fail(kind, name)
 	}
@@ -225,7 +236,11 @@ func (s *installedSkillSource) Candidates(ctx context.Context, kind, name string
 	s.budget.reservedWork = (inflatedCap + 1) * decodeWorkFactor
 	s.budget.reservedEntries = reservedEntries
 	s.budget.reservedPaths = int(inflatedCap + 1)
-	snapshot, verifyErr := verify.VerifySnapshot(verify.VerifyOpts{Ctx: ctx, BundleMeta: meta, TrustRoot: s.policy.TrustRoot(), Tenant: s.policy.TrustRoots().TenantScope}, blob, inflatedCap)
+	opts := verify.VerifyOpts{Ctx: ctx, BundleMeta: meta, TrustRoot: s.policy.TrustRoot(), Tenant: s.policy.TrustRoots().TenantScope}
+	if s.identity != nil {
+		opts.IdentityFetcher = s
+	}
+	snapshot, verifyErr := verify.VerifySnapshot(opts, blob, inflatedCap)
 	// Settle the temporary reservation against actual work, including failed
 	// decoder bytes. No performed read/copy/hash/decode work is refunded.
 	s.budget.reservedWork = 0
@@ -445,4 +460,19 @@ func (p *installedProofRoot) compare(ctx context.Context, actual []installedProo
 		return verify.ErrDigestMismatch
 	}
 	return nil
+}
+
+// GetIdentity charges the source phase before a new bounded network lookup.
+// The phase reader never survives a fresh final source construction.
+func (s *installedSkillSource) GetIdentity(ctx context.Context, id string) (*registry.Identity, error) {
+	if s.identity == nil || s.closed || s.terminal != nil {
+		return nil, registry.ErrIdentityResponse
+	}
+	if !s.identitySeen[id] {
+		if err := s.budget.charge(registry.IdentityDecodeWork); err != nil {
+			return nil, registry.ErrIdentityResponse
+		}
+		s.identitySeen[id] = true
+	}
+	return s.identity.GetIdentity(ctx, id)
 }

@@ -56,6 +56,18 @@ func newRegistryClient(baseURL string, httpClient *http.Client) *registry.Client
 	return c
 }
 
+// newManagedRegistryClient keeps an explicit invalid environment assignment
+// from silently becoming an anonymous managed operation.
+func newManagedRegistryClient(baseURL string, httpClient *http.Client) (*registry.Client, error) {
+	token, err := boundRegistryToken(baseURL, artifact.ModeRead)
+	if err != nil {
+		return nil, err
+	}
+	client := registry.New(baseURL, httpClient)
+	client.Token = token
+	return client, nil
+}
+
 // registryToken resolves the token for baseURL's host, or "" for anonymous.
 //
 // Every failure path is silent and yields anonymous on purpose: a missing
