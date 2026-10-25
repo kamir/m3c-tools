@@ -8,10 +8,9 @@ package main
 // decision to install.InstallBundle, which shares its verification and its write
 // sequence with the registry path.
 //
-// It deliberately mirrors runVerifyBundle: same sidecar resolution, same pinned
-// requirement, same wording. `install --bundle X` should refuse for exactly the
-// reasons `verify --bundle X` refuses, and say so the same way, so an operator
-// who verified before installing is never surprised at the second step.
+// Sidecar resolution and pinned author verification match runVerifyBundle.
+// Managed installation additionally requires a current full revocation snapshot;
+// execution checkpoints and low-risk availability policy cannot relax that gate.
 
 import (
 	"context"
@@ -33,8 +32,8 @@ type installBundleParams struct {
 	// Offline revocation enforcement (SPEC-0276 R4.4) + freshness contract
 	// (SPEC-0279 R4/R5), same three inputs as the verify twin: a signed
 	// revocation list, an optional signed freshness checkpoint, an optional
-	// signed emergency deny-list. All optional; when empty the behavior is
-	// unchanged.
+	// signed emergency deny-list. Managed installs require a signed revocation
+	// list; unmanaged installs retain the optional evidence behavior.
 	revocationsPath string
 	checkpointPath  string
 	emergencyPath   string
@@ -104,14 +103,9 @@ func runInstallBundle(p installBundleParams, stdout, stderr io.Writer) (code int
 		logger = stderr
 	}
 
-	// Offline revocation + freshness gate (SPEC-0276 R4.4, SPEC-0279 R3/R4/R5),
-	// the SAME checks the verify twin runs, in the same order and with the same
-	// exit codes: forged/untrusted list → 12, revoked digest → 17, emergency hit
-	// → 17, stale snapshot for a high-risk bundle → 22. It runs as InstallBundle's
-	// PostVerify hook so it binds to the digest of the verified blob and refuses
-	// BEFORE anything is staged or written. Fail-closed: an unreadable list is an
-	// error, never a pass. gateCode carries the twin's exit code out of the hook;
-	// gateFresh carries the freshness decision for the twin's diagnostics.
+	// Bind revocation and freshness to the verified digest before staging.
+	// Managed installs require the full signed snapshot's own issuance time.
+	// Checkpoints still undergo verification but cannot refresh that snapshot.
 	var gateCode int
 	var gateFresh *freshnessOutcome
 	postVerify := func(res *verify.VerifyResult) error {
@@ -131,8 +125,8 @@ func runInstallBundle(p installBundleParams, stdout, stderr io.Writer) (code int
 				return fmt.Errorf("REVOKED: %s is in the signed revocation list (%s); refusing to install", res.Digest, p.revocationsPath)
 			}
 		}
-		if p.revocationsPath != "" || p.checkpointPath != "" || p.emergencyPath != "" {
-			fresh := evaluateFreshness(freshnessInputs{
+		if root.IsManaged() || p.revocationsPath != "" || p.checkpointPath != "" || p.emergencyPath != "" {
+			fresh := evaluateInstallBundleFreshness(freshnessInputs{
 				root:            root,
 				checkpointPath:  p.checkpointPath,
 				emergencyPath:   p.emergencyPath,

@@ -437,21 +437,30 @@ it under `~/.claude/skills/<name>/`. Refuses if *any* trust-chain step fails. `<
 be a human version string (`1.0.0`) or a digest pin (`sha256:<hex>`); omit it to install the
 newest admitted version.
 
-`--bundle` installs a **standalone `.skb` file** that arrived over an untrusted transport
-(SPEC-0406 D2): fully offline, against locally pinned trust-roots, with the sidecar
-`<file>.skbmeta.json` (or `--meta`) as the envelope. It refuses for exactly the reasons
-`verify --bundle` refuses, including the offline revocation inputs: a signed revocation
-list (`--revocations`), a signed freshness checkpoint (`--checkpoint`) and a signed
-emergency deny-list (`--emergency`) are enforced *before* anything is written, fail-closed
-(an unreadable or forged list is an error, never a pass). Where the skill lands is decided
-by the signed `bundle.json`, never by the file name. The three offline inputs require
-`--bundle`; on the registry path they are refused rather than silently ignored.
+`--bundle` installs a **standalone `.skb` file** received over an untrusted
+transport, offline against pinned trust roots and the `<file>.skbmeta.json`
+sidecar (or `--meta`). Signed revocations, checkpoints and emergency deny-lists
+are checked before staging or changing an installed skill; audit files can be
+written on a refusal. The signed `bundle.json` determines the install name.
+These three offline inputs require `--bundle`.
+
+For a managed root (`offline_policy.enterprise: true`), `--revocations` is
+required. The authenticated full list must have a positive epoch and a valid
+issuance time no later than the local clock, at most 24 hours old (or the root's
+shorter limit). Missing or stale evidence denies installation with `22`; an
+unversioned list is untrusted (`12`). A checkpoint cannot refresh that full
+list, and low-risk execution fail-open policy cannot allow a stale installation.
+Explicit checkpoints and emergency files still undergo verification.
+
+This local bundle check uses the current wall clock. Durable clock/epoch
+rollback protection and equivalent enforcement on other installation routes
+remain unimplemented; this check alone does not establish Enterprise readiness.
 
 | Flag | Purpose |
 |------|---------|
 | `-allow-yellow` | Lower the gate from green to yellow for this install (audited). |
 | `-bundle` | Install a standalone `.skb` file from an untrusted transport, fully offline against pinned trust-roots (SPEC-0406 D2). |
-| `-checkpoint` | Signed freshness checkpoint (SPEC-0279 R4) to reset the `--revocations` staleness clock (with `--bundle`). Forged/untrusted → `12`. |
+| `-checkpoint` | Signed checkpoint with `--bundle`; verified but cannot refresh a managed install's full revocation list. Forged/untrusted → `12`. |
 | `-emergency` | Signed emergency deny-list (SPEC-0279 R5, with `--bundle`). Named digest → `17`; forged list → `12`. |
 | `-governance-min green\|yellow` | Override the trust-root's `governance_minimum`. Empty = use trust-root. |
 | `-home` | Override the install root (advanced; defaults to `$HOME`). |
@@ -459,7 +468,7 @@ by the signed `bundle.json`, never by the file name. The three offline inputs re
 | `-json` | Emit a versioned machine trust result. Put `--json` first to include flag parsing failures. |
 | `-meta` | Path to the BundleMeta envelope JSON for `--bundle` (default: the sidecar `.skbmeta.json`). |
 | `-registry` | Registry base URL. Required only when trust-roots pins multiple registries. |
-| `-revocations` | Signed revocation list to enforce offline (with `--bundle`), same semantics as on `verify --bundle`. Revoked digest → `17`; forged list → `12`; stale snapshot for a high-risk bundle → `22`. |
+| `-revocations` | Signed offline revocation list with `--bundle`; required for managed roots. Revoked digest → `17`; forged/unversioned list → `12`; missing or stale managed evidence → `22`. |
 | `-tenant` | Pin this install to a tenant scope (§7 step 5.5). Overrides trust-roots `tenant_scope`. |
 | `-timeout` | HTTP timeout for registry calls (default `30s`). |
 | `-trust-roots` | Trust-roots YAML to use instead of the default. Pair with `--bundle` for a portable kit. |
