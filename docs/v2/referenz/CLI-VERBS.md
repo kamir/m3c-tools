@@ -69,6 +69,7 @@ gates the CONTENT of the Exit-Code column against the register and the manual.
 | --- | --- | --- |
 | `login` | FR-0043 | 0/1/2 |
 | `version` (`--version`, `-v`) | built-in | 0 |
+| `runtime` (`fingerprint`) | runtime diagnostics | 0/1/2 |
 | `doctor` | SPEC-0406 D1 | 0/1/2 |
 | `token` (`set`, `list`, `rm`) | FR-0117 | 0/1/2 |
 | `pack` | SPEC-0188 (Phase 1 PoC) | 0/1/2, 18 |

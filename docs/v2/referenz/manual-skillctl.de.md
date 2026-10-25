@@ -221,6 +221,62 @@ keygen → pack → sign → verify-sig      # author, locally, fully offline
 
 ---
 
+### `runtime fingerprint`: einen Runtime-Baum beobachten
+
+```bash
+skillctl runtime fingerprint --json --path /absolute/reviewed-site
+skillctl runtime fingerprint --path /absolute/reviewed-site
+```
+
+Liest ein ausdrücklich gewähltes Verzeichnis und gibt seinen Baum-Fingerabdruck
+aus. Der Befehl führt keinen Interpreter oder Systembefehl aus, ändert kein Profil
+oder Trust-Protokoll und genehmigt keine Baseline automatisch. Er ermittelt kein
+Standardziel aus Arbeitsverzeichnis, HOME, PATH oder Enterprise-Profil. Der gewählte
+Baum muss während der Beobachtung stabil bleiben; der begrenzte Verzeichnislauf
+ist kein atomarer Dateisystem-Snapshot und garantiert keine spätere Unveränderlichkeit.
+
+| Flag | Zweck |
+|------|-------|
+| `--path <absolute-tree>` | Pflichtangabe: ausdrückliches absolutes Verzeichnis mit höchstens 4096 UTF-8-Bytes, ohne NUL, CR oder LF. Relative Pfade und zusätzliche Operanden sind Aufruffehler. |
+| `--json` | Gibt ein Ergebnisobjekt aus. Das Flag muss vor fehlerhaften Argumenten stehen, damit deren Fehlerergebnis als JSON erscheint. |
+| `--help` | Zeigt Aufruf und Flags des Fingerabdrucks. `skillctl runtime --help` zeigt die Hilfe der Befehlsfamilie. |
+
+Ein erfolgreiches JSON-Ergebnis verwendet das Schema
+`m3c.skillctl.runtime-tree-observation/v1`, Operation `runtime_fingerprint`,
+`ok: true`, `exit_code: 0`, `complete: true` und `approved: false`. Es enthält den
+kanonischen `path`, den kleingeschriebenen SHA-256-`digest`,
+`algorithm: "m3c.python-site-tree/v1"` und die durchgesetzten `limits`. Bei einem
+Beobachtungsfehler wird kein erfolgreicher Digest ausgegeben. Ein fehlschlagender
+Ausgabekanal liefert einen Fehlercode; Teilausgabe ist kein erfolgreiches Ergebnis.
+
+Der unveränderte Baumalgorithmus erfasst Verzeichnisse sowie Inhalt, Größe und
+relative Pfade regulärer Dateien; Zeitstempel gehen nicht in den Digest ein.
+Grenzen sind 100000 Einträge, insgesamt 4194304 Bytes relativer Pfade, 4096 Bytes
+je Pfad, Tiefe 128 und 268435456 Datei-Bytes. Ein Alias des gewählten Wurzelpfads
+wird zum kanonischen Verzeichnis aufgelöst; innere Links und besondere Go-Dateitypen
+werden verweigert. Transparente Windows-DEDUP-Dateien, die Go als regulär einstuft,
+werden als reguläre Dateien gehasht. Lesen kann OS-Zugriffsmetadaten ändern; der
+Befehl schreibt nicht ausdrücklich ins Dateisystem.
+
+Unter Windows müssen das gewählte Site-Verzeichnis und die vollständige virtuelle
+Umgebung für ihre zwei unterschiedlichen Profilfelder getrennt beobachtet werden:
+
+```powershell
+skillctl runtime fingerprint --json --path 'C:\reviewed\env\Lib\site-packages'
+skillctl runtime fingerprint --json --path 'C:\reviewed\env'
+```
+
+Die Umgebung muss unabhängig geprüft werden, bevor ein Digest ausdrücklich in
+ihr Runtime-Profil übernommen wird. Eine Baumbeobachtung beweist weder Paketherkunft
+noch die Zuordnung des aktiven Interpreters zur Site. Die verwaltete Enterprise-Installation verlangt
+weiterhin das gewählte Profil, dessen genehmigte Baselines und die bestehende
+Abhängigkeitsprüfung. Die Diagnose macht eine fehlende oder veraltete Baseline
+nicht akzeptabel. Es wird kein MCP-Tool für beliebige Verzeichnisbeobachtungen ergänzt.
+
+Exit: `0` vollständige Beobachtung oder Hilfe, `1` Beobachtungs-/Ausgabefehler, `2` Aufruffehler.
+
+---
+
 ### `keygen`: Autorenschlüsselpaar erzeugen
 
 ```bash

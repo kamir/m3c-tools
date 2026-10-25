@@ -28,6 +28,11 @@ class MappingTests(unittest.TestCase):
     def test_current_mapping(self):
         self.assertEqual(GATE.mapping_errors(self.config, self.packages, self.files), [])
 
+    def test_required_test_package_outside_lane_selection(self):
+        self.config["lanes"]["unit"]["required_tests"]["./cmd/skillctl"] = ["TestRuntimeFingerprintActualCLI"]
+        errors = GATE.mapping_errors(self.config, self.packages, self.files)
+        self.assertIn("required Go test package outside lane selection: ./cmd/skillctl", errors)
+
     def test_new_go_package_requires_assignment(self):
         errors = GATE.mapping_errors(self.config, self.packages | {"./cmd/new-gate"}, self.files)
         self.assertIn("unassigned Go test package: ./cmd/new-gate", errors)

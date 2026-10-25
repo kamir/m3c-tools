@@ -253,13 +253,14 @@ func (r *Resolver) checkPython(ctx context.Context, deps []skillbundle.Dependenc
 // 4096-byte paths and over 256MiB file data are rejected. No timestamp or RECORD
 // inventory is used. Go classifies transparent Windows DEDUP files as regular;
 // these bind their actual bytes too. Directory depth is capped at 128. The operator must provide the expected digest separately.
-type treeLimits struct {
-	Entries, PathBytes, PathLength, Depth int
-	Bytes                                 int64
+type treeLimits = TreeObservationLimits
+
+func defaultTreeLimits() treeLimits {
+	return treeLimits{100000, 4 << 20, 4096, 128, maxExecutableBytes}
 }
 
 func siteFingerprint(ctx context.Context, path string) (string, string, error) {
-	return siteFingerprintBounded(ctx, path, treeLimits{100000, 4 << 20, 4096, 128, maxExecutableBytes})
+	return siteFingerprintBounded(ctx, path, defaultTreeLimits())
 }
 func siteFingerprintBounded(ctx context.Context, path string, limits treeLimits) (string, string, error) {
 	resolved, e := filepath.EvalSymlinks(path)
@@ -271,7 +272,7 @@ func siteFingerprintBounded(ctx context.Context, path string, limits treeLimits)
 		return "", "", ErrUnresolved
 	}
 	h := sha256.New()
-	_, _ = h.Write([]byte("m3c.python-site-tree/v1\n"))
+	_, _ = h.Write([]byte(treeFingerprintAlgorithm + "\n"))
 	enc := json.NewEncoder(h)
 	count, pathBytes := 0, 0
 	var total int64

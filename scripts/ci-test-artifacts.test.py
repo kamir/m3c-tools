@@ -385,6 +385,10 @@ class ArtifactContracts(unittest.TestCase):
             ("unit", "TestProjectProfileSnapshotsAndSelection"),
             ("unit", "TestProjectRuntimeRecheckBeforeArchive"),
             ("security", "TestInstallEnterpriseProfileHTTPPreflightActualCLI"),
+            ("unit", "TestRuntimeTreeObservationReadOnly"),
+            ("security", "TestRuntimeTreeObservationReadOnly"),
+            ("unit", "TestRuntimeTreeObservationInvalid"),
+            ("security", "TestRuntimeFingerprintActualCLI"),
         )
         env = dict(os.environ, TEST_PRODUCER_RESULTS=json.dumps(self.needs))
         args = [sys.executable, str(ROOT / "scripts/ci-test-artifacts.py"), str(self.root),

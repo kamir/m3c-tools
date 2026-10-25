@@ -208,6 +208,60 @@ keygen → pack → sign → verify-sig      # author, locally, fully offline
 
 ---
 
+### `runtime fingerprint`: observe a runtime tree
+
+```bash
+skillctl runtime fingerprint --json --path /absolute/reviewed-site
+skillctl runtime fingerprint --path /absolute/reviewed-site
+```
+
+Read an explicitly selected directory and report its tree fingerprint. The command
+executes no interpreter or system tool, changes no profile or trust state, and
+performs no automatic baseline approval. It does not discover a default target
+from the current directory, HOME, PATH or an Enterprise profile. Keep the selected
+tree stable while observing it; this is a bounded traversal, not an atomic
+filesystem snapshot or a promise that files cannot change afterward.
+
+| Flag | Purpose |
+|------|---------|
+| `--path <absolute-tree>` | Required explicit absolute directory, at most 4096 UTF-8 bytes, without NUL, CR or LF. Relative paths and additional operands are usage errors. |
+| `--json` | Emit one result object. Put this flag before malformed arguments to receive their error result as JSON. |
+| `--help` | Show fingerprint usage and flags. `skillctl runtime --help` shows the family usage. |
+
+A successful JSON result uses schema `m3c.skillctl.runtime-tree-observation/v1`,
+operation `runtime_fingerprint`, `ok: true`, `exit_code: 0`, `complete: true` and
+`approved: false`. It includes canonical `path`, lowercase SHA-256 `digest`,
+`algorithm: "m3c.python-site-tree/v1"` and the enforced `limits`. An observation
+failure reports no successful digest. A failing output writer returns nonzero;
+partial output is not a successful result.
+
+The unchanged tree algorithm records directories and regular-file bytes, sizes
+and relative paths; timestamps do not enter the digest. Limits are 100000 entries,
+4194304 total relative-path bytes, 4096 bytes per path, depth 128 and 268435456 file
+bytes. A selected root alias is resolved to its canonical directory; interior
+links and special Go file types are rejected. Transparent Windows DEDUP files
+that Go classifies as regular are hashed as regular files. Reading can update OS
+access metadata; the command performs no explicit filesystem writes.
+
+For Windows, observe the selected site directory and the complete virtual
+environment root separately when preparing their two distinct profile fields:
+
+```powershell
+skillctl runtime fingerprint --json --path 'C:\reviewed\env\Lib\site-packages'
+skillctl runtime fingerprint --json --path 'C:\reviewed\env'
+```
+
+Review the environment independently before explicitly recording a digest in its
+runtime profile. A tree observation proves neither package origin nor the active
+interpreter/site association. Managed Enterprise installation still requires the selected profile,
+its approved baselines and the existing dependency verification. This diagnostic
+does not make a missing or stale baseline acceptable. No MCP tool is added for
+arbitrary directory observation.
+
+Exit: `0` complete observation or help, `1` observation/output failure, `2` usage error.
+
+---
+
 ### `keygen`: generate an author keypair
 
 ```bash
