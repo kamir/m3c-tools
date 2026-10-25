@@ -716,6 +716,25 @@ unavailable dependency identities deny with `14`; no pinned-key or cached-eviden
 fallback is attempted. Managed CLI environment-token origin errors are surfaced
 rather than silently becoming anonymous requests.
 
+Managed online HTTP installation, with pinned or registry-authorized author keys,
+retains the selected client and credential context for metadata and bundle GETs.
+Requests and every redirect must remain within the selected scheme, hostname,
+effective port and complete base-path segment boundary. Ordinary relative redirects,
+including literal dot segments, are allowed only when their resolved target stays
+inside that boundary. Encoded dot segments, slashes and double-encoded paths are
+refused. Identity lookups continue to refuse every redirect. Invalid selected CLI
+base URLs fail before credential lookup. Invalid environment-token origin bindings
+fail before native-store lookup or network access. Explicit loopback HTTP bypasses ambient proxies; HTTPS retains the
+configured proxy behavior. Custom SDK transports remain trusted caller capabilities.
+
+Managed request errors use constant operation messages. If another installation
+error contains the selected plaintext token, its rendered message is replaced while
+preserving error classification and installation-completion uncertainty. This does
+not promise redaction of arbitrary secrets, encoded tokens or successful payloads.
+Legacy unmanaged clients and the separate general HTTP audit poster retain their
+existing redirect behavior. Managed installation overrides remain refused before
+an audit callback can run.
+
 Each fresh identity phase permits at most 256 uncached identities, a 1 MiB response
 and JSON depth 32 with at most 4096 JSON tokens, with a 30-second deadline from its
 first lookup. Dependency

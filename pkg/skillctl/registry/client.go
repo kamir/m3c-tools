@@ -57,6 +57,7 @@ var ErrUnauthorized = errors.New("registry: not authorized")
 // Construct via New(); zero-value Client is not usable (BaseURL would be
 // empty).
 type Client struct {
+	managed *managedTransport
 	// BaseURL is the registry root, e.g.
 	// https://aims.example.com/api/skills. Must NOT have a trailing
 	// slash (the constructor strips it). Path segments are appended
@@ -117,7 +118,8 @@ func New(baseURL string, httpClient *http.Client) *Client {
 //
 // Returns ErrNotFound (wrapped) on 404 so callers can distinguish "no
 // such skill name" from network/transport failures.
-func (c *Client) ResolveByName(ctx context.Context, name string) ([]BundleVersion, error) {
+func (c *Client) ResolveByName(ctx context.Context, name string) (versions []BundleVersion, err error) {
+	defer func() { err = c.managedError("lookup", err) }()
 	if name == "" {
 		return nil, errors.New("registry: name is required")
 	}
@@ -136,7 +138,11 @@ func (c *Client) ResolveByName(ctx context.Context, name string) ([]BundleVersio
 	if err != nil {
 		return nil, fmt.Errorf("registry: GET %s: %w", u, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil && c.managed != nil {
+			err = errors.Join(err, closeErr)
+		}
+	}()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, fmt.Errorf("registry: by-name %q: %w", name, ErrNotFound)
@@ -166,7 +172,8 @@ func (c *Client) ResolveByName(ctx context.Context, name string) ([]BundleVersio
 // digest must be the canonical "sha256:<hex>" form. We don't validate
 // here: the verify layer in S8 recomputes the digest from the returned
 // bytes and refuses on mismatch, which is the authoritative check.
-func (c *Client) GetBundle(ctx context.Context, digest string) ([]byte, error) {
+func (c *Client) GetBundle(ctx context.Context, digest string) (blob []byte, err error) {
+	defer func() { err = c.managedError("bundle", err) }()
 	if digest == "" {
 		return nil, errors.New("registry: digest is required")
 	}
@@ -182,7 +189,11 @@ func (c *Client) GetBundle(ctx context.Context, digest string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("registry: GET %s: %w", u, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil && c.managed != nil {
+			err = errors.Join(err, closeErr)
+		}
+	}()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, fmt.Errorf("registry: bundle %s: %w", digest, ErrNotFound)
@@ -215,7 +226,8 @@ func (c *Client) GetBundle(ctx context.Context, digest string) ([]byte, error) {
 // This is the canonical metadata fetch the verifier uses; GetBundle
 // returns just the blob bytes for digest recomputation, while
 // GetBundleMeta returns the surrounding signatures and provenance.
-func (c *Client) GetBundleMeta(ctx context.Context, digest string) (*BundleMeta, error) {
+func (c *Client) GetBundleMeta(ctx context.Context, digest string) (metaResult *BundleMeta, err error) {
+	defer func() { err = c.managedError("metadata", err) }()
 	if digest == "" {
 		return nil, errors.New("registry: digest is required")
 	}
@@ -231,7 +243,11 @@ func (c *Client) GetBundleMeta(ctx context.Context, digest string) (*BundleMeta,
 	if err != nil {
 		return nil, fmt.Errorf("registry: GET %s: %w", u, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil && c.managed != nil {
+			err = errors.Join(err, closeErr)
+		}
+	}()
 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, fmt.Errorf("registry: bundle %s meta: %w", digest, ErrNotFound)

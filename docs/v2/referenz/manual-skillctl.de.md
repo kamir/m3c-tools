@@ -770,6 +770,28 @@ nicht verfügbare Abhängigkeitsidentitäten verweigern mit `14`; es gibt keinen
 auf gepinnte Schlüssel oder alte Nachweise. Die verwaltete CLI meldet Fehler der
 Origin-Bindung von Umgebungs-Tokens statt still anonym anzufragen.
 
+Verwaltete Online-HTTP-Installationen halten bei gepinnten und Registry-autorisierten
+Autorenschlüsseln den gewählten Client- und Zugangsdatenkontext für Metadaten- und
+Bundle-GETs fest. Anfragen und jede Weiterleitung müssen innerhalb des gewählten
+Schemas, Hostnamens, effektiven Ports und der vollständigen Basispfad-Segmentgrenze
+bleiben. Normale relative Weiterleitungen einschließlich literaler Punktsegmente sind
+nur erlaubt, wenn ihr aufgelöstes Ziel innerhalb dieser Grenze bleibt. Encodierte
+Punktsegmente, Schrägstriche und doppelt encodierte Pfade werden verweigert.
+Identitätsabfragen verweigern weiterhin jede Weiterleitung. Ungültige gewählte
+CLI-Basis-URLs scheitern vor der Zugangsdatenabfrage. Ungültige Origin-Bindungen
+von Umgebungs-Tokens scheitern vor der Abfrage nativer Stores oder Netzwerkzugriff. Explizites Loopback-HTTP umgeht
+Umgebungs-Proxys; HTTPS behält das konfigurierte Proxy-Verhalten. Eigene
+SDK-Transports bleiben vertrauenswürdige Caller-Fähigkeiten.
+
+Verwaltete Anfragefehler verwenden konstante Operationsmeldungen. Enthält ein
+anderer Installationsfehler das gewählte Klartext-Token, wird seine dargestellte
+Meldung ersetzt; Fehlerklassifikation und Ungewissheit über den Abschluss der
+Installation bleiben erhalten. Dies verspricht keine Bereinigung beliebiger Secrets,
+encodierter Tokens oder erfolgreicher Nutzdaten. Bestehende unverwaltete Clients
+und der getrennte allgemeine HTTP-Audit-Poster behalten ihr bisheriges
+Redirectverhalten. Verwaltete Installations-Overrides werden weiterhin verweigert,
+bevor ein Audit-Callback laufen kann.
+
 Jede frische Identitätsphase erlaubt höchstens 256 nicht zwischengespeicherte
 Identitäten, 1 MiB je Antwort, JSON-Tiefe 32 und höchstens 4096 JSON-Tokens.
 Ab ihrer ersten Abfrage gilt eine

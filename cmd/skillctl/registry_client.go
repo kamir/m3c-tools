@@ -26,6 +26,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/kamir/m3c-tools/pkg/httpsafe"
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifactauth"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
@@ -59,6 +60,9 @@ func newRegistryClient(baseURL string, httpClient *http.Client) *registry.Client
 // newManagedRegistryClient keeps an explicit invalid environment assignment
 // from silently becoming an anonymous managed operation.
 func newManagedRegistryClient(baseURL string, httpClient *http.Client) (*registry.Client, error) {
+	if _, err := httpsafe.NewGETBoundary(baseURL, strings.HasPrefix(baseURL, "http://"), registry.MaxRedirects); err != nil {
+		return nil, err
+	}
 	token, err := boundRegistryToken(baseURL, artifact.ModeRead)
 	if err != nil {
 		return nil, err
