@@ -459,23 +459,33 @@ der Vertrauenskette, wird verweigert. `<version>` kann eine lesbare Versionsnumm
 (`1.0.0`) oder ein Digest-Pin (`sha256:<hex>`) sein. Ohne Angabe wird die neueste
 zugelassene Version installiert.
 
-`--bundle` installiert eine **eigenständige `.skb`-Datei**, die über einen nicht
-vertrauenswürdigen Transport eingetroffen ist (SPEC-0406 D2). Die Prüfung ist
-vollständig offline gegen lokale Vertrauensanker; die Begleitdatei
-`<file>.skbmeta.json` oder `--meta` liefert den Umschlag. Es gelten dieselben
-Verweigerungsgründe wie bei `verify --bundle`, einschließlich Offline-Widerruf:
-Signierte Widerrufsliste (`--revocations`), signierter Aktualitätsprüfpunkt
-(`--checkpoint`) und signierte Notfall-Sperrliste (`--emergency`) werden
-**vor jedem Schreibzugriff** geprüft. Unlesbare oder gefälschte Listen führen
-zum Fehler, niemals zur Freigabe. Das signierte `bundle.json` bestimmt den
-Installationsort, nicht der Dateiname. Diese drei Offline-Eingaben erfordern
-`--bundle`; im Registry-Pfad werden sie abgelehnt statt stillschweigend ignoriert.
+`--bundle` installiert eine **eigenständige `.skb`-Datei** aus nicht
+vertrauenswürdigem Transport, offline gegen fest hinterlegte Vertrauensanker
+und die Begleitdatei `<file>.skbmeta.json` (oder `--meta`). Signierte Widerrufe,
+Prüfpunkte und Notfall-Sperrlisten werden vor Staging oder Änderungen eines
+installierten Skills geprüft; bei einer Verweigerung können Auditdateien
+entstehen. Das signierte `bundle.json` bestimmt den Installationsnamen.
+Diese drei Offline-Eingaben erfordern `--bundle`.
+
+Bei einem verwalteten Anker (`offline_policy.enterprise: true`) ist
+`--revocations` Pflicht. Die authentisierte vollständige Liste benötigt eine
+positive Epoche und einen gültigen Ausgabezeitpunkt, der nicht nach der lokalen
+Uhr liegt und höchstens 24 Stunden alt ist (oder die kürzere Ankergrenze).
+Fehlende oder veraltete Evidenz verweigert die Installation mit `22`; eine Liste
+ohne Version ist nicht vertrauenswürdig (`12`). Ein Prüfpunkt kann diese Liste
+nicht verjüngen; die Fail-open-Regel für risikoarme Ausführung erlaubt keine
+veraltete Installation. Explizite Prüfpunkte und Notfalldateien werden weiter
+geprüft.
+
+Diese lokale Bundle-Prüfung verwendet die aktuelle Systemuhr. Dauerhafter Schutz
+vor Uhr-/Epoch-Rücklauf und dieselbe Durchsetzung auf anderen Installationswegen
+sind noch nicht implementiert; diese Prüfung allein belegt keine Enterprise-Reife.
 
 | Flag | Zweck |
 |------|---------|
 | `-allow-yellow` | Mindeststufe für diese Installation von green auf yellow senken; wird protokolliert. |
 | `-bundle` | Eigenständige `.skb`-Datei aus nicht vertrauenswürdigem Transport vollständig offline gegen fest hinterlegte Vertrauensanker installieren (SPEC-0406 D2). |
-| `-checkpoint` | Signierter Aktualitätsprüfpunkt (SPEC-0279 R4), der die Überalterungsfrist von `--revocations` bei `--bundle` erneuert. Gefälscht oder nicht vertrauenswürdig → `12`. |
+| `-checkpoint` | Signierter Prüfpunkt bei `--bundle`; wird geprüft, kann aber die vollständige Widerrufsliste einer verwalteten Installation nicht verjüngen. Gefälscht/nicht vertrauenswürdig → `12`. |
 | `-emergency` | Signierte Notfall-Sperrliste (SPEC-0279 R5, mit `--bundle`). Genannter Digest → `17`; gefälschte Liste → `12`. |
 | `-governance-min green\|yellow` | `governance_minimum` des Vertrauensankers überschreiben; leer verwendet dessen Wert. |
 | `-home` | Installationswurzel überschreiben; fortgeschrittene Verwendung, Standard `$HOME`. |
@@ -483,7 +493,7 @@ Installationsort, nicht der Dateiname. Diese drei Offline-Eingaben erfordern
 | `-json` | Versioniertes maschinenlesbares Vertrauensergebnis ausgeben. `--json` zuerst setzen, damit auch Fehler beim Parsen der Flags enthalten sind. |
 | `-meta` | Pfad des BundleMeta-JSON-Umschlags bei `--bundle`; Standard ist die Begleitdatei `.skbmeta.json`. |
 | `-registry` | Registry-Basis-URL; nur erforderlich, wenn Vertrauensanker mehrere Registries festlegen. |
-| `-revocations` | Signierte, offline durchgesetzte Widerrufsliste bei `--bundle`, dieselbe Semantik wie `verify --bundle`. Widerrufener Digest → `17`; gefälschte Liste → `12`; veralteter Snapshot bei Hochrisiko-Bundle → `22`. |
+| `-revocations` | Signierte Offline-Widerrufsliste bei `--bundle`; Pflicht bei verwalteten Ankern. Widerrufener Digest → `17`; gefälschte/unversionierte Liste → `12`; fehlende/veraltete verwaltete Evidenz → `22`. |
 | `-tenant` | Installation an Mandantenbereich binden (§7, Schritt 5.5); überschreibt `tenant_scope` des Vertrauensankers. |
 | `-timeout` | HTTP-Zeitlimit für Registry-Aufrufe, standardmäßig `30s`. |
 | `-trust-roots` | Andere Vertrauensanker-YAML statt Standard verwenden; zusammen mit `--bundle` für ein portables Kit. |
