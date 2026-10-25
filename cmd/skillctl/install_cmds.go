@@ -125,8 +125,8 @@ func runInstall(args []string, stdout, stderr io.Writer) (code int) {
 	// believes a gate is active that is not. Refuse rather than ignore.
 	// (Before these flags existed, the same invocation failed flag parsing with
 	// the same exit code, so no working call changes behavior.)
-	if *revocationsPath != "" || *checkpointPath != "" || *emergencyPath != "" {
-		fmt.Fprintln(stderr, "skillctl install: --revocations/--checkpoint/--emergency require --bundle; the registry path checks revocation via the registry itself.")
+	if *revocationsPath != "" || *checkpointPath != "" || *emergencyPath != "" || *metaPath != "" {
+		fmt.Fprintln(stderr, "skillctl install: --meta/--revocations/--checkpoint/--emergency require --bundle; managed registry installs use enrolled signed history.")
 		return exitUsage
 	}
 
@@ -163,7 +163,7 @@ func runInstall(args []string, stdout, stderr io.Writer) (code int) {
 		})
 	}()
 
-	tr, root, err := loadAndPickRoot(*registryURL)
+	tr, root, err := loadAndPickRootFromPath(*trustRootsPath, *registryURL)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return exitGeneric

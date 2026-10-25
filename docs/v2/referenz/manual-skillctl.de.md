@@ -442,6 +442,25 @@ enrollen. Weitere Install-/Admit-/Attest-Wege, vollständige Dependency-Durchset
 und Kundenplattformabnahme bleiben gesonderte Arbeit.
 
 
+Verwaltetes HTTP-`install <name>@<version>` verwendet jetzt dieselbe enrollte
+Historie und gehaltene Veröffentlichungssperre wie lokale Bundles. Dieselben
+`--trust-roots`, Registry und `--home` wie bei `trust state enroll` wählen;
+gespeicherte Evidenz ausdrücklich mit `trust state adopt` erneuern. Der
+Registry-Weg verweigert `--meta`, `--revocations`, `--checkpoint` und `--emergency`,
+die zum Weg mit `--bundle` gehören.
+
+Die öffentlichen Bibliotheksaufrufe `install.Install` und `install.InstallBundle`
+erzwingen verwaltete Historie auch ohne `PostVerify`-Callback. Ihr optionales
+`MutationEvidence` liefert eine neuere vollständige signierte Liste, vor dem
+Kopieren auf 1 MiB begrenzt; explizite Evidenz mit unverwaltetem Anker wird
+verweigert. Bei lokalen Bundles übernimmt die Bibliothek Evidenz vor einer
+optionalen Caller-Policy-Verweigerung, damit die neu gelernte Untergrenze erhalten
+bleibt. HTTP-Downloads nutzen je Versuch ein eigenes temporäres Verzeichnis;
+konkurrierende Downloads können nicht das Staging eines anderen Versuchs löschen.
+Dies macht State und Skill-Veröffentlichung nicht zu einer gemeinsamen atomaren
+Transaktion. ER1-/Git-Pull und Freigabewege, vollständige Dependency-Durchsetzung
+und Kundenabnahme bleiben gesonderte Arbeit.
+
 ### `peer`: föderierte Peer-Registry fest hinterlegen (SPEC-0359)
 
 ```bash

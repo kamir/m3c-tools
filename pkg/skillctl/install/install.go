@@ -80,6 +80,11 @@ type Opts struct {
 	// empty. Tests pass a temp dir.
 	HomeDir string
 
+	// MutationEvidence optionally supplies a newer full signed revocation list.
+	// Managed installs always require prior enrollment and fresh retained history,
+	// even when no list is supplied. It never enrolls or resets the state.
+	MutationEvidence []byte
+
 	// SelfTrustRootsPath overrides the SPEC-0225 self trust-roots location
 	// (default ~/.claude/trust-roots.yaml) used by VerifyInstalledSidecar's
 	// registry-trust check (SPEC-0247 OQ-5). Empty = default. Tests inject one.
@@ -156,7 +161,11 @@ type Result struct {
 // On any failure the staging dir is removed; ~/.claude/skills/<name>/ is
 // never touched in a partial state. The atomic rename only fires after
 // Verify succeeds AND extraction validates.
-func Install(opts Opts) (*Result, error) {
+func Install(opts Opts) (result *Result, resultErr error) {
+	if err := validateMutationEvidenceSize(opts.MutationEvidence); err != nil {
+		return nil, err
+	}
+	opts.MutationEvidence = append([]byte(nil), opts.MutationEvidence...)
 	if err := validateOpts(&opts); err != nil {
 		return nil, err
 	}
@@ -264,6 +273,19 @@ func Install(opts Opts) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	if err := verifyInstallSnapshot(blob, verRes, digest); err != nil {
+		return nil, err
+	}
+	store, err := prepareManagedInstall(ctx, opts.TrustRoot, homeDir, opts.MutationEvidence)
+	if err != nil {
+		return nil, err
+	}
+	session, err := beginManagedInstall(ctx, store, verRes.Digest)
+	if err != nil {
+		return nil, err
+	}
+	defer closeManagedInstall(session, &resultErr)
 
 	res, err := finishInstall(finishOpts{
 		blob:       blob,
@@ -575,12 +597,11 @@ func makeStagingDir(homeDir, name, digest string) (string, error) {
 	if err := os.MkdirAll(tmpRoot, 0o700); err != nil {
 		return "", fmt.Errorf("install: mkdir tmp root: %w", err)
 	}
-	stage := filepath.Join(tmpRoot, sanitizeFilename(name)+"-"+sanitizeDigest(digest))
-	// If a prior failed install left the dir behind, scrub it.
-	if err := os.RemoveAll(stage); err != nil {
-		return "", fmt.Errorf("install: clean stale staging dir %s: %w", stage, err)
-	}
-	if err := os.MkdirAll(stage, 0o700); err != nil {
+	// Registry downloads precede the managed publication lock. Each attempt
+	// therefore needs its own directory; a concurrent installer must never
+	// remove another attempt's verified snapshot as stale staging.
+	stage, err := os.MkdirTemp(tmpRoot, sanitizeFilename(name)+"-"+sanitizeDigest(digest)+"-")
+	if err != nil {
 		return "", fmt.Errorf("install: mkdir staging: %w", err)
 	}
 	return stage, nil

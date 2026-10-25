@@ -416,6 +416,23 @@ silently delete history and reenroll. Other install/admit/attest routes, full
 dependency enforcement and customer-platform acceptance remain separate work.
 
 
+Managed HTTP `install <name>@<version>` now uses the same enrolled history and
+held publication lock as local bundles. Select the same `--trust-roots`, registry
+and `--home` used by `trust state enroll`; refresh retained evidence explicitly
+with `trust state adopt`. The registry route rejects `--meta`, `--revocations`,
+`--checkpoint` and `--emergency`, which belong to `--bundle`.
+
+The public `install.Install` and `install.InstallBundle` library calls enforce
+managed history even without a `PostVerify` callback. Their optional
+`MutationEvidence` supplies a newer full signed list, bounded to 1 MiB before
+copying; explicit evidence with an unmanaged root is refused. Local-bundle
+library adoption precedes optional caller-policy refusal so a newly learned
+floor remains recorded. HTTP downloads use a separate temporary directory per
+attempt; concurrent downloads cannot remove another attempt's staging directory.
+This does not make state and skill publication one atomic transaction. ER1/Git
+pull and approval routes, complete dependency enforcement and customer acceptance
+remain separate work.
+
 ### `peer`: pin a federated peer registry (SPEC-0359)
 
 ```bash
