@@ -30,7 +30,7 @@ class PrerequisiteContracts(unittest.TestCase):
         self.environment = mock.patch.dict(os.environ, {"GITHUB_ENV": str(self.output)})
         self.environment.start()
         self.addCleanup(self.environment.stop)
-        self.version = mock.patch.object(HELPER.sys, "version_info", (3, 12, 14))
+        self.version = mock.patch.object(HELPER.sys, "version_info", (3, 14, 9))
         self.version.start()
         self.addCleanup(self.version.stop)
 
@@ -39,7 +39,7 @@ class PrerequisiteContracts(unittest.TestCase):
         self.assertGreater(kwargs["timeout"], 0)
         if "venv" in command:
             self.directory.mkdir()
-        return subprocess.CompletedProcess(command, 0, json.dumps({"python": [3, 12, 14], "packaging": "26.3"}), "")
+        return subprocess.CompletedProcess(command, 0, json.dumps({"python": [3, 14, 9], "packaging": "26.3"}), "")
 
     def test_success_publishes_only_checked_interpreter_and_strict_install(self):
         with mock.patch.object(HELPER.subprocess, "run", side_effect=self.successful_command) as run:
@@ -75,14 +75,15 @@ class PrerequisiteContracts(unittest.TestCase):
 
     def test_wrong_preflight_and_missing_environment_output_refused(self):
         for payload in ({"python": [3, 13, 0], "packaging": "26.3"},
-                        {"python": [3, 12, 14], "packaging": "0"}, {}):
+                        {"python": [3, 12, 14], "packaging": "26.3"},
+                        {"python": [3, 14, 9], "packaging": "0"}, {}):
             with self.subTest(payload=payload):
                 with mock.patch.object(HELPER.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, json.dumps(payload), "")):
                     with self.assertRaises(ValueError):
                         HELPER.provision(self.directory)
                 self.assertFalse(self.output.exists())
         with mock.patch.dict(os.environ, {}, clear=True):
-            with mock.patch.object(HELPER.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, json.dumps({"python": [3, 12, 14], "packaging": "26.3"}), "")):
+            with mock.patch.object(HELPER.subprocess, "run", return_value=subprocess.CompletedProcess([], 0, json.dumps({"python": [3, 14, 9], "packaging": "26.3"}), "")):
                 with self.assertRaises(ValueError):
                     HELPER.provision(self.directory)
         self.assertFalse(self.output.exists())
@@ -94,10 +95,11 @@ class PrerequisiteContracts(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     HELPER.provision(path)
                 run.assert_not_called()
-        with mock.patch.object(HELPER.sys, "version_info", (3, 13, 0)), mock.patch.object(HELPER.subprocess, "run") as run:
-            with self.assertRaises(ValueError):
-                HELPER.provision(self.home / "other")
-            run.assert_not_called()
+        for version in ((3, 13, 0), (3, 12, 14)):
+            with self.subTest(version=version), mock.patch.object(HELPER.sys, "version_info", version), mock.patch.object(HELPER.subprocess, "run") as run:
+                with self.assertRaises(ValueError):
+                    HELPER.provision(self.home / "other")
+                run.assert_not_called()
 
     def test_offline_wheelhouse_disables_index(self):
         wheelhouse = self.home / "wheels"
@@ -138,7 +140,7 @@ class WiringContracts(unittest.TestCase):
                     self.assertLess(setup, provision)
                     self.assertLess(provision, test)
                     self.assertEqual(steps[setup]["uses"], "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1")
-                    self.assertEqual(steps[setup]["with"]["python-version"], "3.12.14")
+                    self.assertEqual(steps[setup]["with"]["python-version"], "3.14.9")
                     self.assertEqual(steps[provision].get("if"), steps[test].get("if"))
                     self.assertFalse(steps[provision].get("continue-on-error", False))
                     self.assertEqual(steps[setup]['id'], 'dependency-python')
@@ -155,7 +157,7 @@ class WiringContracts(unittest.TestCase):
         workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
         self.assertTrue(any(step.get("run") == "python3 scripts/setup-dependency-python.test.py" for step in workflow["jobs"]["python-gate"]["steps"]))
         self.assertTrue(any(contract.get("command") == "python3 scripts/setup-dependency-python.test.py" for contract in selection["python_contracts"]))
-        requirement = (ROOT / "scripts/dependency-test-requirements.txt").read_text()
+        requirement = (ROOT / "scripts/dependency-test/requirements.txt").read_text()
         self.assertIn("packaging==26.3 --hash=sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c", requirement)
         coverage = yaml.safe_load((ROOT / ".testcoverage.yml").read_text())
         floors = {entry["path"]: entry["threshold"] for entry in coverage["override"]}

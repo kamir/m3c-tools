@@ -82,7 +82,7 @@ jobs:
         id: dependency-python
         if: steps.classify.outputs.code == 'true'
         with:
-          python-version: "3.12.14"
+          python-version: "3.14.9"
 
       - name: Provision dependency fixture Python
         if: steps.classify.outputs.code == 'true'

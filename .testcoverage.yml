@@ -76,7 +76,7 @@ override:
   # Runtime resolver: measured 83.6% (576/689 Go statements) with go1.26.10,
   # -covermode=atomic on darwin/arm64, explicit Python3.14.7/packaging26.3.
   # Seed floor(actual - 0.5) like the host-dependent packages below. Actual
-  # pinned hosted Python3.12.14 execution remains pending at introduction.
+  # pinned hosted Python3.14.9 execution remains pending at introduction.
   - { path: '^pkg/skillctl/dependencies$', threshold: 83 } # measured 83.6
   - { path: '^pkg/skillctl/backend/git$',  threshold: 80 } # measured 80.7
   - { path: '^pkg/skillctl/signing$',      threshold: 80 } # measured 80.4

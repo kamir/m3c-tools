@@ -8,9 +8,9 @@ from pathlib import Path
 import subprocess
 import sys
 
-PYTHON_VERSION = (3, 12, 14)
+PYTHON_VERSION = (3, 14, 9)
 PACKAGING_VERSION = "26.3"
-REQUIREMENTS = Path(__file__).with_name("dependency-test-requirements.txt")
+REQUIREMENTS = Path(__file__).parent / "dependency-test" / "requirements.txt"
 PREFLIGHT = (
     "import json,sys,venv,importlib.metadata;import packaging.requirements;"
     "print(json.dumps({'python':list(sys.version_info[:3]),"
