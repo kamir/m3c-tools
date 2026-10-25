@@ -4,13 +4,16 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kamir/m3c-tools/pkg/skillbundle"
 )
@@ -21,12 +24,15 @@ import (
 // makeAgentSkb builds an agent bundle the way Pack does: bundle.json at the
 // top level, kind agent, schema v2, and exactly one content file.
 func makeAgentSkb(t *testing.T, name string, extraFiles map[string]string, schema, kind string) []byte {
+	return makeAgentVersionSkb(t, name, extraFiles, schema, kind, "1.0.0")
+}
+func makeAgentVersionSkb(t *testing.T, name string, extraFiles map[string]string, schema, kind, version string) []byte {
 	t.Helper()
 	var gz bytes.Buffer
 	gw := gzip.NewWriter(&gz)
 	tw := tar.NewWriter(gw)
 
-	man := map[string]any{"schema": schema, "name": name, "version": "1.0.0"}
+	man := map[string]any{"schema": schema, "name": name, "version": version}
 	if kind != "" {
 		man["kind"] = kind
 	}
@@ -52,10 +58,49 @@ func stagedAgent(t *testing.T, name string, skb []byte) *StagedBundle {
 	if err := os.WriteFile(path, skb, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	return &StagedBundle{
+	b := &StagedBundle{
+		Kind: skillbundle.KindAgent,
 		Name: name, Version: "1.0.0", Digest: "sha256:" + hex.EncodeToString(d[:]),
 		Governance: "yellow", StagedSkbPath: path, AuthorIdentity: "id:test@m3c",
 	}
+	man, e := skillbundle.ReadManifest(skb)
+	if e != nil {
+		t.Fatal(e)
+	}
+	b.Version = man.Version
+	signAgentStagedFixture(t, b)
+	return b
+}
+
+// Deterministic synthetic fixture authority; all acceptance remains real Ed25519.
+func agentFixtureRoots() *SelfTrustRoots {
+	key := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{7}, 32))
+	pub := key.Public().(ed25519.PublicKey)
+	return &SelfTrustRoots{Registry: "self", PubKeyB64: base64.StdEncoding.EncodeToString(pub), pub: pub, Fingerprint: selfFingerprint(pub), GovernanceMinimum: "yellow"}
+}
+func signAgentStagedFixture(t *testing.T, b *StagedBundle) {
+	t.Helper()
+	key := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{7}, 32))
+	d, e := hex.DecodeString(strings.TrimPrefix(b.Digest, "sha256:"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	sig := base64.StdEncoding.EncodeToString(ed25519.Sign(key, d))
+	admit, e := BuildBundleAdmittedEvent(AdmittedEventInput{BundleDigest: b.Digest, Name: b.Name, Version: b.Version, AuthorIntent: "yellow", AdmittedByIdentity: "id:test@m3c", AdmittedAt: time.Now(), Signatures: []SignatureRef{{Role: "author", IdentityID: "id:test@m3c", SignatureB64: sig, PubKeyFingerprint: agentFixtureRoots().Fingerprint}, {Role: "registry", IdentityID: "id:test@m3c", SignatureB64: sig, PubKeyFingerprint: agentFixtureRoots().Fingerprint}}})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = SignEnvelopeSignature(key, admit); e != nil {
+		t.Fatal(e)
+	}
+	attest, e := BuildAttestationPublishedEvent(AttestedEventInput{BundleDigest: b.Digest, ReviewerID: "id:test@m3c", GovernanceLevel: "yellow", Rationale: "synthetic fixture", OccurredAt: time.Now()})
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = SignEnvelopeSignature(key, attest); e != nil {
+		t.Fatal(e)
+	}
+	b.Attestation = &AttestationContext{AdmitEvent: admit, GovernanceAttestation: attest}
 }
 
 // homeWith returns a skills dir inside a temp home, so agentsDirFor derives a
@@ -72,7 +117,7 @@ func TestInstallAgentLandsBesideSkills(t *testing.T) {
 	skillsDir, agentsDir := homeWith(t)
 	skb := makeAgentSkb(t, "release-agent", nil, skillbundle.SchemaAgent, skillbundle.KindAgent)
 
-	res, err := installOne(stagedAgent(t, "release-agent", skb), InstallOpts{SkillsDir: skillsDir})
+	res, err := installOne(stagedAgent(t, "release-agent", skb), InstallOpts{NativeTrustRoots: agentFixtureRoots(), SkillsDir: skillsDir})
 	if err != nil {
 		t.Fatalf("installOne: %v", err)
 	}
@@ -101,7 +146,7 @@ func TestInstallAgentWritesProvenance(t *testing.T) {
 	skb := makeAgentSkb(t, "helper", nil, skillbundle.SchemaAgent, skillbundle.KindAgent)
 	staged := stagedAgent(t, "helper", skb)
 
-	res, err := installOne(staged, InstallOpts{SkillsDir: skillsDir})
+	res, err := installOne(staged, InstallOpts{NativeTrustRoots: agentFixtureRoots(), SkillsDir: skillsDir})
 	if err != nil {
 		t.Fatalf("installOne: %v", err)
 	}
@@ -133,7 +178,7 @@ func TestInstallRefusesUnknownSchema(t *testing.T) {
 	skillsDir, agentsDir := homeWith(t)
 	skb := makeAgentSkb(t, "future", nil, "m3c-skill-bundle/v9", skillbundle.KindAgent)
 
-	_, err := installOne(stagedAgent(t, "future", skb), InstallOpts{SkillsDir: skillsDir})
+	_, err := installOne(stagedAgent(t, "future", skb), InstallOpts{NativeTrustRoots: agentFixtureRoots(), SkillsDir: skillsDir})
 	if err == nil {
 		t.Fatal("an unknown schema was installed")
 	}
@@ -157,7 +202,7 @@ func TestInstallRefusesAgentWithExtraFiles(t *testing.T) {
 	skb := makeAgentSkb(t, "fat", map[string]string{"extra.md": "x"},
 		skillbundle.SchemaAgent, skillbundle.KindAgent)
 
-	_, err := installOne(stagedAgent(t, "fat", skb), InstallOpts{SkillsDir: skillsDir})
+	_, err := installOne(stagedAgent(t, "fat", skb), InstallOpts{NativeTrustRoots: agentFixtureRoots(), SkillsDir: skillsDir})
 	if err == nil {
 		t.Fatal("an agent bundle with a second file was installed")
 	}
@@ -173,7 +218,7 @@ func TestInstallSkillUnaffected(t *testing.T) {
 	skb := makeSkbTGZ("plain-skill", "# plain\n")
 
 	if _, err := installOne(stagedFor(t, "plain-skill", "1.0.0", skb),
-		InstallOpts{SkillsDir: skillsDir}); err != nil {
+		InstallOpts{NativeTrustRoots: agentFixtureRoots(), SkillsDir: skillsDir}); err != nil {
 		t.Fatalf("installOne: %v", err)
 	}
 	st, err := os.Stat(filepath.Join(skillsDir, "plain-skill"))

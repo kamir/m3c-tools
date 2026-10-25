@@ -2043,6 +2043,37 @@ skillctl pull --install --trust-mode --dry-run-install
 skillctl pull --install --trust-mode --confirm-install --dry-run-install-token <sig>
 ```
 
+Native agent installation keeps the loader file at `~/.claude/agents/<name>.md`.
+Before publishing it, the installer verifies the admit and bundle signatures and
+the complete governance quorum under the explicitly selected native trust roots.
+It retains the exact archive and complete signed context in
+`agents/.skillctl-evidence/<name>.record`. The record uses framing version 1:
+`M3CAGT1` plus a newline, a four-byte big-endian JSON-header length, the bounded
+strict header, raw archive bytes and compact context JSON. Limits are 8 KiB for
+the header, 256 MiB for the archive and 1 MiB for context. Context checks also
+bound nesting, nodes, strings and the full attestation set before serialization.
+Container fields and legacy provenance are selectors, never trust authorities.
+
+SDK migration: agent calls to `registry.ConfirmInstall` must supply
+`InstallOpts.NativeTrustRoots` and the complete staged `AttestationContext`.
+Missing or invalid inputs deny publication with a repull/reinstall diagnostic;
+a root fingerprint or unsigned metadata cannot replace them. The CLI forwards
+its selected native roots. Existing legacy agent files are left in place and are
+not silently upgraded. Skill installation retains its existing behavior.
+
+A cooperating process lock covers agent plan confirmation through checked
+publication and cleanup. Proof, markdown and provenance are three separate
+publications. After a publication or close failure the installation may already
+have changed; no automatic rollback or multi-file atomicity is promised.
+Repull and use the normal plan/confirmation flow after inspecting the result.
+Unix checks file and parent-directory synchronization. Windows uses checked file
+flush and same-volume write-through replacement; this is not a promise of Unix
+filesystem equivalence or demonstrated power-loss survival.
+
+Retention does not enable agent dependency resolution or provide an Enterprise
+native project profile or fresh full-list revocation lease. Agent dependencies
+remain refused until those verification paths are implemented.
+
 Exit: `0` all bundles staged · `7` NULLTREFFER: the query matched nothing, which is deliberately not success (BUG-0254: an empty run was indistinguishable from a run with nothing to do, and a gate that reports green while checking nothing creates trust nothing answers to) · `2` usage or a refused `--install` precondition (missing `--trust-mode`, a missing / expired / forged G-23 token) · `1` bundles were skipped for MORE THAN ONE reason (no single number can name two causes; read the per-row gate) · one skipped gate maps to ITS number: `12` envelope / registry not trusted, `10` digest, `11` bundle signature, `13` governance below minimum, `6` revoked. `--install` returns `10` when the extracted bundle's `CHECKSUMS` manifest stops describing it (SPEC-0188 §7 step 8). Measured against `skipExitCode` / `gateExit` in `cmd/skillctl/pull_cmds.go`.
 
 ---

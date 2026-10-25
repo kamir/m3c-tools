@@ -42,7 +42,7 @@ func TestInstallRefusesTagManifestKindMismatch(t *testing.T) {
 	staged := stagedAgent(t, "sneaky", skb)
 	staged.Kind = skillbundle.KindSkill // the unsigned tag projection lies
 
-	_, err := installOne(staged, InstallOpts{SkillsDir: skillsDir})
+	_, err := installOne(staged, InstallOpts{NativeTrustRoots: agentFixtureRoots(), SkillsDir: skillsDir})
 	if err == nil {
 		t.Fatal("installOne accepted a tag/manifest kind mismatch")
 	}
@@ -59,7 +59,7 @@ func TestInstallRefusesTagManifestKindMismatch(t *testing.T) {
 	// Counter-probe: an agreeing tag installs the same bundle.
 	staged2 := stagedAgent(t, "sneaky", skb)
 	staged2.Kind = skillbundle.KindAgent
-	if _, err := installOne(staged2, InstallOpts{SkillsDir: skillsDir}); err != nil {
+	if _, err := installOne(staged2, InstallOpts{NativeTrustRoots: agentFixtureRoots(), SkillsDir: skillsDir}); err != nil {
 		t.Fatalf("agreeing kind must install: %v", err)
 	}
 }
@@ -70,15 +70,15 @@ func TestInstallAgentDowngradeGate(t *testing.T) {
 	skillsDir, _ := homeWith(t)
 	skb := makeAgentSkb(t, "replayed", nil, skillbundle.SchemaAgent, skillbundle.KindAgent)
 
-	newer := stagedAgent(t, "replayed", skb)
+	newer := stagedAgent(t, "replayed", makeAgentVersionSkb(t, "replayed", nil, skillbundle.SchemaAgent, skillbundle.KindAgent, "2.0.0"))
 	newer.Version = "2.0.0"
-	if _, err := installOne(newer, InstallOpts{SkillsDir: skillsDir}); err != nil {
+	if _, err := installOne(newer, InstallOpts{NativeTrustRoots: agentFixtureRoots(), SkillsDir: skillsDir}); err != nil {
 		t.Fatalf("install 2.0.0: %v", err)
 	}
 
 	older := stagedAgent(t, "replayed", skb)
 	older.Version = "1.0.0"
-	_, err := installOne(older, InstallOpts{SkillsDir: skillsDir})
+	_, err := installOne(older, InstallOpts{NativeTrustRoots: agentFixtureRoots(), SkillsDir: skillsDir})
 	if err == nil {
 		t.Fatal("an older agent overwrote a newer one without --allow-downgrade")
 	}
@@ -89,7 +89,7 @@ func TestInstallAgentDowngradeGate(t *testing.T) {
 	}
 
 	// The explicit flag is the consent the gate asks for.
-	if _, err := installOne(older, InstallOpts{SkillsDir: skillsDir, AllowDowngrade: true}); err != nil {
+	if _, err := installOne(older, InstallOpts{NativeTrustRoots: agentFixtureRoots(), SkillsDir: skillsDir, AllowDowngrade: true}); err != nil {
 		t.Fatalf("--allow-downgrade must permit the replay: %v", err)
 	}
 }

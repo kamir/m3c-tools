@@ -2242,6 +2242,42 @@ skillctl pull --install --trust-mode --dry-run-install
 skillctl pull --install --trust-mode --confirm-install --dry-run-install-token <sig>
 ```
 
+Native Agent-Installationen behalten die Loader-Datei unter
+`~/.claude/agents/<name>.md`. Vor ihrer Veröffentlichung prüft der Installer
+Admit- und Bundle-Signaturen sowie das vollständige Governance-Quorum unter den
+explizit gewählten nativen Vertrauensankern. Originalarchiv und vollständiger
+signierter Kontext bleiben in `agents/.skillctl-evidence/<name>.record` erhalten.
+Das Record-Format verwendet Version 1: `M3CAGT1` mit Zeilenumbruch, eine vier Byte
+lange Big-Endian-Längenangabe des JSON-Headers, den begrenzten strikten Header,
+unveränderte Archivbytes und kompaktes Kontext-JSON. Grenzen sind 8 KiB für den
+Header, 256 MiB für das Archiv und 1 MiB für den Kontext. Weitere Kontextprüfungen
+begrenzen vor der Serialisierung Tiefe, Knoten, Strings und die vollständige
+Attestierungsmenge. Containerfelder und bisherige Herkunftsmetadaten wählen
+Nachweise aus; sie sind keine Vertrauensautoritäten.
+
+SDK-Migration: Agent-Aufrufe von `registry.ConfirmInstall` müssen
+`InstallOpts.NativeTrustRoots` und den vollständigen vorbereiteten
+`AttestationContext` übergeben. Fehlende oder ungültige Eingaben verweigern die
+Veröffentlichung mit einem Hinweis auf erneuten Abruf und Installation.
+Fingerprint oder unsignierte Metadaten ersetzen diese Nachweise nicht. Die CLI
+reicht ihre gewählten nativen Vertrauensanker weiter. Bestehende Legacy-Agenten
+bleiben erhalten und werden nicht still aufgewertet. Skill-Installationen behalten
+ihr bisheriges Verhalten.
+
+Eine Prozesssperre für mitwirkende Installer umfasst Planbestätigung,
+Veröffentlichung und geprüfte Bereinigung. Nachweis, Markdown und Herkunftsdatei
+werden getrennt veröffentlicht. Nach einem Veröffentlichungs- oder Close-Fehler
+kann sich die Installation bereits geändert haben; automatische Rücknahme oder
+Mehrdatei-Atomizität werden nicht versprochen. Ergebnis prüfen, erneut abrufen
+und den normalen Plan-/Bestätigungsvorgang verwenden. Unix prüft Datei- und
+Elternverzeichnis-Synchronisierung. Windows verwendet geprüften Datei-Flush und
+Write-through-Ersetzung auf demselben Volume. Das ist weder eine Gleichsetzung
+mit Unix-Dateisystemen noch ein nachgewiesener Schutz bei Stromausfall.
+
+Die Erhaltung aktiviert keine Agent-Abhängigkeitsauflösung und ersetzt weder ein
+natives Enterprise-Projektprofil noch eine frische vollständige Widerrufssitzung.
+Agent-Abhängigkeiten bleiben bis zur Umsetzung dieser Prüfwege verweigert.
+
 Exit: `0` alle Bundles vorbereitet · `7` NULLTREFFER: Abfrage ohne Ergebnis,
 bewusst kein Erfolg (BUG-0254: Ein leerer Lauf war von einem Lauf ohne offene
 Arbeit nicht unterscheidbar; ein grünes Gate ohne Prüfung erzeugt unbelegtes
