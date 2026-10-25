@@ -712,6 +712,21 @@ werden geprüft und vor dem ersten Austausch eines installierten Skills erneut
 geprüft. Danach prüft die gehaltene Sperre die signierte Widerrufshistorie und die
 tatsächliche Uhr erneut.
 
+Mit gewähltem Profil verwenden HTTP- und lokale Root-Verifikation dieselben
+erhaltenen Archivbytes für Digest, Signaturen, signierte Scopes und Manifest. Die
+Verifikation öffnet Eingangs- oder Staging-Pfad nicht erneut. Die verwaltete
+Snapshot-Verifikation begrenzt das Manifest auf 1 MiB und JSON-Tiefe 128, entpackte
+Nutzdaten auf 100 MiB und Einträge auf 10.000. Für den vollständig entpackten Stream
+einschließlich Tar-Metadaten, Padding und Trailer gilt das endliche Limit von
+116.146.176 Bytes. Ein größerer Extraktions-Override erhöht diese Verifikationsgrenzen
+nicht. Fehlerhafte, doppelte JSON-Schlüssel enthaltende, zu große oder zu tiefe
+Snapshot-Manifeste verweigern bereits bei der Verifikation mit `10`, vor Policy-Callbacks
+nach der Verifikation. Gültige UTF-8-Bytes und kanonische Namen kritischer Felder
+bleiben erforderlich. Gültige frische
+Evidenz wird weiterhin vor einer optionalen Caller- oder späteren Abhängigkeitsverweigerung
+übernommen. Entpackter Baum und erhaltenes Archiv im Installationsziel stammen aus
+den verifizierten erhaltenen Bytes.
+
 Skill-Abhängigkeiten können eine bereits aktive HTTP-Installation verwenden, wenn
 die gewählten Vertrauensanker die Autorenschlüssel ausdrücklich pinnen. Genau eine
 reguläre erhaltene `.skb` und ein begrenzter `.skillctl-offline.json`-Umschlag liefern

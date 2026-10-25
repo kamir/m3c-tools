@@ -103,6 +103,9 @@ PROJECT_CASES = {
         'TestInstalledSkillGraphSelectedRuntime',
         'TestInstalledSkillSourceBoundedInputs',
         'TestInstalledSkillSourceRejectsAmbiguousOrForeignEvidence',
+        'TestRetainedRootLocalSnapshot',
+        'TestRetainedRootHTTPStagingSnapshot',
+        'TestRetainedRootManifestAndAdoption',
     ),
     'github.com/kamir/m3c-tools/cmd/skillctl': (
         'TestInstallEnterpriseProfileActualCLI',
@@ -114,6 +117,7 @@ PROJECT_CASES = {
         'TestInstallInstalledSkillDependenciesActualCLI',
         'TestInstallInstalledSkillDependenciesTamperActualCLI',
         'TestInstallInstalledSkillDependenciesRevokedActualCLI',
+        'TestInstallRetainedRootSnapshotActualCLI',
     ),
 }
 for _package, _cases in PROJECT_CASES.items():

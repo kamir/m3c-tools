@@ -112,7 +112,10 @@
           "TestInstalledSkillNoProvisioningOrIgnoreBypass",
           "TestInstalledSkillGraphSelectedRuntime",
           "TestInstalledSkillSourceBoundedInputs",
-          "TestInstalledSkillSourceRejectsAmbiguousOrForeignEvidence"
+          "TestInstalledSkillSourceRejectsAmbiguousOrForeignEvidence",
+          "TestRetainedRootLocalSnapshot",
+          "TestRetainedRootHTTPStagingSnapshot",
+          "TestRetainedRootManifestAndAdoption"
         ],
         "./pkg/skillctl/verify": [
           "TestSnapshotSameBytesScopes",
@@ -235,7 +238,10 @@
           "TestInstalledSkillNoProvisioningOrIgnoreBypass",
           "TestInstalledSkillGraphSelectedRuntime",
           "TestInstalledSkillSourceBoundedInputs",
-          "TestInstalledSkillSourceRejectsAmbiguousOrForeignEvidence"
+          "TestInstalledSkillSourceRejectsAmbiguousOrForeignEvidence",
+          "TestRetainedRootLocalSnapshot",
+          "TestRetainedRootHTTPStagingSnapshot",
+          "TestRetainedRootManifestAndAdoption"
         ],
         "./cmd/skillctl": [
           "TestInstallEnterpriseProfileActualCLI",
@@ -246,7 +252,8 @@
           "TestRuntimeFingerprintOutputFailure",
           "TestInstallInstalledSkillDependenciesActualCLI",
           "TestInstallInstalledSkillDependenciesTamperActualCLI",
-          "TestInstallInstalledSkillDependenciesRevokedActualCLI"
+          "TestInstallInstalledSkillDependenciesRevokedActualCLI",
+          "TestInstallRetainedRootSnapshotActualCLI"
         ],
         "./pkg/skillctl/verify": [
           "TestSnapshotSameBytesScopes",

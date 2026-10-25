@@ -665,6 +665,18 @@ declarations. Python/system requirements are checked, then checked again before
 the first replacement of an installed skill. Retained signed revocation history
 and the actual clock are rechecked under the held lock after runtime probes.
 
+With a selected profile, HTTP and local root verification use the same retained
+archive bytes for the digest, signatures, signed scopes and manifest. Verification
+does not reopen the input or staging path. Managed snapshot verification limits the
+manifest to 1 MiB and JSON depth 128, extracted payload to 100 MiB and entries to
+10,000, with a finite 116,146,176-byte inflated-stream limit including tar metadata,
+padding and trailers. A larger extraction override does not raise these verification
+ceilings. Malformed, duplicate-key, oversized or too-deep snapshot manifests deny
+with `10` during verification, before post-verification policy callbacks. UTF-8
+validity and canonical names for critical fields remain required. Valid fresh evidence is still adopted before an
+optional caller or later dependency denial. The extracted tree and retained archive
+stash use the verified retained bytes.
+
 Skill dependencies can use an already active HTTP installation when the selected
 roots explicitly pin author keys. Exactly one regular retained `.skb` and a bounded
 `.skillctl-offline.json` envelope supply the retained proof. Archive digest and

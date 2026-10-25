@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/kamir/m3c-tools/pkg/skillbundle"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
 )
@@ -52,4 +53,25 @@ func readLocalInstallBytes(r io.Reader, limit int64) ([]byte, error) {
 		return nil, fmt.Errorf("install: local bundle exceeds %d bytes", limit)
 	}
 	return blob, nil
+}
+
+// Managed roots use the default payload ceiling plus the shared reader's finite
+// default allowance for tar headers and padding. This does not enlarge the
+// independent installed-dependency source's per-phase budget.
+const rootSnapshotInflatedBytes = skillbundle.DefaultMaxExtractedBytes + int64(skillbundle.DefaultMaxExtractedFiles)*1024 + 1<<20
+
+func verifyRootInput(opts verify.VerifyOpts, blob []byte, managed bool) (*verify.VerifyResult, *verify.SnapshotResult, error) {
+	if !managed {
+		verified, err := verify.Verify(opts)
+		return verified, nil, err
+	}
+	opts.BundlePath = ""
+	snapshot, err := verify.VerifySnapshot(opts, blob, rootSnapshotInflatedBytes)
+	if err != nil {
+		return nil, nil, err
+	}
+	if snapshot == nil || snapshot.Verification == nil {
+		return nil, nil, fmt.Errorf("install: missing verified root snapshot: %w", verify.ErrDigestMismatch)
+	}
+	return snapshot.Verification, snapshot, nil
 }

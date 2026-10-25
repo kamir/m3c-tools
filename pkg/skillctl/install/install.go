@@ -292,7 +292,7 @@ func Install(opts Opts) (result *Result, resultErr error) {
 		Tenant:          opts.Tenant,
 		Logger:          opts.Logger,
 	}
-	verRes, err := verify.Verify(verifyOpts)
+	verRes, snapshot, err := verifyRootInput(verifyOpts, blob, opts.ProjectPolicy != nil)
 	if err != nil {
 		return nil, err
 	}
@@ -309,7 +309,7 @@ func Install(opts Opts) (result *Result, resultErr error) {
 		return nil, err
 	}
 	defer closeManagedInstall(session, &resultErr)
-	preCommit, err := prepareProjectDependencies(ctx, opts.ProjectPolicy, blob, verRes, opts.Name, resolvedVersion, session)
+	preCommit, err := prepareProjectDependencies(ctx, opts.ProjectPolicy, blob, verRes, opts.Name, resolvedVersion, session, snapshot)
 	if err != nil {
 		return nil, err
 	}
