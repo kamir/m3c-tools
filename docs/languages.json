@@ -161,8 +161,8 @@
     {
       "de": "docs/v2/referenz/CLI-VERBS.de.md",
       "en": "docs/v2/referenz/CLI-VERBS.md",
-      "de_sha256": "f38c8dfe61952cb71ee0188e8f61453995920aac7cd4faca27c1f1adca121b94",
-      "en_sha256": "c0c3aa239f0f0976504a33ba98da8a2fcac8de534de8e25780bbd15adab71dda"
+      "de_sha256": "8d60434d5222c816892c0b346aed61b2d3319a85bf89dded49ebb0bc68334040",
+      "en_sha256": "57b63b307672d14fc5e80f483713f5e1deaac12e6c8f8fdaebaddc2b07aafc54"
     },
     {
       "de": "docs/v2/referenz/PLATFORM-DIFFERENCES.de.md",
@@ -179,8 +179,8 @@
     {
       "de": "docs/v2/referenz/manual-skillctl.de.md",
       "en": "docs/v2/referenz/manual-skillctl.md",
-      "de_sha256": "8faad48d36202304d22f1c17a29de4c7707c109c09a9e9644b9b8efb6c508119",
-      "en_sha256": "ce4d318423219b99f078f8a620de947fae01d07665c71e6d7126d5031e066eb3"
+      "de_sha256": "4f075d29065d375eb08636e2dd8aecaa5c7e3625508a15d50a8b6f714c050ca7",
+      "en_sha256": "b790a96825bea29cdfe4cd8e1252514d1c1f83d4a5ed2867c6145806e2efe3b9"
     },
     {
       "de": "docs/v2/sicherheit/audit-spur.de.md",

@@ -85,6 +85,9 @@ def mapping_errors(config, go_packages, files, discoveries=None):
         for package in lane.get("mandatory", []):
             if package not in go_packages or not any(selected(package, s) for s in lane["selectors"]):
                 errors.append("missing mandatory target: " + package)
+        for package in lane.get("required_tests", {}):
+            if package not in go_packages or not any(selected(package, s) for s in lane["selectors"]):
+                errors.append("required Go test package outside lane selection: " + package)
     for package in exceptions - go_packages:
         errors.append("stale Go exception: " + package)
     # A directory outside the metadata union needs a new build variant, not a

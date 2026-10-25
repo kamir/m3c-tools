@@ -56,6 +56,9 @@ DEPENDENCY_CASES = (
     'TestWindowsVenvSiteClassification',
     'TestGraphAggregateBudget',
     'TestWindowsMarkerEnvironment',
+    'TestRuntimeTreeObservationGolden',
+    'TestRuntimeTreeObservationReadOnly',
+    'TestRuntimeTreeObservationInvalid',
 )
 REQUIRED.update({(DEPENDENCIES, name) for name in DEPENDENCY_CASES})
 # Fixed project-policy, held-session and actual CLI identities.
@@ -87,6 +90,9 @@ PROJECT_CASES = {
         'TestInstallEnterpriseProfileActualCLI',
         'TestInstallEnterpriseProfileUsageBeforeReads',
         'TestInstallEnterpriseProfileHTTPPreflightActualCLI',
+        'TestRuntimeFingerprintActualCLI',
+        'TestRuntimeFingerprintUsageBeforeReads',
+        'TestRuntimeFingerprintOutputFailure',
     ),
 }
 for _package, _cases in PROJECT_CASES.items():

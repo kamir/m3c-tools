@@ -75,7 +75,10 @@
           "TestSiteTreeGoldenAndBounds",
           "TestWindowsVenvSiteClassification",
           "TestGraphAggregateBudget",
-          "TestWindowsMarkerEnvironment"
+          "TestWindowsMarkerEnvironment",
+          "TestRuntimeTreeObservationGolden",
+          "TestRuntimeTreeObservationReadOnly",
+          "TestRuntimeTreeObservationInvalid"
         ],
         "./pkg/skillctl/projectpolicy": [
           "TestProjectProfileSnapshotsAndSelection",
@@ -175,7 +178,10 @@
           "TestSiteTreeGoldenAndBounds",
           "TestWindowsVenvSiteClassification",
           "TestGraphAggregateBudget",
-          "TestWindowsMarkerEnvironment"
+          "TestWindowsMarkerEnvironment",
+          "TestRuntimeTreeObservationGolden",
+          "TestRuntimeTreeObservationReadOnly",
+          "TestRuntimeTreeObservationInvalid"
         ],
         "./pkg/skillctl/projectpolicy": [
           "TestProjectProfileSnapshotsAndSelection",
@@ -203,7 +209,10 @@
         "./cmd/skillctl": [
           "TestInstallEnterpriseProfileActualCLI",
           "TestInstallEnterpriseProfileUsageBeforeReads",
-          "TestInstallEnterpriseProfileHTTPPreflightActualCLI"
+          "TestInstallEnterpriseProfileHTTPPreflightActualCLI",
+          "TestRuntimeFingerprintActualCLI",
+          "TestRuntimeFingerprintUsageBeforeReads",
+          "TestRuntimeFingerprintOutputFailure"
         ]
       }
     },

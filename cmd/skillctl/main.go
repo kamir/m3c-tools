@@ -166,6 +166,8 @@ func main() {
 	// === SPEC-0317 R-7 (P2): named offline state machine: informational
 	// SessionStart context (prints online/degraded/offline/locked + the
 	// advisory-until-pinned banner). Pure read; gates nothing. ===
+	case "runtime":
+		os.Exit(runRuntime(os.Args[2:], os.Stdout, os.Stderr))
 	case "session-baseline":
 		os.Exit(runSessionBaseline(os.Args[2:], os.Stdout, os.Stderr))
 	// === END SPEC-0317 P2 ===
@@ -321,6 +323,7 @@ func printUsage(w *os.File) {
 	fmt.Fprintln(w, "  runbook                 Publish an onboarding runbook into the THOH catalog (runbook publish).")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Install and verify (SPEC-0188 S8, SPEC-0276, SPEC-0406)")
+	fmt.Fprintln(w, "  runtime                 Observe an explicit runtime tree fingerprint without approving a baseline.")
 	fmt.Fprintln(w, "  install                 Pull, verify, and install a signed skill bundle.")
 	fmt.Fprintln(w, "  verify                  Re-run the trust-chain check on an installed skill or a .skb file.")
 	fmt.Fprintln(w, "  export-bundle           Produce a sendable bundle plus its verification envelope.")

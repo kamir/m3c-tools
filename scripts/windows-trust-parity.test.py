@@ -37,6 +37,9 @@ DEPENDENCY_TESTS = (
     'TestWindowsVenvSiteClassification',
     'TestGraphAggregateBudget',
     'TestWindowsMarkerEnvironment',
+    'TestRuntimeTreeObservationGolden',
+    'TestRuntimeTreeObservationReadOnly',
+    'TestRuntimeTreeObservationInvalid',
 )
 PROJECT_TESTS = {
     'github.com/kamir/m3c-tools/pkg/skillctl/projectpolicy': (
@@ -66,6 +69,9 @@ PROJECT_TESTS = {
         'TestInstallEnterpriseProfileActualCLI',
         'TestInstallEnterpriseProfileUsageBeforeReads',
         'TestInstallEnterpriseProfileHTTPPreflightActualCLI',
+        'TestRuntimeFingerprintActualCLI',
+        'TestRuntimeFingerprintUsageBeforeReads',
+        'TestRuntimeFingerprintOutputFailure',
     ),
 }
 COMMIT = "c" * 40
@@ -157,12 +163,14 @@ class ParityContracts(unittest.TestCase):
     def test_same_required_cases_pass_with_denominator(self):
         result = self.run_reports()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("linux lane=trust required=51 pass=51 skip=0 missing=0 exceptions=0", result.stdout)
-        self.assertIn("windows lane=trust required=51 pass=51 skip=0 missing=0 exceptions=0", result.stdout)
+        self.assertIn("linux lane=trust required=57 pass=57 skip=0 missing=0 exceptions=0", result.stdout)
+        self.assertIn("windows lane=trust required=57 pass=57 skip=0 missing=0 exceptions=0", result.stdout)
         self.assertIn("UNBOUND", result.stdout)
 
     def test_dependency_python_skip_or_missing_cannot_hide_behind_package_pass(self):
-        for selected in ("TestPythonRuntimeFixture", "TestWindowsMarkerEnvironment"):
+        for selected in ("TestPythonRuntimeFixture", "TestWindowsMarkerEnvironment",
+                         "TestRuntimeTreeObservationGolden", "TestRuntimeTreeObservationReadOnly",
+                         "TestRuntimeTreeObservationInvalid"):
             for status in ("skip", "missing"):
                 for platform in ("linux", "windows"):
                     with self.subTest(selected=selected, status=status, platform=platform):
@@ -198,6 +206,20 @@ class ParityContracts(unittest.TestCase):
                                  and r["Action"] == "pass")["Action"] = "skip"
                         self.reject(self.run_reports(**{platform: rows}, bound=True), "is " + status)
 
+    def test_runtime_cli_observation_cases_cannot_skip(self):
+        for name in ("TestRuntimeFingerprintActualCLI", "TestRuntimeFingerprintUsageBeforeReads",
+                     "TestRuntimeFingerprintOutputFailure"):
+            for status in ("skip", "missing"):
+                for platform in ("linux", "windows"):
+                    with self.subTest(name=name, status=status, platform=platform):
+                        rows = successful_report()
+                        if status == "missing":
+                            rows = [r for r in rows if r.get("Test") != name]
+                        else:
+                            next(r for r in rows if r.get("Test") == name
+                                 and r["Action"] == "pass")["Action"] = "skip"
+                        self.reject(self.run_reports(**{platform: rows}, bound=True), "is " + status)
+
     def test_equal_counts_disjoint_ids_rejected(self):
         rows = successful_report()
         for row in rows:
@@ -212,7 +234,7 @@ class ParityContracts(unittest.TestCase):
                 row["Action"] = "skip"
         result = self.run_reports(windows=rows)
         self.reject(result, "is skip")
-        self.assertIn("windows lane=trust required=51 pass=0 skip=51", result.stdout)
+        self.assertIn("windows lane=trust required=57 pass=0 skip=57", result.stdout)
 
     def test_missing_or_skipped_subtest_with_passing_parent_rejected(self):
         for status in ("missing", "skip"):
@@ -288,7 +310,7 @@ class ParityContracts(unittest.TestCase):
         rows[-1:-1] = [event("TestOptional", "run"), event("TestOptional", "skip")]
         result = self.run_reports(windows=rows)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("observed pass=51 skip=1", result.stdout)
+        self.assertIn("observed pass=57 skip=1", result.stdout)
         self.assertIn("1 other identities outside reviewed parity scope", result.stdout)
 
     def test_bound_same_run_reports_pass(self):
@@ -319,7 +341,7 @@ class ParityContracts(unittest.TestCase):
         result = self.run_reports(windows=rows, exceptions=[exception()])
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("EXCEPTION (not PASS)", result.stdout)
-        self.assertIn("windows lane=trust required=51 pass=50 skip=0 missing=1 exceptions=1", result.stdout)
+        self.assertIn("windows lane=trust required=57 pass=56 skip=0 missing=1 exceptions=1", result.stdout)
         self.assertIn("not acceptance", result.stdout)
         self.reject(self.run_reports(linux=rows, exceptions=[exception()]), "linux: required")
 
@@ -372,7 +394,7 @@ class ParityContracts(unittest.TestCase):
         next(row for row in rows if row.get("Test") == CHILD and row["Action"] == "pass")["Action"] = "skip"
         result = self.run_reports(windows=rows, exceptions=[exception()])
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("pass=50 skip=1 missing=0 exceptions=1", result.stdout)
+        self.assertIn("pass=56 skip=1 missing=0 exceptions=1", result.stdout)
         today = datetime.now(timezone.utc).date().isoformat()
         self.reject(self.run_reports(windows=rows, exceptions=[exception(expires=today)]), "expired exception")
 
