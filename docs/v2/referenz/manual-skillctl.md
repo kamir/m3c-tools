@@ -665,11 +665,39 @@ declarations. Python/system requirements are checked, then checked again before
 the first replacement of an installed skill. Retained signed revocation history
 and the actual clock are rechecked under the held lock after runtime probes.
 
-Skill/agent dependency declarations currently refuse installation with a concrete
-install/reinstall hint until the complete active retained-proof adapter is available.
-An existing directory or unsigned sidecar does not satisfy this gate. No dependency
-is automatically installed. These refusals do not constitute support completion or
-Enterprise acceptance; ER1/Git/self and admission/attestation integration remain open.
+Skill dependencies can use an already active HTTP installation when the selected
+roots explicitly pin author keys. Exactly one regular retained `.skb` and a bounded
+`.skillctl-offline.json` envelope supply the retained proof. Archive digest and
+signatures are verified under the selected roots and existing verifier policy.
+Mutable envelope projections are not independently authenticated; governance remains
+subject to that policy. Unsigned identity fields cannot select authority. Signed name, kind, numeric release version
+and dependency declarations govern the graph. Extracted files must match the signed
+archive, with no unexpected files or directories. Symlinks and special files are
+refused, including under normally exempt metadata names. Unsigned metadata does not
+prove the original registry when authorities share keys.
+
+The complete transitive graph is checked against the selected runtime and checked
+again from fresh active proofs before replacing the target. Then the held trust
+session rechecks the root and every dependency digest against retained revocations
+and the current clock. Revocation and freshness failures retain exits `17` and `22`;
+unusable dependency proofs return `14`. Active directory identity and descriptor
+cleanup are checked; this is not an atomic filesystem snapshot or isolation from a
+hostile local operator.
+
+Each proof phase caps explicitly managed handles at 64 in total, including anchors
+and temporary file/directory handles; aggregate reserved work is capped at 512 MiB,
+entries at 100,000, relative-path bytes at 4 MiB, path length at 4096 and depth at 128.
+Metadata is capped at 1 MiB and retained compressed archives at 256 MiB. The remaining
+path/entry budget also conservatively limits each inflated stream, and decoder work
+reserves 64 times stream bytes. Large otherwise valid archives may therefore be
+refused below the archive cap. Checks observe cancellation between I/O operations;
+they do not guarantee deadlines for blocked filesystem operations.
+
+Agents and retained proofs requiring registry-authorized author keys remain refused
+with an install/reinstall hint. An existing directory or unsigned
+sidecar alone does not satisfy the guard. No dependency is automatically installed.
+These refusals do not constitute support completion or Enterprise acceptance;
+ER1/Git/self and admission/attestation integration remain open.
 Status and diagnosis do not require this installation profile.
 
 For MCP `skill_install`, the operator configures `SKILLCTL_ENTERPRISE_PROFILE`,

@@ -67,6 +67,16 @@ PROJECT_TESTS = {
         'TestProjectRuntimeRecheckBeforeArchive',
         'TestProjectMetadataSnapshotBudget',
         'TestProjectRequestedVersionBindsSignedManifest',
+        'TestInstalledSkillSourceSignedActiveProof',
+        'TestInstalledSkillSourceRejectsUnsignedAndLegacy',
+        'TestInstalledSkillSourceBindsIdentityVersionAndDeclarations',
+        'TestInstalledSkillGraphTransitiveAndCycles',
+        'TestInstalledSkillRecheckBeforeArchive',
+        'TestInstalledSkillSubjectRevocationAndClock',
+        'TestInstalledSkillNoProvisioningOrIgnoreBypass',
+        'TestInstalledSkillGraphSelectedRuntime',
+        'TestInstalledSkillSourceBoundedInputs',
+        'TestInstalledSkillSourceRejectsAmbiguousOrForeignEvidence',
     ),
     'github.com/kamir/m3c-tools/cmd/skillctl': (
         'TestInstallEnterpriseProfileActualCLI',
@@ -75,6 +85,9 @@ PROJECT_TESTS = {
         'TestRuntimeFingerprintActualCLI',
         'TestRuntimeFingerprintUsageBeforeReads',
         'TestRuntimeFingerprintOutputFailure',
+        'TestInstallInstalledSkillDependenciesActualCLI',
+        'TestInstallInstalledSkillDependenciesTamperActualCLI',
+        'TestInstallInstalledSkillDependenciesRevokedActualCLI',
     ),
 }
 SNAPSHOT_TESTS = ('TestSnapshotSameBytesScopes', 'TestSnapshotRejectsPathReopen', 'TestSnapshotBoundedInputs', 'TestSnapshotExistingVerifyParity')
@@ -168,8 +181,8 @@ class ParityContracts(unittest.TestCase):
     def test_same_required_cases_pass_with_denominator(self):
         result = self.run_reports()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("linux lane=trust required=62 pass=62 skip=0 missing=0 exceptions=0", result.stdout)
-        self.assertIn("windows lane=trust required=62 pass=62 skip=0 missing=0 exceptions=0", result.stdout)
+        self.assertIn("linux lane=trust required=75 pass=75 skip=0 missing=0 exceptions=0", result.stdout)
+        self.assertIn("windows lane=trust required=75 pass=75 skip=0 missing=0 exceptions=0", result.stdout)
         self.assertIn("UNBOUND", result.stdout)
 
     def test_dependency_python_skip_or_missing_cannot_hide_behind_package_pass(self):
@@ -247,6 +260,22 @@ class ParityContracts(unittest.TestCase):
                                  (package, name, "pass"))["Action"] = "skip"
                         self.reject(self.run_reports(**{platform: rows}), name)
 
+    def test_installed_dependency_guards_cannot_skip_or_disappear(self):
+        for package in ("github.com/kamir/m3c-tools/pkg/skillctl/install", "github.com/kamir/m3c-tools/cmd/skillctl"):
+            for name in PROJECT_TESTS[package]:
+                if not name.startswith(("TestInstalledSkill", "TestInstallInstalledSkill")):
+                    continue
+                for platform in ("linux", "windows"):
+                    for action in ("skip", "missing"):
+                        with self.subTest(package=package, name=name, platform=platform, action=action):
+                            rows = successful_report()
+                            if action == "missing":
+                                rows = [r for r in rows if (r["Package"], r.get("Test")) != (package, name)]
+                            else:
+                                next(r for r in rows if (r["Package"], r.get("Test"), r["Action"]) ==
+                                     (package, name, "pass"))["Action"] = "skip"
+                            self.reject(self.run_reports(**{platform: rows}), name)
+
     def test_all_windows_skip_is_not_pass(self):
         rows = successful_report()
         for row in rows:
@@ -254,7 +283,7 @@ class ParityContracts(unittest.TestCase):
                 row["Action"] = "skip"
         result = self.run_reports(windows=rows)
         self.reject(result, "is skip")
-        self.assertIn("windows lane=trust required=62 pass=0 skip=62", result.stdout)
+        self.assertIn("windows lane=trust required=75 pass=0 skip=75", result.stdout)
 
     def test_missing_or_skipped_subtest_with_passing_parent_rejected(self):
         for status in ("missing", "skip"):
@@ -330,7 +359,7 @@ class ParityContracts(unittest.TestCase):
         rows[-1:-1] = [event("TestOptional", "run"), event("TestOptional", "skip")]
         result = self.run_reports(windows=rows)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("observed pass=62 skip=1", result.stdout)
+        self.assertIn("observed pass=75 skip=1", result.stdout)
         self.assertIn("1 other identities outside reviewed parity scope", result.stdout)
 
     def test_bound_same_run_reports_pass(self):
@@ -361,7 +390,7 @@ class ParityContracts(unittest.TestCase):
         result = self.run_reports(windows=rows, exceptions=[exception()])
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("EXCEPTION (not PASS)", result.stdout)
-        self.assertIn("windows lane=trust required=62 pass=61 skip=0 missing=1 exceptions=1", result.stdout)
+        self.assertIn("windows lane=trust required=75 pass=74 skip=0 missing=1 exceptions=1", result.stdout)
         self.assertIn("not acceptance", result.stdout)
         self.reject(self.run_reports(linux=rows, exceptions=[exception()]), "linux: required")
 
@@ -414,7 +443,7 @@ class ParityContracts(unittest.TestCase):
         next(row for row in rows if row.get("Test") == CHILD and row["Action"] == "pass")["Action"] = "skip"
         result = self.run_reports(windows=rows, exceptions=[exception()])
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("pass=61 skip=1 missing=0 exceptions=1", result.stdout)
+        self.assertIn("pass=74 skip=1 missing=0 exceptions=1", result.stdout)
         today = datetime.now(timezone.utc).date().isoformat()
         self.reject(self.run_reports(windows=rows, exceptions=[exception(expires=today)]), "expired exception")
 

@@ -92,6 +92,16 @@ PROJECT_CASES = {
         'TestProjectRuntimeRecheckBeforeArchive',
         'TestProjectMetadataSnapshotBudget',
         'TestProjectRequestedVersionBindsSignedManifest',
+        'TestInstalledSkillSourceSignedActiveProof',
+        'TestInstalledSkillSourceRejectsUnsignedAndLegacy',
+        'TestInstalledSkillSourceBindsIdentityVersionAndDeclarations',
+        'TestInstalledSkillGraphTransitiveAndCycles',
+        'TestInstalledSkillRecheckBeforeArchive',
+        'TestInstalledSkillSubjectRevocationAndClock',
+        'TestInstalledSkillNoProvisioningOrIgnoreBypass',
+        'TestInstalledSkillGraphSelectedRuntime',
+        'TestInstalledSkillSourceBoundedInputs',
+        'TestInstalledSkillSourceRejectsAmbiguousOrForeignEvidence',
     ),
     'github.com/kamir/m3c-tools/cmd/skillctl': (
         'TestInstallEnterpriseProfileActualCLI',
@@ -100,6 +110,9 @@ PROJECT_CASES = {
         'TestRuntimeFingerprintActualCLI',
         'TestRuntimeFingerprintUsageBeforeReads',
         'TestRuntimeFingerprintOutputFailure',
+        'TestInstallInstalledSkillDependenciesActualCLI',
+        'TestInstallInstalledSkillDependenciesTamperActualCLI',
+        'TestInstallInstalledSkillDependenciesRevokedActualCLI',
     ),
 }
 for _package, _cases in PROJECT_CASES.items():
