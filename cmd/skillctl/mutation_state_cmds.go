@@ -124,7 +124,7 @@ func mutationStateExitCode(err error) int {
 // readMutationEvidence retains one bounded regular-file snapshot for verification
 // and adoption. Installation must not re-read a potentially changed pathname.
 func readMutationEvidence(path string) ([]byte, error) {
-	// #nosec G703 -- --revocations explicitly selects an operator-owned local file; it is not a path confined under a remote-controlled root.
+	// #nosec G703 -- --revocations explicitly selects an operator-selected local file; it is not a path confined under a remote-controlled root.
 	before, err := os.Lstat(path)
 	if err != nil || !before.Mode().IsRegular() {
 		return nil, errors.New("trust state: evidence must be a readable regular file, not a link")
