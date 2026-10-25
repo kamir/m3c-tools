@@ -36,6 +36,10 @@ func readDigestVerifiedManifest(r io.Reader, expectedDigest string, limit int64)
 	if err != nil {
 		return nil, fmt.Errorf("unpack bundle: %w", err)
 	}
+	return manifestFromEntries(entries, 0, 10000)
+}
+
+func manifestFromEntries(entries []skillbundle.Entry, maxManifestBytes, maxDepth int) (map[string]any, error) {
 	var manifest []byte
 	found := false
 	for _, entry := range entries {
@@ -50,7 +54,10 @@ func readDigestVerifiedManifest(r io.Reader, expectedDigest string, limit int64)
 	if !found {
 		return nil, errors.New("bundle.json not found in archive")
 	}
-	if err := validateManifestJSON(manifest); err != nil {
+	if maxManifestBytes > 0 && len(manifest) > maxManifestBytes {
+		return nil, errors.New("bundle.json exceeds manifest byte limit")
+	}
+	if err := validateManifestJSON(manifest, maxDepth); err != nil {
 		return nil, fmt.Errorf("decode bundle.json: %w", err)
 	}
 	var out map[string]any
@@ -60,7 +67,7 @@ func readDigestVerifiedManifest(r io.Reader, expectedDigest string, limit int64)
 	return out, nil
 }
 
-func validateManifestJSON(raw []byte) error {
+func validateManifestJSON(raw []byte, maxDepth int) error {
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	token, err := dec.Token()
 	if err != nil {
@@ -69,7 +76,7 @@ func validateManifestJSON(raw []byte) error {
 	if token != json.Delim('{') {
 		return errors.New("manifest must be a JSON object")
 	}
-	if err := consumeManifestObject(dec, 1); err != nil {
+	if err := consumeManifestObject(dec, 1, maxDepth); err != nil {
 		return err
 	}
 	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
@@ -78,7 +85,7 @@ func validateManifestJSON(raw []byte) error {
 	return nil
 }
 
-func consumeManifestObject(dec *json.Decoder, depth int) error {
+func consumeManifestObject(dec *json.Decoder, depth, maxDepth int) error {
 	seen := make(map[string]struct{})
 	for dec.More() {
 		token, err := dec.Token()
@@ -93,7 +100,7 @@ func consumeManifestObject(dec *json.Decoder, depth int) error {
 			return errors.New("manifest contains duplicate JSON keys")
 		}
 		seen[key] = struct{}{}
-		if err := consumeManifestValue(dec, depth); err != nil {
+		if err := consumeManifestValue(dec, depth, maxDepth); err != nil {
 			return err
 		}
 	}
@@ -101,7 +108,7 @@ func consumeManifestObject(dec *json.Decoder, depth int) error {
 	return err
 }
 
-func consumeManifestValue(dec *json.Decoder, depth int) error {
+func consumeManifestValue(dec *json.Decoder, depth, maxDepth int) error {
 	token, err := dec.Token()
 	if err != nil {
 		return err
@@ -110,16 +117,17 @@ func consumeManifestValue(dec *json.Decoder, depth int) error {
 	if !nested {
 		return nil
 	}
-	// Match encoding/json's maximum nesting depth before its final Unmarshal.
-	if depth >= 10000 {
+	// Bound nesting before descending, preserving the legacy JSON limit
+	// while allowing the retained snapshot entrypoint to select a tighter cap.
+	if depth >= maxDepth {
 		return errors.New("manifest JSON exceeds maximum nesting depth")
 	}
 	switch delim {
 	case '{':
-		return consumeManifestObject(dec, depth+1)
+		return consumeManifestObject(dec, depth+1, maxDepth)
 	case '[':
 		for dec.More() {
-			if err := consumeManifestValue(dec, depth+1); err != nil {
+			if err := consumeManifestValue(dec, depth+1, maxDepth); err != nil {
 				return err
 			}
 		}

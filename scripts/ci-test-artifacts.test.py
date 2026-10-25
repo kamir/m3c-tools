@@ -50,6 +50,8 @@ class ArtifactContracts(unittest.TestCase):
                 rows = []
                 for package in packages:
                     names = lane.get("required_tests", {}).get("." + package.removeprefix(GATE.MODULE), ["TestFixture"])
+                    # Keep package success independent of every required-case mutation.
+                    names = [*names, "TestUnrelatedFixture"]
                     rows.append(dict(Package=package, Action="start"))
                     for case_name in names:
                         rows.extend([dict(Package=package, Test=case_name, Action="run"),
@@ -389,6 +391,9 @@ class ArtifactContracts(unittest.TestCase):
             ("security", "TestRuntimeTreeObservationReadOnly"),
             ("unit", "TestRuntimeTreeObservationInvalid"),
             ("security", "TestRuntimeFingerprintActualCLI"),
+            ("unit", "TestUnpackInflatedBudget"),
+            ("unit", "TestSnapshotRejectsPathReopen"),
+            ("security", "TestSnapshotBoundedInputs"),
         )
         env = dict(os.environ, TEST_PRODUCER_RESULTS=json.dumps(self.needs))
         args = [sys.executable, str(ROOT / "scripts/ci-test-artifacts.py"), str(self.root),
@@ -411,11 +416,13 @@ class ArtifactContracts(unittest.TestCase):
                         for status in ("pass", "skip", "fail")
                     }
                     metadata.write_text(json.dumps(meta))
-                    result = subprocess.run(args, env=env, capture_output=True, text=True)
-                    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-                    self.assertIn("mandatory Go scenario", result.stderr)
-                    raw.write_bytes(original_raw)
-                    metadata.write_bytes(original_metadata)
+                    try:
+                        result = subprocess.run(args, env=env, capture_output=True, text=True)
+                        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                        self.assertIn("mandatory Go scenario", result.stderr)
+                    finally:
+                        raw.write_bytes(original_raw)
+                        metadata.write_bytes(original_metadata)
 
     def test_consumer_is_in_required_always_job(self):
         data = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())

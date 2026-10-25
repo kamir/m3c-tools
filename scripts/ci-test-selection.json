@@ -102,6 +102,15 @@
           "TestProjectRuntimeRecheckBeforeArchive",
           "TestProjectMetadataSnapshotBudget",
           "TestProjectRequestedVersionBindsSignedManifest"
+        ],
+        "./pkg/skillctl/verify": [
+          "TestSnapshotSameBytesScopes",
+          "TestSnapshotRejectsPathReopen",
+          "TestSnapshotBoundedInputs",
+          "TestSnapshotExistingVerifyParity"
+        ],
+        "./pkg/skillbundle": [
+          "TestUnpackInflatedBudget"
         ]
       }
     },
@@ -213,6 +222,12 @@
           "TestRuntimeFingerprintActualCLI",
           "TestRuntimeFingerprintUsageBeforeReads",
           "TestRuntimeFingerprintOutputFailure"
+        ],
+        "./pkg/skillctl/verify": [
+          "TestSnapshotSameBytesScopes",
+          "TestSnapshotRejectsPathReopen",
+          "TestSnapshotBoundedInputs",
+          "TestSnapshotExistingVerifyParity"
         ]
       }
     },

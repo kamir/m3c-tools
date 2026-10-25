@@ -25,6 +25,10 @@ REQUIRED = {
         "TestVerify_DigestMismatch_BundleTampered",
         "TestVerify_AuthorSig_WrongPubkey",
         "TestVerify_IdentityRevoke_Sentinel",
+        "TestSnapshotSameBytesScopes",
+        "TestSnapshotRejectsPathReopen",
+        "TestSnapshotBoundedInputs",
+        "TestSnapshotExistingVerifyParity",
         "TestExitCode_Sentinels",
         "TestExitCode_Sentinels/digest_mismatch",
         "TestExitCode_Sentinels/author_sig_invalid",
@@ -63,6 +67,9 @@ DEPENDENCY_CASES = (
 REQUIRED.update({(DEPENDENCIES, name) for name in DEPENDENCY_CASES})
 # Fixed project-policy, held-session and actual CLI identities.
 PROJECT_CASES = {
+    'github.com/kamir/m3c-tools/pkg/skillbundle': (
+        'TestUnpackInflatedBudget',
+    ),
     'github.com/kamir/m3c-tools/pkg/skillctl/projectpolicy': (
         'TestProjectProfileSnapshotsAndSelection',
         'TestProjectProfileStrictInputs',

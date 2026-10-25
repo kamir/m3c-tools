@@ -35,6 +35,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/kamir/m3c-tools/pkg/skillbundle"
 	"github.com/kamir/m3c-tools/pkg/skillctl/govlevel"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/signing"
@@ -194,15 +195,18 @@ func Verify(opts VerifyOpts) (*VerifyResult, error) {
 	if err := validateOpts(opts); err != nil {
 		return nil, err
 	}
-	ctx := opts.Ctx
-	if ctx == nil {
-		ctx = context.Background()
-	}
-
 	// Step 1: recompute digest from the staged blob.
 	digestRaw, digestStr, err := stepRecomputeDigest(opts.BundlePath)
 	if err != nil {
 		return nil, err
+	}
+	return verifyDigest(opts, digestRaw, digestStr, nil)
+}
+
+func verifyDigest(opts VerifyOpts, digestRaw [sha256.Size]byte, digestStr string, snapshot *snapshotInput) (*VerifyResult, error) {
+	ctx := opts.Ctx
+	if ctx == nil {
+		ctx = context.Background()
 	}
 	logStep(opts.Logger, "digest_ok", "digest=%s", digestStr)
 
@@ -307,7 +311,30 @@ func Verify(opts VerifyOpts) (*VerifyResult, error) {
 	// bundle-row scope is read from the mutable registry row. Advisory: this
 	// never changes the verdict. A read failure is non-fatal. A chain that
 	// otherwise passed must not fail just because we could not surface scope.
-	dataScopes := collectDeclaredScopes(opts.BundlePath, digestStr, opts.BundleMeta, opts.Logger)
+	var dataScopes []DeclaredScope
+	if snapshot == nil {
+		dataScopes = collectDeclaredScopes(opts.BundlePath, digestStr, opts.BundleMeta, opts.Logger)
+	} else {
+		entries, usage, err := skillbundle.UnpackBounded(ctx, snapshot.blob, skillbundle.UnpackOptions{StripWrapper: true}, snapshot.limit)
+		snapshot.result.Usage = usage
+		if err != nil {
+			return nil, fmt.Errorf("verify: snapshot unpack: %w", errors.Join(ErrDigestMismatch, err))
+		}
+		manifest, err := manifestFromEntries(entries, 1<<20, 128)
+		if err != nil {
+			return nil, fmt.Errorf("verify: snapshot manifest: %w", errors.Join(ErrDigestMismatch, err))
+		}
+		snapshot.result.Entries = entries
+		snapshot.result.Manifest = manifest
+		for _, raw := range rawScopeList(manifest) {
+			dataScopes = append(dataScopes, DeclaredScope{Provenance: ScopeProvenanceSignedManifest, Raw: raw})
+		}
+		if opts.BundleMeta != nil {
+			for _, raw := range rawScopeList(opts.BundleMeta.Bundle) {
+				dataScopes = append(dataScopes, DeclaredScope{Provenance: ScopeProvenanceBundleRow, Raw: raw})
+			}
+		}
+	}
 	logStep(opts.Logger, "datascope_ok", "scopes=%d", len(dataScopes))
 
 	res := &VerifyResult{
@@ -332,6 +359,10 @@ func validateOpts(opts VerifyOpts) error {
 	if opts.BundlePath == "" {
 		return errors.New("verify: BundlePath is required")
 	}
+	return validateChainOpts(opts)
+}
+
+func validateChainOpts(opts VerifyOpts) error {
 	if opts.BundleMeta == nil {
 		return errors.New("verify: BundleMeta is required")
 	}
