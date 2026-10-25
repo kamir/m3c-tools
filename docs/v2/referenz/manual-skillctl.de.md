@@ -712,12 +712,42 @@ werden geprüft und vor dem ersten Austausch eines installierten Skills erneut
 geprüft. Danach prüft die gehaltene Sperre die signierte Widerrufshistorie und die
 tatsächliche Uhr erneut.
 
-Deklarierte Skill-/Agent-Abhängigkeiten verweigern aktuell mit konkretem
-Installations-/Neuinstallationshinweis, bis der vollständige Adapter für aktive,
-erhaltene Installationsnachweise verfügbar ist. Ein Verzeichnis oder eine unsignierte
-Begleitdatei erfüllt den Guard nicht. Abhängigkeiten werden nicht automatisch
-installiert. Diese Verweigerungen bedeuten keine vollständige Unterstützung oder
-Enterprise-Abnahme; ER1/Git/self und Admit-/Attest-Integration bleiben offen.
+Skill-Abhängigkeiten können eine bereits aktive HTTP-Installation verwenden, wenn
+die gewählten Vertrauensanker die Autorenschlüssel ausdrücklich pinnen. Genau eine
+reguläre erhaltene `.skb` und ein begrenzter `.skillctl-offline.json`-Umschlag liefern
+den erhaltenen Nachweis. Archivdigest und Signaturen werden unter den gewählten
+Ankern und der bestehenden Verifier-Policy geprüft. Veränderliche Projektionen im
+Umschlag werden nicht unabhängig authentifiziert; Governance folgt weiterhin dieser
+Policy. Unsignierte Identitätsfelder wählen keine Autorität.
+Signierter Name, Typ, numerische Release-Version und Abhängigkeitsdeklarationen
+bestimmen den Graphen. Entpackte Dateien müssen dem signierten Archiv entsprechen;
+unerwartete Dateien oder Verzeichnisse werden verweigert. Symlinks und Spezialdateien
+werden auch unter sonst ausgenommenen Metadatennamen verweigert. Unsignierte
+Metadaten belegen bei gemeinsam genutzten Schlüsseln nicht die Ursprungsregistry.
+
+Der vollständige transitive Graph wird gegen die gewählte Runtime geprüft und vor
+dem Zielaustausch aus frischen aktiven Nachweisen erneut geprüft. Anschließend prüft
+die gehaltene Trust-Sitzung den Root-Digest und jeden Abhängigkeitsdigest gegen die
+erhaltenen Widerrufe und die aktuelle Uhr. Widerruf und fehlende Aktualität behalten
+Exit `17` und `22`; unbrauchbare Abhängigkeitsnachweise liefern `14`. Aktive
+Verzeichnisidentität und Descriptor-Freigabe werden geprüft; dies ist kein atomarer
+Dateisystem-Snapshot und keine Isolation gegenüber einem feindlichen lokalen Betreiber.
+
+Jede Nachweisphase begrenzt ausdrücklich verwaltete Handles insgesamt auf 64,
+einschließlich Ankern und temporären Datei-/Verzeichnis-Handles; aggregierte reservierte
+Arbeit ist auf 512 MiB begrenzt, Einträge auf 100.000, relative Pfadbytes auf 4 MiB, Pfadlänge auf
+4096 und Tiefe auf 128. Metadaten sind auf 1 MiB und erhaltene komprimierte Archive
+auf 256 MiB begrenzt. Das verbleibende Pfad-/Eintragsbudget begrenzt zusätzlich jeden
+entpackten Stream konservativ; Decoder-Arbeit reserviert das 64-Fache der Streambytes.
+Große sonst gültige Archive können daher unterhalb des Archivlimits verweigert
+werden. Zwischen I/O-Operationen wird Abbruch geprüft; blockierte Dateisystemoperationen
+haben dadurch keine garantierte Frist.
+
+Agenten und erhaltene Nachweise, deren Autorenschlüssel von der Registry autorisiert
+werden müssen, bleiben mit Installations-/Neuinstallationshinweis gesperrt. Ein Verzeichnis oder eine unsignierte Begleitdatei allein
+erfüllt den Guard nicht. Abhängigkeiten werden nicht automatisch installiert. Diese
+Verweigerungen bedeuten keine vollständige Unterstützung oder Enterprise-Abnahme;
+ER1/Git/self und Admit-/Attest-Integration bleiben offen.
 Status und Diagnose benötigen dieses Installationsprofil nicht.
 
 Für MCP `skill_install` setzt der Betreiber `SKILLCTL_ENTERPRISE_PROFILE`,

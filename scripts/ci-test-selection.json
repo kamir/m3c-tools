@@ -92,7 +92,8 @@
           "TestSessionRecheckInvalidInputsDoNotWrite",
           "TestSessionRecheckRejectsHistoryReplacement",
           "TestSessionRecheckPersistenceUncertaintyInvalidatesSession",
-          "TestSessionRecheckCloseAndDecisionConcurrent"
+          "TestSessionRecheckCloseAndDecisionConcurrent",
+          "TestStateRealProcessLock"
         ],
         "./pkg/skillctl/install": [
           "TestProjectManagedInstallRequiresPolicyBeforeIO",
@@ -101,7 +102,17 @@
           "TestProjectManagedInstallActualSignedRoutes",
           "TestProjectRuntimeRecheckBeforeArchive",
           "TestProjectMetadataSnapshotBudget",
-          "TestProjectRequestedVersionBindsSignedManifest"
+          "TestProjectRequestedVersionBindsSignedManifest",
+          "TestInstalledSkillSourceSignedActiveProof",
+          "TestInstalledSkillSourceRejectsUnsignedAndLegacy",
+          "TestInstalledSkillSourceBindsIdentityVersionAndDeclarations",
+          "TestInstalledSkillGraphTransitiveAndCycles",
+          "TestInstalledSkillRecheckBeforeArchive",
+          "TestInstalledSkillSubjectRevocationAndClock",
+          "TestInstalledSkillNoProvisioningOrIgnoreBypass",
+          "TestInstalledSkillGraphSelectedRuntime",
+          "TestInstalledSkillSourceBoundedInputs",
+          "TestInstalledSkillSourceRejectsAmbiguousOrForeignEvidence"
         ],
         "./pkg/skillctl/verify": [
           "TestSnapshotSameBytesScopes",
@@ -204,7 +215,8 @@
           "TestSessionRecheckInvalidInputsDoNotWrite",
           "TestSessionRecheckRejectsHistoryReplacement",
           "TestSessionRecheckPersistenceUncertaintyInvalidatesSession",
-          "TestSessionRecheckCloseAndDecisionConcurrent"
+          "TestSessionRecheckCloseAndDecisionConcurrent",
+          "TestStateRealProcessLock"
         ],
         "./pkg/skillctl/install": [
           "TestProjectManagedInstallRequiresPolicyBeforeIO",
@@ -213,7 +225,17 @@
           "TestProjectManagedInstallActualSignedRoutes",
           "TestProjectRuntimeRecheckBeforeArchive",
           "TestProjectMetadataSnapshotBudget",
-          "TestProjectRequestedVersionBindsSignedManifest"
+          "TestProjectRequestedVersionBindsSignedManifest",
+          "TestInstalledSkillSourceSignedActiveProof",
+          "TestInstalledSkillSourceRejectsUnsignedAndLegacy",
+          "TestInstalledSkillSourceBindsIdentityVersionAndDeclarations",
+          "TestInstalledSkillGraphTransitiveAndCycles",
+          "TestInstalledSkillRecheckBeforeArchive",
+          "TestInstalledSkillSubjectRevocationAndClock",
+          "TestInstalledSkillNoProvisioningOrIgnoreBypass",
+          "TestInstalledSkillGraphSelectedRuntime",
+          "TestInstalledSkillSourceBoundedInputs",
+          "TestInstalledSkillSourceRejectsAmbiguousOrForeignEvidence"
         ],
         "./cmd/skillctl": [
           "TestInstallEnterpriseProfileActualCLI",
@@ -221,7 +243,10 @@
           "TestInstallEnterpriseProfileHTTPPreflightActualCLI",
           "TestRuntimeFingerprintActualCLI",
           "TestRuntimeFingerprintUsageBeforeReads",
-          "TestRuntimeFingerprintOutputFailure"
+          "TestRuntimeFingerprintOutputFailure",
+          "TestInstallInstalledSkillDependenciesActualCLI",
+          "TestInstallInstalledSkillDependenciesTamperActualCLI",
+          "TestInstallInstalledSkillDependenciesRevokedActualCLI"
         ],
         "./pkg/skillctl/verify": [
           "TestSnapshotSameBytesScopes",

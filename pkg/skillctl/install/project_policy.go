@@ -3,6 +3,7 @@ package install
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -77,34 +78,71 @@ func prepareProjectDependencies(ctx context.Context, policy *projectpolicy.Polic
 	if kind != "skill" {
 		return nil, fmt.Errorf("install: HTTP project install supports skill bundles only: %w", verify.ErrDepsUnsatisfied)
 	}
-	for _, d := range assessment.Declarations {
-		if d.Kind == "skill" || d.Kind == "agent" {
-			if len(d.Name) > 128 {
-				return nil, verify.ErrDepsUnsatisfied
-			}
-			if _, err := CanonicalSkillName(d.Name); err != nil {
-				return nil, verify.ErrDepsUnsatisfied
-			}
-			return nil, fmt.Errorf("install: dependency %s %q requires an already installed cryptographically verified artifact; install or reinstall it from the selected registry after retained-proof support is available: %w", d.Kind, d.Name, verify.ErrDepsUnsatisfied)
-		}
-	}
-	resolver, err := dependencies.NewResolver(policy.Runtime(), nil)
-	if err != nil {
-		return nil, fmt.Errorf("install: invalid project runtime: %w", verify.ErrDepsUnsatisfied)
-	}
 	root := dependencies.Artifact{Authority: policy.ProfileDigest(), Kind: kind, Name: manifestName, Version: version, Digest: verified.Digest, Declarations: assessment.Declarations}
-	report, err := resolver.Resolve(ctx, root)
+	resolve := func(expectedLock string, final func(*dependencies.Report) error) (*dependencies.Report, error) {
+		source := newInstalledSkillSource(policy)
+		resolver, err := dependencies.NewResolver(policy.Runtime(), source)
+		if err != nil {
+			return nil, errors.Join(verify.ErrDepsUnsatisfied, source.Close())
+		}
+		var report *dependencies.Report
+		if expectedLock == "" {
+			report, err = resolver.Resolve(ctx, root)
+		} else {
+			report, err = resolver.Recheck(ctx, root, expectedLock)
+		}
+		if err == nil {
+			err = source.validateProofs(ctx)
+		}
+		if source.terminal != nil {
+			err = source.terminal
+		}
+		if err == nil && final != nil {
+			finalErr := final(report)
+			if finalErr != nil {
+				return nil, errors.Join(finalErr, source.Close())
+			}
+		}
+		err = errors.Join(err, source.Close())
+		if err != nil {
+			return nil, fmt.Errorf("install: project dependencies require matching active retained proof: %w", errors.Join(verify.ErrDepsUnsatisfied, err))
+		}
+		return report, nil
+	}
+	report, err := resolve("", nil)
 	if err != nil {
-		return nil, fmt.Errorf("install: project dependencies unresolved: %w", verify.ErrDepsUnsatisfied)
+		return nil, err
 	}
 	return func() error {
-		if _, err := resolver.Recheck(ctx, root, report.LockDigest); err != nil {
-			return fmt.Errorf("install: project dependency recheck failed: %w", errors.Join(verify.ErrDepsUnsatisfied, err))
-		}
-		if _, err := session.Recheck(ctx); err != nil {
-			return managedInstallStateError(err)
-		}
-		return nil
+		_, err := resolve(report.LockDigest, func(fresh *dependencies.Report) error {
+			// Recheck always includes Begin's original. Convert the resolver's
+			// validated raw-hex representation to the session's canonical form.
+			seen := map[string]bool{root.Digest: true}
+			var digests []string
+			for _, artifact := range fresh.Artifacts {
+				d := artifact.Digest
+				if len(d) != 64 || d != strings.ToLower(d) {
+					return verify.ErrDepsUnsatisfied
+				}
+				if _, err := hex.DecodeString(d); err != nil {
+					return verify.ErrDepsUnsatisfied
+				}
+				d = "sha256:" + d
+				if seen[d] {
+					continue
+				}
+				if len(seen) >= mutationstate.MaxSessionSubjects {
+					return verify.ErrDepsUnsatisfied
+				}
+				seen[d] = true
+				digests = append(digests, d)
+			}
+			if decision, err := session.Recheck(ctx, digests...); err != nil {
+				return fmt.Errorf("install: final mutation evidence %s: %w", decision.Reason, managedInstallStateError(err))
+			}
+			return nil
+		})
+		return err
 	}, nil
 }
 
@@ -138,6 +176,12 @@ func projectManifest(blob []byte) (map[string]any, error) {
 	if json.Unmarshal(raw, &out) != nil || out == nil {
 		return nil, verify.ErrDigestMismatch
 	}
+	return validateProjectManifest(out)
+}
+func validateProjectManifest(out map[string]any) (map[string]any, error) {
+	if out == nil {
+		return nil, verify.ErrDigestMismatch
+	}
 	for key := range out {
 		for _, canonical := range []string{"name", "version", "kind", "schema", "depends_on", "package_dependencies", "data_dependencies"} {
 			if key != canonical && strings.EqualFold(key, canonical) {
@@ -147,6 +191,7 @@ func projectManifest(blob []byte) (map[string]any, error) {
 	}
 	return out, nil
 }
+
 func manifestJSONValue(d *json.Decoder, depth int) error {
 	if depth > 128 {
 		return verify.ErrDigestMismatch
@@ -193,26 +238,8 @@ func manifestJSONValue(d *json.Decoder, depth int) error {
 // Bound caller-owned metadata before JSON snapshot allocation. Maps are wire
 // JSON values, not arbitrary caller objects with custom marshal callbacks.
 func snapshotProjectMeta(meta *registry.BundleMeta) (*registry.BundleMeta, error) {
-	if meta == nil || len(meta.Signatures) > 4096 || len(meta.Attestations) > 4096 {
-		return nil, verify.ErrRegistryNotTrusted
-	}
-	b := metaBudget{}
-	if !b.value(meta.Bundle, 0) || !b.value(meta.Manifest, 0) || !b.text(meta.CurrentGovernance) {
-		return nil, verify.ErrRegistryNotTrusted
-	}
-	for _, s := range meta.Signatures {
-		for _, v := range []string{s.Role, s.IdentityID, s.SignatureB64, s.PubkeyFingerprint, s.Status} {
-			if !b.text(v) {
-				return nil, verify.ErrRegistryNotTrusted
-			}
-		}
-	}
-	for _, a := range meta.Attestations {
-		for _, v := range []string{a.AttestationID, a.Level, a.ReviewerID, a.AttestedAt, a.Rationale, a.SignatureB64, a.Status, a.TenantScope, a.AuthorID} {
-			if !b.text(v) {
-				return nil, verify.ErrRegistryNotTrusted
-			}
-		}
+	if err := validateProjectMeta(meta); err != nil {
+		return nil, err
 	}
 	raw, err := json.Marshal(meta)
 	if err != nil {
@@ -223,6 +250,31 @@ func snapshotProjectMeta(meta *registry.BundleMeta) (*registry.BundleMeta, error
 		return nil, verify.ErrRegistryNotTrusted
 	}
 	return &out, nil
+}
+
+func validateProjectMeta(meta *registry.BundleMeta) error {
+	if meta == nil || len(meta.Signatures) > 4096 || len(meta.Attestations) > 4096 {
+		return verify.ErrRegistryNotTrusted
+	}
+	b := metaBudget{}
+	if !b.value(meta.Bundle, 0) || !b.value(meta.Manifest, 0) || !b.text(meta.CurrentGovernance) {
+		return verify.ErrRegistryNotTrusted
+	}
+	for _, s := range meta.Signatures {
+		for _, v := range []string{s.Role, s.IdentityID, s.SignatureB64, s.PubkeyFingerprint, s.Status} {
+			if !b.text(v) {
+				return verify.ErrRegistryNotTrusted
+			}
+		}
+	}
+	for _, a := range meta.Attestations {
+		for _, v := range []string{a.AttestationID, a.Level, a.ReviewerID, a.AttestedAt, a.Rationale, a.SignatureB64, a.Status, a.TenantScope, a.AuthorID} {
+			if !b.text(v) {
+				return verify.ErrRegistryNotTrusted
+			}
+		}
+	}
+	return nil
 }
 
 type metaBudget struct{ bytes, nodes int }
