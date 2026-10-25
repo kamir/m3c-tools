@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/kamir/m3c-tools/pkg/skillbundle"
+	"github.com/kamir/m3c-tools/pkg/skillctl/mutationstate"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
 )
@@ -44,6 +46,25 @@ func managedEvidenceRoots(t *testing.T, f installableFixture, managed bool, fail
 	policy, err := root.Freshness()
 	if err != nil || policy.MaxStaleness != 24*time.Hour || string(policy.FailPolicy) != failPolicy {
 		t.Fatalf("fixture freshness policy differs: %+v error=%v", policy, err)
+	}
+	if managed {
+		// Valid managed fixtures now include an explicit prior enrollment event.
+		// Candidate list generation remains separate, including invalid cases.
+		list, err := verify.NewSignedRevocationList(f.regURL, time.Now().UTC().Add(-2*time.Hour).Format(time.RFC3339Nano), 1, nil, f.regPriv)
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw, err := json.Marshal(list)
+		if err != nil {
+			t.Fatal(err)
+		}
+		store, err := mutationstate.New(filepath.Join(f.home, ".claude", "mutation-state"), root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store.Enroll(context.Background(), raw); err != nil {
+			t.Fatalf("explicit fixture enrollment: %v", err)
+		}
 	}
 	return root
 }

@@ -5,8 +5,8 @@
     {
       "de": "docs/component-index.de.md",
       "en": "docs/component-index.md",
-      "de_sha256": "5028a4259957328c79c09b7c646059973786ee7546b5c8c1f860f4fbe5ce31bd",
-      "en_sha256": "98537a98b72f079174ebd0fbba164160361afb6392690ecc4590b0e7847604f9"
+      "de_sha256": "51a2b653383fbc880e8685f6bb162d6811a6640bc64229a1a69e55809d3ff55c",
+      "en_sha256": "21f03da31e4609002f33f4ebc0f3b58d7c32530573307fa9425b7865db86d335"
     },
     {
       "de": "docs/index.md",
@@ -179,8 +179,8 @@
     {
       "de": "docs/v2/referenz/manual-skillctl.de.md",
       "en": "docs/v2/referenz/manual-skillctl.md",
-      "de_sha256": "3bdc194b6d8e22eb4b11def88c1d042d78f7e9dbb85d0295fc45f6ac0d20c6a5",
-      "en_sha256": "167d5e6ac1f30793394c9f7cffd6a59487ce43ebc25c0b7b3af07d63350c138d"
+      "de_sha256": "45846dc37cb31c479f9ff27dae0eddb5a8c04e60db85db02667630089f8af987",
+      "en_sha256": "f37c91e208368f2fee4297c4392f482e1a620550d6d27b5a6a01ca197197c0d3"
     },
     {
       "de": "docs/v2/sicherheit/audit-spur.de.md",

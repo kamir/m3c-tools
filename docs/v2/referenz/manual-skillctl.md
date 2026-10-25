@@ -359,6 +359,63 @@ skillctl trust remove --registry https://aims.example.com/api/skills
 
 ---
 
+**`trust state`: local managed mutation history**
+
+Use `trust state enroll` once before a local managed bundle installation. It
+requires both `--profile local-operator-v1` and `--confirm-local-trust`: the
+operator explicitly trusts the local operator and OS wall clock. Enrollment
+creates a registry-specific history below `<home>/.claude/mutation-state` and
+refuses an existing or reserved registry directory, including incomplete state.
+Use the same `--home`, selected registry and pinned trust-root configuration for
+state commands and installation.
+
+`trust state status` prints JSON metadata (registry, root/evidence fingerprints,
+epoch, issuance and last observed clock). It never enrolls, repairs or refreshes
+the observation and can diagnose authenticated stale evidence. Status success is
+not permission to install. `trust state adopt` requires existing valid history
+and a fresh complete signed list; it cannot lower the epoch or signed issuance.
+At the same epoch, a refresh must preserve the revoked set. Full-list input is
+limited to 1 MiB and must be a regular file, not a symlink.
+
+```bash
+skillctl trust state enroll --trust-roots roots.yaml --registry https://registry.example/api/skills --home ./demo-home --revocations revocations.json --profile local-operator-v1 --confirm-local-trust
+skillctl trust state status --trust-roots roots.yaml --registry https://registry.example/api/skills --home ./demo-home
+skillctl trust state adopt --trust-roots roots.yaml --registry https://registry.example/api/skills --home ./demo-home --revocations revocations.json
+skillctl install --bundle demo@1.0.0.skb --trust-roots roots.yaml --registry https://registry.example/api/skills --home ./demo-home --revocations revocations.json
+```
+
+Managed local `install --bundle` still requires `--revocations`. It retains one
+bounded snapshot and adopts valid fresh evidence into existing history even if
+the requested subject is revoked or another optional policy input later refuses
+the operation. A later old list cannot erase that adopted floor. Immediately
+before staging, the command rechecks persisted history and durably advances the
+local observation under an exclusive OS lock held through installation. Missing,
+corrupt state, evidence below the retained floor or unconfirmed state writes deny installation. A failure
+after state advancement may leave newer history without a completed install;
+state and skill publication are not one atomic transaction. Lock-close failure
+reports uncertain completion; inspect status rather than assuming rollback.
+The JSON `freshness` field describes the snapshot-age check; overall `ok` describes
+the command result, including subsequent state checks.
+
+This model requires an owner- or OS-controlled local home and parent paths;
+do not place state under an untrusted shared writable parent. Selected state
+permissions are checked, but the entire ancestor ACL chain is not verified.
+It rejects newly presented epochs or clock readings below retained history
+across ordinary restarts and coordinates cooperating writers. Restoring an older
+complete valid history record or directory is not detected without an external
+anchor. It does not protect against malicious same-user changes, administrator
+control or full machine/snapshot rollback. Root-policy
+fingerprint changes require separate operator recovery; they never silently
+create a new baseline.
+
+There is no `reset`, `--force` or automated recovery executor. Recovery requires
+a documented two-person operations process; this CLI does not authenticate those
+approvals. Preserve original state and diagnostics, and escalate lost history,
+incomplete enrollment or a corrected clock behind its recorded floor. Never
+silently delete history and reenroll. Other install/admit/attest routes, full
+dependency enforcement and customer-platform acceptance remain separate work.
+
+
 ### `peer`: pin a federated peer registry (SPEC-0359)
 
 ```bash
@@ -452,9 +509,10 @@ unversioned list is untrusted (`12`). A checkpoint cannot refresh that full
 list, and low-risk execution fail-open policy cannot allow a stale installation.
 Explicit checkpoints and emergency files still undergo verification.
 
-This local bundle check uses the current wall clock. Durable clock/epoch
-rollback protection and equivalent enforcement on other installation routes
-remain unimplemented; this check alone does not establish Enterprise readiness.
+Managed local bundles also require explicit prior `trust state enroll`. The
+local durable observation detects unintended clock/epoch rollback under the
+local-operator model described in `trust state`. Other installation routes and
+customer acceptance remain open; this check alone does not establish Enterprise readiness.
 
 | Flag | Purpose |
 |------|---------|
