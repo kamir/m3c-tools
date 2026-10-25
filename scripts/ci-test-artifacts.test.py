@@ -119,6 +119,29 @@ class ArtifactContracts(unittest.TestCase):
         meta_path.write_bytes(metadata)
         self.assertEqual(set(self.run_gate()), set(self.config["lanes"]))
 
+    def test_mcp_bridge_identity_from_directory_producer(self):
+        # The real lane runs pytest with cwd=mcp-skill-server, not repo root.
+        # Keep this producer identity independent of catalog-generated fixtures.
+        raw, metadata_path = self.paths["python-mcp"]
+        report = ('<testsuite tests="2" errors="0" failures="0" skipped="0">'
+                  '<testcase classname="test_other" name="passing_control"/>'
+                  '<testcase classname="test_enterprise_profile" '
+                  'name="test_real_cli_enterprise_profile_and_stdio"/></testsuite>')
+        raw.write_text(report)
+        metadata = json.loads(metadata_path.read_text())
+        metadata["result_sha256"] = hashlib.sha256(raw.read_bytes()).hexdigest()
+        metadata["test_counts"] = GATE.python_counts(raw.read_bytes())
+        metadata_path.write_text(json.dumps(metadata))
+        self.assertIn("python-mcp", self.run_gate())
+        # A repo-root name must fail even when producer selection and digest
+        # metadata are rebound consistently to that incorrect catalog value.
+        wrong_lane = self.config["lanes"]["python-mcp"]
+        wrong_lane["required_cases"][0]["classname"] = "mcp-skill-server.test_enterprise_profile"
+        metadata["selection"] = wrong_lane
+        metadata_path.write_text(json.dumps(metadata))
+        with self.assertRaisesRegex(ValueError, "required Python case"):
+            self.run_gate()
+
     def test_required_python_identity_configuration_is_strict(self):
         valid = dict(classname="suite", name="case")
         report = '<testsuite><testcase classname="suite" name="case"/></testsuite>'

@@ -282,7 +282,7 @@
       "via": "scripts/check-python.sh",
       "required_cases": [
         {
-          "classname": "mcp-skill-server.test_enterprise_profile",
+          "classname": "test_enterprise_profile",
           "name": "test_real_cli_enterprise_profile_and_stdio"
         }
       ]
