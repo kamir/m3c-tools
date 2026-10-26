@@ -243,14 +243,14 @@ func TestPullNativeEnterpriseProfilePreflightActualCLI(t *testing.T) {
 			t.Fatalf("valid diagnostic became mutation or wrong refusal: exit%d %s", code, text)
 		}
 	})
-	for _, mode := range []string{"valid", "git-carrier", "foreign-registry", "dryrun", "confirm", "empty-profile", "missing-profile", "bad-pin", "pin-without-profile", "home-without-profile", "help", "unknown-kind"} {
+	for _, mode := range []string{"valid", "git-carrier", "unsupported-local-locator", "foreign-registry", "dryrun", "confirm", "empty-profile", "missing-profile", "bad-pin", "pin-without-profile", "home-without-profile", "help", "unknown-kind"} {
 		t.Run(mode, func(t *testing.T) {
 			f := nativeCLIQAProfileFixture(t)
 			args := []string{"pull", "--enterprise-profile", f.path, "--enterprise-profile-sha256", f.pin, "--home", f.home}
 			want := 12
 			unavailable := true
 			switch mode {
-			case "git-carrier":
+			case "git-carrier", "unsupported-local-locator":
 				raw, err := os.ReadFile(f.path)
 				if err != nil {
 					t.Fatal(err)
@@ -259,11 +259,25 @@ func TestPullNativeEnterpriseProfilePreflightActualCLI(t *testing.T) {
 				if err = json.Unmarshal(raw, &doc); err != nil {
 					t.Fatal(err)
 				}
-				locator := "local://" + t.TempDir()
+				// Use a platform-independent supported Git selector. Windows drive
+				// paths concatenated with local:// are deliberately unsupported.
+				locator := "github://example.invalid/owner/repo"
+				if mode == "unsupported-local-locator" {
+					locator = "local://C:\\fixture\\repository"
+					unavailable = false
+				}
 				doc["native"].(map[string]any)["carrier"] = map[string]any{"kind": "git", "locator": locator}
 				ref := nativeCLIQAWrite(t, f.path, doc)
 				args[4] = ref["sha256"]
 				args = append(args, "--registry", locator)
+				policy, selectedErr := projectpolicy.LoadNativePinned(f.path, ref["sha256"], f.project, f.home)
+				if mode == "git-carrier" {
+					if selectedErr != nil || policy == nil || policy.CarrierSelection().Locator != locator || policy.ValidateSelection(f.project, f.home, locator) != nil {
+						t.Fatalf("Git fixture must select valid native policy before CLI denial: %v", selectedErr)
+					}
+				} else if policy != nil || !errors.Is(selectedErr, projectpolicy.ErrUnsupported) {
+					t.Fatalf("unsupported local locator was accepted: %v", selectedErr)
+				}
 			case "foreign-registry":
 				args = append(args, "--registry", "er1://foreign.invalid")
 				unavailable = false
