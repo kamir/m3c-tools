@@ -26,6 +26,9 @@ const NativeSchema = "m3c.enterprise-project-profile/v2"
 // NativeEvidenceSchema adds an explicit public revocation evidence source.
 const NativeEvidenceSchema = "m3c.enterprise-project-profile/v3"
 
+// NativeLiveSchema adds explicit live ER1 credential and TLS selection.
+const NativeLiveSchema = "m3c.enterprise-project-profile/v4"
+
 // NativeCarrierSelection is copied operator provenance, not signed carrier origin.
 type NativeCarrierSelection struct {
 	Kind              string
@@ -44,6 +47,8 @@ type NativePolicy struct {
 	authority                        *registry.NativeRevocationAuthority
 	runtime                          dependencies.Profile
 	source                           *registry.NativeEvidenceSource
+	live                             *registry.NativeLiveAgentSource
+	liveBinding                      nativeLiveBinding
 }
 type nativeDocument struct {
 	Schema       string        `json:"schema"`
@@ -105,11 +110,11 @@ func loadNative(path, expected, actualProject, actualHome string) (*NativePolicy
 		return nil, e
 	}
 	var schema string
-	if json.Unmarshal(top["schema"], &schema) != nil || (schema != NativeSchema && schema != NativeEvidenceSchema) {
+	if json.Unmarshal(top["schema"], &schema) != nil || (schema != NativeSchema && schema != NativeEvidenceSchema && schema != NativeLiveSchema) {
 		return nil, ErrInvalid
 	}
 	keys := []string{"logical_registry", "authority_scope", "tenant_scope", "artifact_trust", "revocation_trust", "revocation_policy", "carrier"}
-	if schema == NativeEvidenceSchema {
+	if schema == NativeEvidenceSchema || schema == NativeLiveSchema {
 		keys = append(keys, "revocation_source")
 	}
 	mapping, e := nativeObjectAllowUnsupported(top["native"], keys...)
@@ -145,50 +150,59 @@ func loadNative(path, expected, actualProject, actualHome string) (*NativePolicy
 		return nil, ErrInvalid
 	}
 	carrier := NativeCarrierSelection{Kind: n.Carrier.Kind}
-	switch n.Carrier.Kind {
-	case "er1":
-		if _, e = nativeObject(mapping["carrier"], "kind", "base_url", "context_id", "allow_loopback_http"); e != nil {
-			return nil, e
-		}
-		var carrierObject map[string]json.RawMessage
-		if json.Unmarshal(mapping["carrier"], &carrierObject) != nil || (string(carrierObject["allow_loopback_http"]) != "true" && string(carrierObject["allow_loopback_http"]) != "false") {
-			return nil, ErrInvalid
-		}
-		if !nativeText(n.Carrier.BaseURL, 8192) || !nativeText(n.Carrier.ContextID, 8192) {
-			return nil, ErrInvalid
-		}
-		base, e := httpsafe.ParseAPIBase(n.Carrier.BaseURL, n.Carrier.AllowLoopbackHTTP)
-		if e != nil {
-			return nil, ErrInvalid
-		}
-		carrier.BaseURL = strings.TrimRight(base.URL, "/")
-		carrier.ContextID = n.Carrier.ContextID
-		carrier.AllowLoopbackHTTP = n.Carrier.AllowLoopbackHTTP
-		carrier.Locator = n.LogicalRegistry
-	case "git":
-		if _, e = nativeObject(mapping["carrier"], "kind", "locator"); e != nil {
-			return nil, e
-		}
-		locator := n.Carrier.Locator
-		if !nativeText(locator, 4096) || strings.Contains(locator, "@") || strings.ContainsAny(locator, "?#") {
+	if schema == NativeLiveSchema {
+		if n.Carrier.Kind != "er1" {
 			return nil, ErrUnsupported
 		}
-		switch {
-		case strings.HasPrefix(locator, "local:///"):
-			if !filepath.IsAbs(strings.TrimPrefix(locator, "local://")) {
+		carrier.Locator = n.LogicalRegistry
+		carrier.BaseURL = n.Carrier.BaseURL
+		carrier.ContextID = n.Carrier.ContextID
+	} else {
+		switch n.Carrier.Kind {
+		case "er1":
+			if _, e = nativeObject(mapping["carrier"], "kind", "base_url", "context_id", "allow_loopback_http"); e != nil {
+				return nil, e
+			}
+			var carrierObject map[string]json.RawMessage
+			if json.Unmarshal(mapping["carrier"], &carrierObject) != nil || (string(carrierObject["allow_loopback_http"]) != "true" && string(carrierObject["allow_loopback_http"]) != "false") {
 				return nil, ErrInvalid
 			}
-		case strings.HasPrefix(locator, "gitlab://"), strings.HasPrefix(locator, "github://"):
-			rest := strings.TrimPrefix(strings.TrimPrefix(locator, "gitlab://"), "github://")
-			if rest == "" || strings.Contains(rest, ":") || strings.Contains(rest, "//") || strings.Contains(rest, "\\") || strings.Contains(rest, "..") || strings.HasSuffix(rest, "/") {
+			if !nativeText(n.Carrier.BaseURL, 8192) || !nativeText(n.Carrier.ContextID, 8192) {
 				return nil, ErrInvalid
 			}
+			base, e := httpsafe.ParseAPIBase(n.Carrier.BaseURL, n.Carrier.AllowLoopbackHTTP)
+			if e != nil {
+				return nil, ErrInvalid
+			}
+			carrier.BaseURL = strings.TrimRight(base.URL, "/")
+			carrier.ContextID = n.Carrier.ContextID
+			carrier.AllowLoopbackHTTP = n.Carrier.AllowLoopbackHTTP
+			carrier.Locator = n.LogicalRegistry
+		case "git":
+			if _, e = nativeObject(mapping["carrier"], "kind", "locator"); e != nil {
+				return nil, e
+			}
+			locator := n.Carrier.Locator
+			if !nativeText(locator, 4096) || strings.Contains(locator, "@") || strings.ContainsAny(locator, "?#") {
+				return nil, ErrUnsupported
+			}
+			switch {
+			case strings.HasPrefix(locator, "local:///"):
+				if !filepath.IsAbs(strings.TrimPrefix(locator, "local://")) {
+					return nil, ErrInvalid
+				}
+			case strings.HasPrefix(locator, "gitlab://"), strings.HasPrefix(locator, "github://"):
+				rest := strings.TrimPrefix(strings.TrimPrefix(locator, "gitlab://"), "github://")
+				if rest == "" || strings.Contains(rest, ":") || strings.Contains(rest, "//") || strings.Contains(rest, "\\") || strings.Contains(rest, "..") || strings.HasSuffix(rest, "/") {
+					return nil, ErrInvalid
+				}
+			default:
+				return nil, ErrUnsupported
+			}
+			carrier.Locator = locator
 		default:
 			return nil, ErrUnsupported
 		}
-		carrier.Locator = locator
-	default:
-		return nil, ErrUnsupported
 	}
 	project, e1 := canonicalDirectory(doc.ProjectRoot)
 	home, e2 := canonicalDirectory(doc.ArtifactHome)
@@ -207,11 +221,21 @@ func loadNative(path, expected, actualProject, actualHome string) (*NativePolicy
 	dir := filepath.Dir(absolute)
 	var source *registry.NativeEvidenceSource
 	var sourceBinding nativeSourceBinding
-	if schema == NativeEvidenceSchema {
+	if schema == NativeEvidenceSchema || schema == NativeLiveSchema {
 		source, sourceBinding, e = parseNativeEvidenceSource(dir, mapping["revocation_source"])
 		if e != nil {
 			return nil, e
 		}
+	}
+	var live *registry.NativeLiveAgentSource
+	var liveBinding nativeLiveBinding
+	if schema == NativeLiveSchema {
+		live, liveBinding, e = parseNativeLiveSource(dir, mapping["carrier"])
+		if e != nil {
+			return nil, e
+		}
+		carrier.BaseURL = liveBinding.BaseURL
+		carrier.ContextID = liveBinding.ContextID
 	}
 	artifactRaw, e := readNativeRef(dir, n.ArtifactTrust, maxTrustBytes)
 	if e != nil {
@@ -260,7 +284,7 @@ func loadNative(path, expected, actualProject, actualHome string) (*NativePolicy
 	if e != nil {
 		return nil, ErrInvalid
 	}
-	if schema == NativeEvidenceSchema {
+	if schema == NativeEvidenceSchema || schema == NativeLiveSchema {
 		selectionBytes, e = json.Marshal(struct {
 			Domain, Project, Home, Authority string
 			Carrier                          NativeCarrierSelection
@@ -270,8 +294,19 @@ func loadNative(path, expected, actualProject, actualHome string) (*NativePolicy
 			return nil, ErrInvalid
 		}
 	}
+	if schema == NativeLiveSchema {
+		selectionBytes, e = json.Marshal(struct {
+			Domain, Project, Home, Authority string
+			Carrier                          NativeCarrierSelection
+			Source                           nativeSourceBinding
+			Live                             nativeLiveBinding
+		}{"m3c.native-selection/v3", project, home, authority.HistoryAuthorityID(), carrier, sourceBinding, liveBinding})
+		if e != nil {
+			return nil, ErrInvalid
+		}
+	}
 	selectionSHA := sha256.Sum256(selectionBytes)
-	return &NativePolicy{project: project, home: home, digest: hex.EncodeToString(sum[:]), selection: hex.EncodeToString(selectionSHA[:]), carrier: carrier, roots: roots, authority: authority, runtime: runtimeProfile, source: source}, nil
+	return &NativePolicy{project: project, home: home, digest: hex.EncodeToString(sum[:]), selection: hex.EncodeToString(selectionSHA[:]), carrier: carrier, roots: roots, authority: authority, runtime: runtimeProfile, source: source, live: live, liveBinding: liveBinding}, nil
 }
 func nativeObject(raw []byte, keys ...string) (map[string]json.RawMessage, error) {
 	var object map[string]json.RawMessage

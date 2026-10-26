@@ -16,11 +16,14 @@ import (
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
 )
 
-// runTrustNativeState exposes only explicit adoption into already enrolled history.
+// runTrustNativeState exposes explicit initial enrollment and evidence adoption.
 // It never resolves legacy registry settings, credentials or install permissions.
 func runTrustNativeState(args []string, stdout, stderr io.Writer) int {
 	if stdout == nil || stderr == nil {
 		return exitUsage
+	}
+	if len(args) > 0 && args[0] == "enroll" {
+		return runNativeStateEnroll(args[1:], stdout, stderr)
 	}
 	if len(args) == 1 && (args[0] == "--help" || args[0] == "-h" || args[0] == "help") {
 		return writeNativeStateHelp(stdout)
@@ -111,7 +114,7 @@ func runTrustNativeState(args []string, stdout, stderr io.Writer) int {
 }
 
 func writeNativeStateHelp(w io.Writer) int {
-	const help = "Usage: skillctl trust native-state adopt --enterprise-profile ABS [--enterprise-profile-sha256 SHA] [--home H] [--json]\nExplicitly adopt complete signed evidence from the profile's HTTPS source into existing native history. No enrollment, reset or installation grant.\n"
+	const help = "Usage: skillctl trust native-state adopt --enterprise-profile ABS [--enterprise-profile-sha256 SHA] [--home H] [--json]\n       skillctl trust native-state enroll --enterprise-profile ABS --evidence ABS [--enterprise-profile-sha256 SHA] [--home H] [--json]\nExplicitly adopt HTTPS evidence into existing history, or initially enroll complete signed local evidence. Neither operation resets history or grants installation. Lost-history recovery requires the documented operator procedure.\n"
 	n, err := io.WriteString(w, help)
 	if err != nil || n != len(help) {
 		return exitGeneric

@@ -3434,13 +3434,13 @@ The current working directory and artifact home must match the selected native
 profile. These flags are explicit CLI selections; the MCP server separately
 captures its operator configuration at startup.
 
-Native Enterprise installation and publication CLI operations remain blocked with exit code 12, including
-pull dry-runs and publish admit, attest, revoke and batch modes. A valid profile
-or a cryptographically valid native revocation diagnostic does not grant
-permission to install or publish. Live carrier integration is still required
-before these CLI operations can be enabled. Invalid selection
-is refused before credential, signing-key, backend or install-state access.
-A profile hash or home flag without a profile is a usage error (exit code 2).
+The explicit v4 native agent session described below supports one exact-digest,
+fully signed agent without dependencies. All other native CLI installation modes,
+including legacy dry-runs and cross-process token confirmation, remain blocked.
+Native publication, admit, attest, revoke and batch modes remain blocked with exit
+code 12. A valid profile or revocation diagnostic alone never grants installation.
+Invalid selection is refused before credential or backend access. A profile hash
+or home flag without a profile is a usage error (exit code 2).
 
 With a native profile bound at MCP startup, install, attest, revoke and awareness
 sync calls return a structured refusal before child execution or registry calls.
@@ -3470,8 +3470,8 @@ refused attempt. Consent lasts at most five minutes and is required even for
 new files. Planning retains the exact signed archive and complete reviewer
 context. Unsupported dependencies, stale or revoked trust, target drift and
 invalid consent prevent publication. Publication or checked-close failures may
-mean files changed; inspect the destination before retrying. This SDK path does
-not enable CLI/MCP operations, skill installation, automatic dependencies,
+mean files changed; inspect the destination before retrying. This offline SDK path does
+not by itself enable CLI/MCP operations, skill installation, automatic dependencies,
 untrusted execution isolation or customer platform acceptance.
 
 
@@ -3484,7 +3484,7 @@ skillctl trust native-state adopt --enterprise-profile /absolute/project-profile
 ```
 
 This command requires an existing authenticated native journal and a profile with
-`schema: "m3c.enterprise-project-profile/v3"`. It does not enroll or reset history.
+`schema: "m3c.enterprise-project-profile/v3"` or v4. It does not enroll or reset history.
 The profile retains all v2 authority, tenant, runtime and carrier mappings and adds
 an explicit `native.revocation_source`, for example:
 
@@ -3518,3 +3518,82 @@ history may already have changed. Inspect authenticated history before retrying.
 Success reports history status, without authorizing installation or publication.
 Live CLI/MCP installation and publication remain guarded separately; customer
 platform acceptance and recovery approval are still required for release.
+
+
+### Initial native history and live agent installation
+
+`--evidence <absolute-file>` selects the complete signed local evidence for explicit
+initial enrollment. It does not select a reset or a remote source.
+
+`--native-session` selects held, same-process agent consent for `pull`. It requires
+an explicit v4 profile, agent kind, exact digest, installation and trust-mode flags;
+legacy cross-process confirmation flags are unsupported.
+
+Run from the profile's project directory. Bootstrap history explicitly from a
+complete signed local evidence file before installation:
+
+```sh
+skillctl trust native-state enroll --enterprise-profile /absolute/project-profile.json --evidence /absolute/initial-evidence.json --home /absolute/artifact-home --json
+```
+
+The evidence must be an ordinary regular file, at most 1 MiB; a symbolic link is
+refused. The command authenticates the complete evidence and refuses any existing
+history reservation, including damaged or incomplete state. It performs no network
+or credential lookup and grants no installation. An entirely deleted history
+directory cannot be distinguished locally from first use: lost-history recovery
+still requires Scalytics-DevOps' documented four-eyes procedure. There is no reset
+or force option. Use the separate `adopt` command to refresh existing stale history.
+An output failure can occur after enrollment has persisted; inspect history before
+retrying.
+
+A live installation requires `schema: "m3c.enterprise-project-profile/v4"`, retaining
+the v3 authority, runtime and revocation-source fields. Its `native.carrier` is
+explicit, for example:
+
+```json
+{"kind":"er1","base_url":"https://registry.example.com/api-prefix","context_id":"selected-context","auth":{"mode":"none"},"tls":{"mode":"system"}}
+```
+
+For external credentials, select exactly one family and its bound HTTPS origin:
+`"auth":{"mode":"external-env","family":"api-key","origin":"https://registry.example.com:443"}`
+reads only `ER1_API_KEY`; family `bearer` reads only `ER1_DEVICE_TOKEN`. A missing or
+invalid selected value fails; no other credential provider is tried. Public mode
+`none` reads neither value. Never put credential values into the profile or argv.
+The carrier TLS selection is independent from the revocation source: `system` or
+`pinned-pem` with the same bounded, hashed CA-file format described above. HTTPS is
+mandatory; the complete base prefix and exact context remain bound. v2/v3 profiles
+do not acquire live installation permission.
+
+```sh
+skillctl pull --enterprise-profile /absolute/project-profile.json --home /absolute/artifact-home --kind agent --digest sha256:REPLACE_WITH_64_LOWERCASE_HEX_DIGITS --install --trust-mode --native-session
+```
+
+The command acquires and holds fresh authenticated history before reading the
+selected external credential or making its bounded registry request. It never
+automatically enrolls or adopts evidence. The exact signed archive and complete
+reviewer context remain in the same process through publication. The HTTPS reader
+uses HTTP/1.1 with a 30-second request limit, no redirects, ambient proxy, automatic
+retry or decompression; it accepts at most 32 MiB of response and 16 MiB of archive.
+These are individual ceilings; aggregate work limits may refuse smaller combinations.
+Missing inline bytes, ambiguous proofs and a full 500-item page are refused. This
+bounded acquisition does not prove the remote catalog is complete or latest.
+
+Read the emitted `native-agent-plan` JSON line. To approve that exact plan, enter
+its complete 43-character token followed by Enter on stdin in the same process.
+LF and CRLF are accepted; spaces, missing newline, EOF or a different token cancel
+or refuse the operation. Only the first line is interpreted. Confirmation is
+required for new files as well as overwrites. The command has a five-minute total
+limit; the SDK independently checks plan expiry and consumes each attempted
+confirmation. No active artifact is published before confirmation, although trust
+history clock observations may be persisted during planning.
+
+`native-agent-installed` is emitted only after checked session release. An I/O or
+completion-output failure returns nonzero; files or history may already have
+changed. Inspect the destination before retrying. Profile/authentication/consent
+failures return 12, unavailable or stale history 22, and source/persistence/output
+I/O failures 1. Unrelated legacy pull flags are unsupported in this mode.
+
+Native SKILL, dependencies, Git carriers, native publishing and MCP mutation remain
+unavailable. MCP captures v4 as a native refusal before child or registry execution;
+it does not reuse a CLI token across processes. Customer platform and release-binary
+acceptance remain separate requirements.

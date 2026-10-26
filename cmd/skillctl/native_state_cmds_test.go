@@ -22,6 +22,7 @@ import (
 	"go/parser"
 	"go/token"
 	"io"
+	"io/fs"
 	"log"
 	"math/big"
 	"net"
@@ -557,13 +558,35 @@ func NativeProviderTrapActive() bool {
 
 func qaNativeSourceArtifactInventory(t *testing.T, root string) map[string]string {
 	t.Helper()
-	all := nativeCLIQAInventory(t, root)
 	out := map[string]string{}
 	prefix := filepath.Join(".claude", "native-mutation-state")
-	for path, value := range all {
-		if path != prefix && !strings.HasPrefix(path, prefix+string(os.PathSeparator)) {
-			out[path] = value
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
 		}
+		relative, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		if relative == prefix || strings.HasPrefix(relative, prefix+string(os.PathSeparator)) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.IsDir() {
+			out[relative] = "dir"
+			return nil
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		out[relative] = hex.EncodeToString(raw)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 	return out
 }

@@ -332,6 +332,7 @@ func printTrustUsage(w io.Writer) {
 	fmt.Fprintln(w, "  list     Print configured registries and their pinned keys.")
 	fmt.Fprintln(w, "  state    Inspect, enroll or adopt local managed mutation history.")
 	fmt.Fprintln(w, "  native-state adopt  Explicitly refresh enrolled native history from the selected HTTPS source.")
+	fmt.Fprintln(w, "  native-state enroll Initially enroll complete signed local evidence; never reset existing history.")
 	fmt.Fprintln(w, "  add      Pin a registry public key.")
 	fmt.Fprintln(w, "  add-author   Pin an AUTHOR key, with a fingerprint confirmed out-of-band.")
 	fmt.Fprintln(w, "  fingerprint  Print sha256:<hex> of a public key, to read aloud on a call.")

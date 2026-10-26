@@ -80,6 +80,9 @@ PROJECT_CASES = {
         'TestNativeProfileStrictSelection',
         'TestNativeEvidenceProfileSourceBinding',
         'TestNativeEvidenceExplicitAdopt',
+        'TestNativeLiveProfileBinding',
+        'TestNativeLiveAgentAcquisition',
+        'TestNativeLiveInstallConsentBoundary',
         'TestProjectProfileSnapshotsAndSelection',
         'TestProjectProfileStrictInputs',
         'TestProjectProfilePinnedRolesAndYAML',
@@ -96,6 +99,9 @@ PROJECT_CASES = {
     ),
     'github.com/kamir/m3c-tools/pkg/skillctl/registry': (
         'TestNativeEvidenceHTTPSReaderContract',
+        'TestNativeLiveSessionRetainedConsent',
+        'TestNativeLiveSessionFailClosed',
+        'TestNativeLiveAgentSourceContract',
         'TestNativeJournalEnrollmentAndHistory',
         'TestNativeJournalEpochClockAndFullSet',
         'TestNativeJournalLockAndPersistence',
@@ -146,6 +152,8 @@ PROJECT_CASES = {
     ),
     'github.com/kamir/m3c-tools/cmd/skillctl': (
         'TestTrustNativeEvidenceAdoptActualCLI',
+        'TestTrustNativeStateEnrollActualCLI',
+        'TestNativeLiveInstallActualCLI',
         'TestPullNativeEnterpriseProfilePreflightActualCLI',
         'TestPublishNativeEnterpriseProfilePreflightActualCLI',
         'TestInstallEnterpriseProfileActualCLI',

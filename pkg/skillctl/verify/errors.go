@@ -190,6 +190,10 @@ var (
 	// distinct from authenticated trust decisions and maps to generic I/O exit 1.
 	ErrNativeEvidenceSourceIO = registry.ErrNativeEvidenceSourceIO
 
+	// ErrNativeLiveSourceIO identifies bounded carrier or selected credential
+	// acquisition failures, separately from revocation evidence adoption.
+	ErrNativeLiveSourceIO = registry.ErrNativeLiveSourceIO
+
 	// ErrDigestMismatch, the bundle's recomputed digest doesn't match
 	// what the signature was over. Exit code 10.
 	ErrDigestMismatch = errors.New("digest mismatch")
@@ -327,7 +331,7 @@ func ExitCode(err error) int {
 		return 0
 	}
 	switch {
-	case errors.Is(err, ErrNativeEvidenceSourceIO), errors.Is(err, registry.ErrNativePersistence):
+	case errors.Is(err, ErrNativeEvidenceSourceIO), errors.Is(err, ErrNativeLiveSourceIO), errors.Is(err, registry.ErrNativePersistence):
 		return 1
 	case errors.Is(err, registry.ErrNativeDependenciesUnavailable):
 		return nativeErrorExit(err, ExitDepsUnsatisfied)

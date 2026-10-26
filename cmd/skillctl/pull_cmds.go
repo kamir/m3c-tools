@@ -23,6 +23,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -37,9 +38,10 @@ import (
 func runPull(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("pull", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	enterpriseProfile := fs.String("enterprise-profile", "", "Explicit native Enterprise project profile; native operations remain unavailable until durable trust sessions are supported.")
+	enterpriseProfile := fs.String("enterprise-profile", "", "Explicit native Enterprise project profile; live agent installation requires --native-session.")
 	enterpriseProfileSHA := fs.String("enterprise-profile-sha256", "", "Expected lowercase SHA-256 of --enterprise-profile bytes.")
 	enterpriseHome := fs.String("home", "", "Artifact home bound by the native Enterprise profile; defaults to $HOME.")
+	nativeSession := fs.Bool("native-session", false, "Review and confirm one exact native agent in this process using a token line on stdin.")
 
 	var (
 		registryName = fs.String("registry", "self", "Registry spec. Only `self` / `er1://…` are handled here; HTTP registries route through `skillctl install`.")
@@ -76,6 +78,15 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 	}
 	if err := fs.Parse(reorderFlagArgs(fs, args)); err != nil {
 		return 2
+	}
+	nativeSessionSelected := false
+	fs.Visit(func(f *flag.Flag) { nativeSessionSelected = nativeSessionSelected || f.Name == "native-session" })
+	if nativeSessionSelected {
+		return runSelectedNativePull(context.Background(), fs, nativePullFlags{
+			profile: *enterpriseProfile, pin: *enterpriseProfileSHA, home: *enterpriseHome,
+			selector: *registryName, digest: *digestArg, kind: *kindFlag,
+			install: *install, trustMode: *trustMode, nativeSession: *nativeSession,
+		}, os.Stdin, stdout, stderr)
 	}
 	if !registry.IsER1Registry(*registryName) && !artifact.Registered(*registryName) {
 		fmt.Fprintf(stderr, "pull: unsupported registry %q: use \"self\"/\"er1://…\" or \"gitlab://host/group/proj\"; HTTP admission registries route through `skillctl install`\n", *registryName)

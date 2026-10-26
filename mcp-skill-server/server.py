@@ -863,9 +863,9 @@ def _enterprise_profile_snapshot(path: str) -> tuple[str, bool]:
     if not isinstance(document, dict):
         raise ValueError("enterprise profile must be an object")
     schema = document.get("schema")
-    if "schema" in document and (not isinstance(schema, str) or schema not in {"m3c.enterprise-project-profile/v1", "m3c.enterprise-project-profile/v2"}):
+    if "schema" in document and (not isinstance(schema, str) or schema not in {"m3c.enterprise-project-profile/v1", "m3c.enterprise-project-profile/v2", "m3c.enterprise-project-profile/v4"}):
         raise ValueError("unsupported enterprise profile schema")
-    native = schema == "m3c.enterprise-project-profile/v2"
+    native = schema in {"m3c.enterprise-project-profile/v2", "m3c.enterprise-project-profile/v4"}
     return hashlib.sha256(raw).hexdigest(), native
 
 

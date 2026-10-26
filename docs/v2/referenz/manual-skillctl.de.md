@@ -3725,14 +3725,14 @@ zugesicherte Keychain-/Secret-Manager-/Umgebungskette für alle Befehle.
 gewählten nativen Profil passen. Die CLI verlangt diese ausdrückliche Auswahl;
 der MCP-Server hält seine Betreiberkonfiguration beim Start fest.
 
-Native Enterprise-CLI-Operationen zur Installation und Veröffentlichung bleiben mit Exitcode 12 gesperrt,
-einschließlich Pull-Dry-Runs und Publish für Admit, Attest, Revoke und Batches.
-Ein gültiges Profil oder ein kryptografisch gültiger nativer Widerrufsnachweis
-berechtigt nicht zur Installation oder Veröffentlichung. Für diese CLI-Pfade
-fehlt noch die Anbindung der Live-Registry. Ungültige
-Auswahl wird vor Credential-, Signaturschlüssel-, Backend- oder
-Installationszustandszugriffen abgewiesen. Hash- oder Home-Flag ohne Profil ist
-ein Verwendungsfehler (Exitcode 2).
+Die unten beschriebene ausdrückliche native Agenten-Session mit Profil v4
+unterstützt genau einen vollständig signierten Agenten per exaktem Digest ohne
+Abhängigkeiten. Andere native CLI-Installationsmodi einschließlich bisheriger
+Dry-Runs und prozessübergreifender Token-Bestätigung bleiben gesperrt. Native
+Veröffentlichung, Admit, Attest, Revoke und Batches bleiben mit Exitcode 12 gesperrt.
+Ein gültiges Profil oder ein Widerrufsdiagnoseergebnis allein berechtigt nicht zur
+Installation. Ungültige Auswahl wird vor Credential- oder Backendzugriffen
+abgewiesen. Hash- oder Home-Flag ohne Profil ist ein Verwendungsfehler (Exitcode 2).
 
 Bei einem beim MCP-Start gebundenen nativen Profil liefern Install, Attest,
 Revoke und Awareness-Sync eine strukturierte Ablehnung vor Kindprozess- oder
@@ -3768,7 +3768,7 @@ signierte Archiv und alle Reviewer-Nachweise fest. Nicht unterstützte
 Abhängigkeiten, veralteter oder widerrufener Trust, geänderte Ziele und ungültige
 Zustimmung verhindern die Veröffentlichung. Bei Publikations- oder
 Abschlussfehlern können Dateien bereits verändert sein; prüfe vor einem erneuten
-Versuch das Ziel. Dieser SDK-Pfad aktiviert weder CLI/MCP-Operationen noch
+Versuch das Ziel. Dieser Offline-SDK-Pfad allein aktiviert weder CLI/MCP-Operationen noch
 Skill-Installation, automatische Abhängigkeiten, Isolation nicht
 vertrauenswürdiger Ausführung oder Kunden-Plattformabnahme.
 
@@ -3782,7 +3782,7 @@ skillctl trust native-state adopt --enterprise-profile /absolute/project-profile
 ```
 
 Der Befehl verlangt eine vorhandene authentische native Historie und ein Profil
-mit `schema: "m3c.enterprise-project-profile/v3"`. Er legt keine Historie an und
+mit `schema: "m3c.enterprise-project-profile/v3"` oder v4. Er legt keine Historie an und
 setzt sie nicht zurück. Das Profil behält die Autoritäts-, Tenant-, Runtime- und
 Carrier-Zuordnungen aus v2 und ergänzt ausdrücklich `native.revocation_source`,
 zum Beispiel:
@@ -3818,5 +3818,91 @@ Transport-, geprüfte Close- und Speicherfehler liefern 1. Auch ein Ausgabefehle
 nach erfolgreicher Übernahme liefert 1: Die Historie kann bereits geändert sein.
 Vor einem erneuten Versuch die authentische Historie prüfen. Erfolg meldet den
 Historienstatus und erteilt keine Installations- oder Veröffentlichungsfreigabe.
-Live-Installation und Veröffentlichung über CLI/MCP bleiben gesondert gesperrt;
+Live-Installation und Veröffentlichung über CLI/MCP unterliegen gesonderten Schutzbedingungen;
 Kunden-Plattformabnahme und Recovery-Freigabe bleiben Voraussetzungen des Releases.
+
+
+### Initiale native Historie und Live-Installation eines Agenten
+
+`--evidence <absolute-file>` wählt den vollständigen signierten lokalen Nachweis für
+ausdrückliches initiales Enrollment. Das Flag wählt weder Reset noch Remote-Quelle.
+
+`--native-session` wählt die gehaltene Agenten-Zustimmung im selben `pull`-Prozess.
+Erforderlich sind ein ausdrückliches v4-Profil, Agenten-Art, exakter Digest sowie
+Installations- und Trust-Mode-Flags; bisherige prozessübergreifende
+Bestätigungsflags sind nicht unterstützt.
+
+Im Projektverzeichnis des Profils ausführen. Vor der Installation wird die Historie
+ausdrücklich aus einer vollständigen signierten lokalen Nachweisdatei initialisiert:
+
+```sh
+skillctl trust native-state enroll --enterprise-profile /absolute/project-profile.json --evidence /absolute/initial-evidence.json --home /absolute/artifact-home --json
+```
+
+Der Nachweis muss eine gewöhnliche reguläre Datei mit höchstens 1 MiB sein;
+symbolische Links werden abgewiesen. Der Befehl authentisiert den vollständigen
+Nachweis und verweigert jede bereits reservierte Historie, auch bei beschädigtem
+oder unvollständigem Zustand. Er greift weder auf Netzwerk noch Zugangsdaten zu
+und erteilt keine Installationsfreigabe. Ein vollständig gelöschtes Historienverzeichnis
+ist lokal nicht von einer Erstverwendung unterscheidbar: Für verlorene Historie gilt
+weiter das dokumentierte Vier-Augen-Recovery-Verfahren von Scalytics-DevOps. Es gibt
+keine Reset- oder Force-Option. Vorhandene veraltete Historie wird separat mit `adopt`
+aktualisiert. Ein Ausgabefehler kann nach der dauerhaften Eintragung auftreten;
+prüfe vor einem erneuten Versuch den Zustand.
+
+Die Live-Installation verlangt `schema: "m3c.enterprise-project-profile/v4"` und
+behält die Autoritäts-, Runtime- und Widerrufsquellen-Felder aus v3. Der
+`native.carrier` wird ausdrücklich gewählt, zum Beispiel:
+
+```json
+{"kind":"er1","base_url":"https://registry.example.com/api-prefix","context_id":"selected-context","auth":{"mode":"none"},"tls":{"mode":"system"}}
+```
+
+Für externe Zugangsdaten wird genau eine Familie samt gebundener HTTPS-Origin gewählt:
+`"auth":{"mode":"external-env","family":"api-key","origin":"https://registry.example.com:443"}`
+liest ausschließlich `ER1_API_KEY`; Familie `bearer` liest ausschließlich
+`ER1_DEVICE_TOKEN`. Fehlende oder ungültige gewählte Werte führen zum Abbruch;
+es wird kein anderer Credential-Provider versucht. Der öffentliche Modus `none`
+liest keinen dieser Werte. Zugangswerte gehören niemals in Profil oder argv.
+Die TLS-Auswahl des Carriers ist unabhängig von der Widerrufsquelle: `system` oder
+`pinned-pem` mit demselben begrenzten, per Hash gebundenen CA-Dateiformat wie oben.
+HTTPS ist verpflichtend; vollständiger Basispfad und exakter Kontext bleiben
+gebunden. Profile v2/v3 erhalten keine Live-Installationsberechtigung.
+
+```sh
+skillctl pull --enterprise-profile /absolute/project-profile.json --home /absolute/artifact-home --kind agent --digest sha256:REPLACE_WITH_64_LOWERCASE_HEX_DIGITS --install --trust-mode --native-session
+```
+
+Der Befehl hält zunächst frische authentisierte Historie unter Sperre, bevor er
+gewählte externe Zugangsdaten liest oder den begrenzten Registry-Request ausführt.
+Er führt weder Enrollment noch Adoption automatisch aus. Exaktes signiertes Archiv
+und vollständiger Reviewer-Kontext bleiben bis zur Veröffentlichung im selben
+Prozess. Der HTTPS-Leser verwendet HTTP/1.1 mit 30 Sekunden Requestfrist, ohne
+Redirects, Umgebungsproxy, automatische Wiederholung oder Dekompression; erlaubt
+sind höchstens 32 MiB Antwort und 16 MiB Archiv. Fehlende Inline-Bytes, mehrdeutige
+Nachweise und eine volle Seite mit 500 Einträgen werden abgewiesen. Der begrenzte
+Abruf beweist weder Vollständigkeit noch Aktualität des gesamten Remote-Katalogs.
+Die Einzelgrenzen sind Obergrenzen; das gemeinsame Arbeitsbudget kann auch kleinere
+Kombinationen abweisen.
+
+Prüfe die ausgegebene JSON-Zeile `native-agent-plan`. Zur Zustimmung zu genau diesem
+Plan gib dessen vollständigen Token mit 43 Zeichen gefolgt von Enter auf stdin im
+selben Prozess ein. LF und CRLF sind erlaubt; Leerzeichen, fehlender Zeilenabschluss,
+EOF oder ein anderer Token führen zum Abbruch oder zur Ablehnung. Nur die erste
+Zeile wird interpretiert. Auch neue Dateien verlangen Zustimmung. Die Gesamtfrist
+des Befehls beträgt fünf Minuten; das SDK prüft zusätzlich das Planablaufdatum und
+verbraucht jeden Bestätigungsversuch. Vor Bestätigung werden keine aktiven Artefakte
+veröffentlicht; Uhrbeobachtungen der Trust-Historie können beim Planen gespeichert
+werden.
+
+`native-agent-installed` wird erst nach geprüftem Close-Ergebnis der Session ausgegeben.
+I/O- oder Abschlussausgabefehler führen zu einem Fehlercode; Dateien oder Historie
+können bereits verändert sein. Prüfe vor einem erneuten Versuch das Ziel.
+Profil-, Authentisierungs- und Zustimmungsfehler ergeben 12, fehlende oder veraltete
+Historie 22 und Quellen-/Persistenz-/Ausgabe-I/O-Fehler 1. Andere bisherige Pull-Flags
+sind in diesem Modus nicht unterstützt.
+
+Native SKILLs, Abhängigkeiten, Git-Carrier, native Veröffentlichung und MCP-Mutationen
+bleiben gesperrt. MCP hält v4 vor Kindprozess- oder Registry-Ausführung als native
+Ablehnung fest; CLI-Tokens werden nicht zwischen Prozessen wiederverwendet.
+Kundenplattform- und Release-Binary-Abnahme bleiben gesonderte Anforderungen.

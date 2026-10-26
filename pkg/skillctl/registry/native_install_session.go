@@ -23,6 +23,8 @@ type NativeInstallSession struct {
 	journal                               *NativeJournal
 	lease                                 *nativeJournalLease
 	rootDigest                            string
+	liveSourceBinding                     string
+	liveWork                              *int64
 	closed, poisoned, terminal, published bool
 	plan                                  *nativeRetainedPlan
 	activeConsent                         *nativeRetainedPlan
@@ -137,13 +139,20 @@ func (s *NativeInstallSession) PlanInstall(ctx context.Context, bundles []*Stage
 	if err != nil {
 		return nil, err
 	}
+	return s.planPreparedLocked(ctx, input, inputHash, prepared)
+}
+
+// planPreparedLocked shares native consent construction for bounded offline and
+// live inputs. The caller holds the session mutex and journal lease.
+func (s *NativeInstallSession) planPreparedLocked(ctx context.Context, input *StagedBundle, inputHash string, prepared *preparedAgent) (*NativeInstallPlan, error) {
+	var err error
 	if err = s.validatePrepared(prepared); err != nil {
 		return nil, err
 	}
 	if err = s.recheckLocked(ctx, prepared); err != nil {
 		return nil, err
 	}
-	targets, err := nativeObserveTargets(s.journal.selection, prepared.bundle.Name)
+	targets, err := s.observeTargetsLocked(prepared.bundle.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -162,6 +171,9 @@ func (s *NativeInstallSession) PlanInstall(ctx context.Context, bundles []*Stage
 	}
 	retained := &nativeRetainedPlan{prepared: prepared, inputHash: inputHash, planHash: hash, issued: issued, row: row, targets: targets}
 	if _, err = rand.Read(retained.nonce[:]); err != nil {
+		return nil, err
+	}
+	if err = ctx.Err(); err != nil {
 		return nil, err
 	}
 	s.plan = retained
@@ -211,7 +223,7 @@ func (s *NativeInstallSession) ConfirmInstall(ctx context.Context, bundles []*St
 	if err = s.recheckLocked(ctx, p.prepared); err != nil {
 		return nil, err
 	}
-	targets, err := nativeObserveTargets(s.journal.selection, p.prepared.bundle.Name)
+	targets, err := s.observeTargetsLocked(p.prepared.bundle.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +255,7 @@ func (s *NativeInstallSession) ConfirmInstall(ctx context.Context, bundles []*St
 	}()
 	// Recheck under the publication lease, before any staging writes. A target
 	// changed by another cooperating installer invalidates the original consent.
-	targets, err = nativeObserveTargets(s.journal.selection, p.prepared.bundle.Name)
+	targets, err = s.observeTargetsLocked(p.prepared.bundle.Name)
 	if err != nil {
 		return nil, err
 	}
@@ -391,7 +403,7 @@ func (s *NativeInstallSession) consentHash(p *preparedAgent, row NativeInstallPl
 		left -= 6 * len(text)
 		return true
 	}
-	for _, text := range []string{selected.authority.historyID, selected.profileDigest, selected.selectionID, selected.project, selected.home, s.rootDigest, selected.artifactRoots.GovernanceMinimum, row.Name, row.Version, row.Kind, row.Digest, row.Target, row.Operation, row.OldDigest} {
+	for _, text := range []string{selected.authority.historyID, selected.profileDigest, selected.selectionID, selected.project, selected.home, s.rootDigest, s.liveSourceBinding, selected.artifactRoots.GovernanceMinimum, row.Name, row.Version, row.Kind, row.Digest, row.Target, row.Operation, row.OldDigest} {
 		if !charge(text) {
 			return "", ErrNativeConsentInvalid
 		}
@@ -428,7 +440,8 @@ func (s *NativeInstallSession) consentHash(p *preparedAgent, row NativeInstallPl
 		Signers                                                                                        []signer
 		Row                                                                                            NativeInstallPlanRow
 		Targets                                                                                        []nativeTargetObservation
-	}{"m3c.native-offline-install-consent/v1", selected.authority.historyID, selected.profileDigest, selected.selectionID, selected.project, selected.home, s.rootDigest, agentDigest(selected.runtimeRaw), agentDigest(p.contextRaw), base64.StdEncoding.EncodeToString(selected.artifactRoots.pub), selected.artifactRoots.GovernanceMinimum, selected.artifactRoots.quorum(), signers, row, targets}
+		LiveSource                                                                                     string `json:",omitempty"`
+	}{"m3c.native-offline-install-consent/v1", selected.authority.historyID, selected.profileDigest, selected.selectionID, selected.project, selected.home, s.rootDigest, agentDigest(selected.runtimeRaw), agentDigest(p.contextRaw), base64.StdEncoding.EncodeToString(selected.artifactRoots.pub), selected.artifactRoots.GovernanceMinimum, selected.artifactRoots.quorum(), signers, row, targets, s.liveSourceBinding}
 	raw, err := json.Marshal(value)
 	if err != nil || len(raw) > 64<<10 {
 		return "", ErrNativeConsentInvalid
@@ -459,4 +472,11 @@ func (s *NativeInstallSession) Close() error {
 	}
 	s.closeErr = nativeSessionDiagnostic(err)
 	return s.closeErr
+}
+
+func (s *NativeInstallSession) observeTargetsLocked(name string) ([]nativeTargetObservation, error) {
+	if s.liveWork == nil {
+		return nativeObserveTargets(s.journal.selection, name)
+	}
+	return nativeObserveTargetsWork(s.journal.selection, name, s.liveWork)
 }
