@@ -29,6 +29,9 @@ const NativeEvidenceSchema = "m3c.enterprise-project-profile/v3"
 // NativeLiveSchema adds explicit live ER1 credential and TLS selection.
 const NativeLiveSchema = "m3c.enterprise-project-profile/v4"
 
+// NativeGitSchema selects explicit commit and tree pins for native Git reads.
+const NativeGitSchema = "m3c.enterprise-project-profile/v5"
+
 // NativeCarrierSelection is copied operator provenance, not signed carrier origin.
 type NativeCarrierSelection struct {
 	Kind              string
@@ -36,6 +39,11 @@ type NativeCarrierSelection struct {
 	BaseURL           string
 	ContextID         string
 	AllowLoopbackHTTP bool
+	Provider          string `json:",omitempty"`
+	Repository        string `json:",omitempty"`
+	CommitOID         string `json:",omitempty"`
+	RootTreeOID       string `json:",omitempty"`
+	ObjectFormat      string `json:",omitempty"`
 }
 
 // NativePolicy retains private role-separated authority and runtime snapshots.
@@ -50,6 +58,7 @@ type NativePolicy struct {
 	live                             *registry.NativeLiveAgentSource
 	liveSkill                        *registry.NativeLiveSkillSource
 	liveBinding                      nativeLiveBinding
+	git                              *registry.NativeGitSource
 }
 type nativeDocument struct {
 	Schema       string        `json:"schema"`
@@ -111,11 +120,11 @@ func loadNative(path, expected, actualProject, actualHome string) (*NativePolicy
 		return nil, e
 	}
 	var schema string
-	if json.Unmarshal(top["schema"], &schema) != nil || (schema != NativeSchema && schema != NativeEvidenceSchema && schema != NativeLiveSchema) {
+	if json.Unmarshal(top["schema"], &schema) != nil || (schema != NativeSchema && schema != NativeEvidenceSchema && schema != NativeLiveSchema && schema != NativeGitSchema) {
 		return nil, ErrInvalid
 	}
 	keys := []string{"logical_registry", "authority_scope", "tenant_scope", "artifact_trust", "revocation_trust", "revocation_policy", "carrier"}
-	if schema == NativeEvidenceSchema || schema == NativeLiveSchema {
+	if schema == NativeEvidenceSchema || schema == NativeLiveSchema || schema == NativeGitSchema {
 		keys = append(keys, "revocation_source")
 	}
 	mapping, e := nativeObjectAllowUnsupported(top["native"], keys...)
@@ -158,6 +167,11 @@ func loadNative(path, expected, actualProject, actualHome string) (*NativePolicy
 		carrier.Locator = n.LogicalRegistry
 		carrier.BaseURL = n.Carrier.BaseURL
 		carrier.ContextID = n.Carrier.ContextID
+	} else if schema == NativeGitSchema {
+		if n.Carrier.Kind != "git" {
+			return nil, ErrUnsupported
+		}
+		carrier.Locator = n.LogicalRegistry
 	} else {
 		switch n.Carrier.Kind {
 		case "er1":
@@ -222,7 +236,7 @@ func loadNative(path, expected, actualProject, actualHome string) (*NativePolicy
 	dir := filepath.Dir(absolute)
 	var source *registry.NativeEvidenceSource
 	var sourceBinding nativeSourceBinding
-	if schema == NativeEvidenceSchema || schema == NativeLiveSchema {
+	if schema == NativeEvidenceSchema || schema == NativeLiveSchema || schema == NativeGitSchema {
 		source, sourceBinding, e = parseNativeEvidenceSource(dir, mapping["revocation_source"])
 		if e != nil {
 			return nil, e
@@ -238,6 +252,20 @@ func loadNative(path, expected, actualProject, actualHome string) (*NativePolicy
 		}
 		carrier.BaseURL = liveBinding.BaseURL
 		carrier.ContextID = liveBinding.ContextID
+	}
+	var gitSource *registry.NativeGitSource
+	var gitBinding nativeGitBinding
+	if schema == NativeGitSchema {
+		gitSource, gitBinding, e = parseNativeGitSource(dir, mapping["carrier"])
+		if e != nil {
+			return nil, e
+		}
+		carrier.BaseURL = gitBinding.APIBase
+		carrier.Provider = gitBinding.Provider
+		carrier.Repository = gitBinding.Repository
+		carrier.CommitOID = gitBinding.CommitOID
+		carrier.RootTreeOID = gitBinding.RootTreeOID
+		carrier.ObjectFormat = gitBinding.ObjectFormat
 	}
 	artifactRaw, e := readNativeRef(dir, n.ArtifactTrust, maxTrustBytes)
 	if e != nil {
@@ -307,8 +335,19 @@ func loadNative(path, expected, actualProject, actualHome string) (*NativePolicy
 			return nil, ErrInvalid
 		}
 	}
+	if schema == NativeGitSchema {
+		selectionBytes, e = json.Marshal(struct {
+			Domain, Project, Home, Authority string
+			Carrier                          NativeCarrierSelection
+			Source                           nativeSourceBinding
+			Git                              nativeGitBinding
+		}{"m3c.native-selection/v4", project, home, authority.HistoryAuthorityID(), carrier, sourceBinding, gitBinding})
+		if e != nil {
+			return nil, ErrInvalid
+		}
+	}
 	selectionSHA := sha256.Sum256(selectionBytes)
-	return &NativePolicy{project: project, home: home, digest: hex.EncodeToString(sum[:]), selection: hex.EncodeToString(selectionSHA[:]), carrier: carrier, roots: roots, authority: authority, runtime: runtimeProfile, source: source, live: live, liveSkill: liveSkill, liveBinding: liveBinding}, nil
+	return &NativePolicy{project: project, home: home, digest: hex.EncodeToString(sum[:]), selection: hex.EncodeToString(selectionSHA[:]), carrier: carrier, roots: roots, authority: authority, runtime: runtimeProfile, source: source, live: live, liveSkill: liveSkill, liveBinding: liveBinding, git: gitSource}, nil
 }
 func nativeObject(raw []byte, keys ...string) (map[string]json.RawMessage, error) {
 	var object map[string]json.RawMessage

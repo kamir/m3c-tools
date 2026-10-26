@@ -4013,3 +4013,92 @@ und Überläufe sind nicht unterstützt. `1.2.3` wird beispielsweise unterstütz
 `1.2.3-rc.1` abgewiesen. Unbekannte Versionen werden für die Downgrade-Prüfung
 niemals still normalisiert. Das gemeinsame Inventar impliziter und expliziter
 Archiv-Pfadpräfixe ist auf 100.000 begrenzt.
+
+
+### Native GitHub- und GitLab-Lesesessions
+
+Wähle `m3c.enterprise-project-profile/v5` für native Git-Lesezugriffe. Die
+expliziten Artefakt-/Widerrufsautoritäten, Tenant-, Runtime- und unabhängige
+`revocation_source`-Zuordnung des nativen Profils bleiben verbindlich. Ersetze
+`carrier` durch eine explizite Git-Zuordnung, etwa diese Vorlage:
+
+```json
+{
+  "kind": "git",
+  "provider": "github",
+  "api_base": "https://api.github.com",
+  "repository": "your-org/skill-catalog",
+  "object_format": "sha1",
+  "commit_oid": "COMMIT_40_LOWERCASE_HEX",
+  "root_tree_oid": "ROOT_TREE_40_LOWERCASE_HEX",
+  "tls": {"mode": "system"},
+  "auth": {
+    "mode": "external-env",
+    "family": "github-read-token",
+    "origin": "https://api.github.com:443"
+  }
+}
+```
+
+Ersetze beide OID-Platzhalter durch freigegebene vollständige Git-IDs in
+Kleinbuchstaben aus eurem Repository-Review-/Release-Prozess. Pinne den Root-Tree
+vor dem Abruf; die Anwendung übernimmt keinen Antwort-Tree automatisch.
+Branches, Tags, verkürzte IDs, SHA256-Git-Repositories, SSH und lokale Git-Pfade
+sind hier nicht unterstützt. Für GitLab wählst du `provider: "gitlab"`, die
+vollständige HTTPS-API-Basis, etwa `https://gitlab.example.com/api/v4`, den ganzen
+Gruppen-/Untergruppen-/Projektpfad und `family: "gitlab-read-token"`. GitHub
+verlangt genau owner/repository. API-Basis, Repository und Zugangsdaten werden
+explizit gewählt; keine Service-URL wird hergeleitet.
+
+Der Transport prüft jeden rekonstruierten Git-Tree und rohe Blob-Bytes gegen den
+gepinnten Root mit kollisionsprüfendem SHA1. Das begrenzt bekannte
+SHA1-Kollisionsangriffe; Git-SHA1 erhält dadurch keine SHA256-Stärke. Die Zuordnung
+Commit zu Root-Tree bleibt eine Aussage der authentisierten API: Rohe
+Commit-Bytes, Commit-Signaturen, Abstammung und Branch-Erreichbarkeit werden nicht
+verifiziert. Artefaktidentität bleibt SHA256 mit den gewählten nativen Signaturen,
+vollständigem Reviewer-Quorum, Tenant-Policy und frischem unabhängigem
+Widerrufsjournal. Git-Eigentum und API-Verifikationsfelder erteilen diese
+Autorität nicht.
+
+`auth: {"mode": "none"}` liest öffentliche Repositories ohne Token. Bei
+`external-env` stellst du ausschließlich das gewählte `M3C_GITHUB_RO_TOKEN` oder
+`M3C_GITLAB_RO_TOKEN` für den gewählten kanonischen API-Origin bereit. Beschränke
+das Token auf Repository-Leserechte; der Familienname beweist keine tatsächlichen
+Berechtigungen auf dem Server. Go validiert und verwendet es nach dem Erwerb
+frischer, eingeschriebener History. MCP erfasst genau diese Umgebungsfamilie beim
+Start und übergibt deren unveränderte Bytes an denselben gehaltenen Go-Prozess.
+Andere Token-Familien, Credential-Helper, native Stores, Git-Konfiguration,
+Proxys und Redirects werden nicht verwendet. TLS `system` verwendet System-CAs;
+`pinned-pem` ausschließlich die geprüfte `ca`-Dateireferenz wie beim ER1-Profil.
+
+Verwende den bestehenden Aufruf `pull --native-session --enterprise-profile ABS
+--kind agent` oder `--kind skill`, den exakten `--digest sha256:HEX`, `--install`
+und `--trust-mode`. Prüfe den Plan und bestätige dessen Token im selben Prozess.
+MCP verwendet die bestehenden getrennten Agent-/SKILL-Opt-ins und
+Plan-/Confirm-/Close-Tools, eine unveränderliche Startauswahl und einen gemeinsamen
+gehaltenen Session-Slot. Ältere native Git-Locators schalten diesen v5-Live-Weg
+nicht frei. Es gibt keinen Legacy-Fallback, implizites Enrollment oder
+Git-Schreibzugriff.
+
+Der Reader erfasst den vollständigen `events/`-Unterbaum am Root, einschließlich
+irreführender Dateinamen und anderer Digest-Verzeichnisse. Fehlerhafte Datensätze,
+unvollständige Seiten, unbekannte/gemischte Eventformen, falsche Objekt-Hashes
+und überschrittene Grenzen sperren die Quelle. Ein Source-Revoke für das gewählte
+Artefakt ergibt 12; es schreibt keine native History fort und importiert keine
+neue Signer-Rolle. Autoritativer Widerrufsstatus 17 stammt aus dem unabhängigen
+nativen Journal. Installed-Audit-Envelope-Bytes werden in der SourceProof-/
+Zustimmungsbindung der Session erfasst, bleiben aber kryptografisch ungeprüfte,
+nicht autorisierende Metadaten; sie erfüllen weder Admission noch Quorum.
+Der veröffentlichte verwaltete Nachweis erhält den vollständigen Admission-/
+Governance-Kontext; nicht jeder Source-Audit-Datensatz wird im Ziel gespeichert.
+
+Die getrennten Agent-/SKILL-Publisher, Archiv-/Abhängigkeitsprüfungen,
+zielgebundene Zustimmung, erhaltenen Nachweise, SKILL-Backups und Regeln bei
+unsicheren I/O-Ergebnissen gelten weiterhin. Native Git-Lesezugriffe haben ein
+30-Sekunden-Limit und endliche kumulative Request-/Objekt-/Tree-/Pfad-/JSON-/
+Arbeitsbudgets: höchstens 500 Event-Blobs, 16 MiB gemeinsame Event-Bytes, ein 16-MiB-
+Archiv und 512 MiB verrechnete Arbeit über den gehaltenen Vorgang. Einzelne
+Obergrenzen versprechen nicht, dass jede Kombination hineinpasst. Große oder
+nicht unterstützte Repositories werden gesperrt. Dieser Weg liefert keine
+automatische Abhängigkeitsinstallation, Git-Publikation oder Sandbox für die
+Ausführung nicht vertrauenswürdiger Skills.

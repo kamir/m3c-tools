@@ -5,12 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 import hashlib
 import os
+import re
 from pathlib import Path
 import stat
 import sys
 import unicodedata
 from collections.abc import Mapping
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 from api_connection import parse_api_base
 from native_agent_protocol import decode_bounded_json, validate_digest
@@ -175,12 +176,16 @@ def _auth_family(document) -> str | None:
     # or crypto verification. In particular no referenced trust/TLS file is read.
     if (
         type(document) is not dict
-        or document.get("schema") != "m3c.enterprise-project-profile/v4"
+        or document.get("schema") not in (
+            "m3c.enterprise-project-profile/v4", "m3c.enterprise-project-profile/v5"
+        )
     ):
         raise NativeAgentBindingError()
     native = document.get("native")
     if type(native) is not dict:
         raise NativeAgentBindingError()
+    if document["schema"] == "m3c.enterprise-project-profile/v5":
+        return _git_auth_family(native.get("carrier"))
     carrier = _keys(
         native.get("carrier"), {"kind", "base_url", "context_id", "auth", "tls"}
     )
@@ -229,6 +234,78 @@ def _auth_family(document) -> str | None:
     if selected != origin or auth_origin != expected_origin:
         raise NativeAgentBindingError()
     return "ER1_API_KEY" if auth["family"] == "api-key" else "ER1_DEVICE_TOKEN"
+
+
+def _git_api_origin(value):
+    base = _text(value, 8192)
+    _, origin = parse_api_base(base)
+    parsed = urlsplit(base)
+    raw = parsed.path
+    decoded = unquote(raw, errors="strict")
+    if (origin[0] != "https" or len(decoded.encode("utf-8")) > 4096
+            or any(c in decoded for c in "\\%") or "//" in decoded
+            or any(c.isspace() for c in decoded)
+            or any(part in (".", "..") for part in decoded.split("/"))):
+        raise NativeAgentBindingError()
+    # Match Go's GET-boundary rejection of encoded delimiters and aliases.
+    for match in re.finditer(r"%([0-9a-fA-F]{2})", raw):
+        byte = int(match[1], 16)
+        if (byte in b"/\\%.-_~" or 48 <= byte <= 57
+                or 65 <= byte <= 90 or 97 <= byte <= 122):
+            raise NativeAgentBindingError()
+    return origin
+
+
+def _git_auth_family(value) -> str | None:
+    carrier = _keys(value, {"kind", "provider", "api_base", "repository",
+                            "object_format", "commit_oid", "root_tree_oid",
+                            "tls", "auth"})
+    if carrier["kind"] != "git" or carrier["provider"] not in ("github", "gitlab"):
+        raise NativeAgentBindingError()
+    provider = carrier["provider"]
+    repository = _text(carrier["repository"], 1024)
+    parts = repository.split("/")
+    if (not 2 <= len(parts) <= 8 or (provider == "github" and len(parts) != 2)
+            or any(not 1 <= len(part) <= 255 or part in (".", "..")
+                   or part.startswith("-") or part.lower().endswith(".git")
+                   or re.fullmatch(r"[A-Za-z0-9_.-]+", part) is None
+                   for part in parts)):
+        raise NativeAgentBindingError()
+    if carrier["object_format"] != "sha1":
+        raise NativeAgentBindingError()
+    for key in ("commit_oid", "root_tree_oid"):
+        if re.fullmatch(r"[0-9a-f]{40}", _text(carrier[key], 40)) is None:
+            raise NativeAgentBindingError()
+    origin = _git_api_origin(carrier["api_base"])
+    tls = carrier["tls"]
+    if type(tls) is not dict:
+        raise NativeAgentBindingError()
+    if tls.get("mode") == "system":
+        _keys(tls, {"mode"})
+    elif tls.get("mode") == "pinned-pem":
+        _keys(tls, {"mode", "ca"})
+        ca = _keys(tls["ca"], {"path", "sha256"})
+        _text(ca["path"], _MAX_PATH)
+        if re.fullmatch(r"[0-9a-fA-F]{64}", _text(ca["sha256"], 64)) is None:
+            raise NativeAgentBindingError()
+    else:
+        raise NativeAgentBindingError()
+    auth = carrier["auth"]
+    if type(auth) is not dict:
+        raise NativeAgentBindingError()
+    if auth.get("mode") == "none":
+        _keys(auth, {"mode"})
+        return None
+    _keys(auth, {"mode", "family", "origin"})
+    if auth["mode"] != "external-env" or auth["family"] != provider + "-read-token":
+        raise NativeAgentBindingError()
+    auth_origin = _text(auth["origin"], 8192)
+    canonical, selected = parse_api_base(auth_origin)
+    parsed = urlsplit(canonical)
+    if (selected != origin
+            or auth_origin != urlunsplit((parsed.scheme, parsed.netloc, "", "", ""))):
+        raise NativeAgentBindingError()
+    return "M3C_GITHUB_RO_TOKEN" if provider == "github" else "M3C_GITLAB_RO_TOKEN"
 
 
 def _environment(

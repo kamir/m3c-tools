@@ -23,8 +23,10 @@ UNIT_CASES = [
 ]
 UNIT_CASES += [{"classname": "test_native_skill_session", "name": name}
                for name in ("test_native_skill_startup_binding", "test_native_skill_session_lifecycle")]
+UNIT_CASES += [{"classname": "test_native_git_session", "name": name}
+               for name in ("test_native_git_startup_binding", "test_native_git_session_lifecycle")]
 UNIT_FILES = ["test_native_agent_binding.py", "test_native_agent_protocol.py",
-              "test_native_agent_session.py", "test_native_skill_session.py"]
+              "test_native_agent_session.py", "test_native_skill_session.py", "test_native_git_session.py"]
 PREFLIGHT = (
     "import json,sys,importlib.metadata;from mcp.server.fastmcp import FastMCP;"
     "from mcp import ClientSession;from mcp.client.stdio import stdio_client;"
@@ -123,7 +125,7 @@ def run_native_units(report):
     if not report.is_absolute() or report.exists() or sidecar.exists() or report.is_symlink():
         raise ValueError("new absolute native MCP report is required")
     command = [executable, "-I", "-B", "-m", "pytest", "-q", *UNIT_FILES,
-               "-k", "not test_native_agent_retained_session_stdio and not test_native_skill_retained_session_stdio", "--junitxml=" + str(report)]
+               "-k", "not test_native_agent_retained_session_stdio and not test_native_skill_retained_session_stdio and not test_native_git_retained_session_stdio", "--junitxml=" + str(report)]
     subprocess.run(command, cwd=ROOT / "mcp-skill-server", check=True, timeout=180,
                    stdin=subprocess.DEVNULL)
     if report.is_symlink() or not report.is_file() or report.stat().st_size > 32 << 20:
@@ -136,9 +138,11 @@ def run_native_units(report):
                     excluded_case="test_native_agent_retained_session_stdio",
                     integration_requirement="TestNativeAgentRetainedMCPSubprocess",
                     excluded_cases=["test_native_agent_retained_session_stdio",
-                                    "test_native_skill_retained_session_stdio"],
+                                    "test_native_skill_retained_session_stdio",
+                                    "test_native_git_retained_session_stdio"],
                     integration_requirements=["TestNativeAgentRetainedMCPSubprocess",
-                                              "TestNativeSkillRetainedMCPSubprocess"])
+                                              "TestNativeSkillRetainedMCPSubprocess",
+                                              "TestNativeGitRetainedMCPSubprocess"])
     with sidecar.open("x", encoding="utf-8") as stream:
         json.dump(metadata, stream, indent=2)
         stream.write("\n")

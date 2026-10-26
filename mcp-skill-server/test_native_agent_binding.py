@@ -566,3 +566,78 @@ def test_native_agent_binding_windows_frozen_handle_ctime_rechecked(tmp_path):
                 delta[0] += 100
                 with pytest.raises(binding.NativeAgentBindingError):
                     captured.recheck()
+
+
+def test_native_git_binding_invalid_source_precedes_secret_snapshot(tmp_path):
+    env, profile, document = fixture(tmp_path)
+    document["schema"] = "m3c.enterprise-project-profile/v5"
+    env.update({"M3C_GITHUB_RO_TOKEN": "synthetic-github-read-value",
+                "M3C_GITLAB_RO_TOKEN": "synthetic-gitlab-read-value"})
+
+    class NoSecrets(dict):
+        def get(self, key, default=None):
+            if key in {"M3C_GITHUB_RO_TOKEN", "M3C_GITLAB_RO_TOKEN", "ER1_API_KEY", "ER1_DEVICE_TOKEN"}:
+                raise AssertionError("invalid source read a credential family")
+            return super().get(key, default)
+
+        def __getitem__(self, key):
+            if key in {"M3C_GITHUB_RO_TOKEN", "M3C_GITLAB_RO_TOKEN", "ER1_API_KEY", "ER1_DEVICE_TOKEN"}:
+                raise AssertionError("invalid source read a credential family")
+            return super().__getitem__(key)
+
+    cases = [
+        ("provider", "unknown"), ("object_format", "sha256"),
+        ("commit_oid", "main"), ("root_tree_oid", "B" * 40),
+        ("repository", "owner/../repo"), ("repository", "owner/repo.GIT"),
+        ("api_base", "https://git.invalid/api/../escape"),
+        ("api_base", "https://git.invalid/api//alias"),
+        ("api_base", "https://git.invalid/api%2Fescape"),
+        ("api_base", "https://git.invalid/%61pi"),
+        ("api_base", "https://git.invalid/api?redirect=elsewhere"),
+        ("api_base", "https://user@git.invalid/api"),
+        ("auth", {"mode": "external-env", "family": "gitlab-read-token", "origin": "https://git.invalid:443"}),
+        ("auth", {"mode": "external-env", "family": "github-read-token", "origin": "https://other.invalid:443"}),
+        ("tls", {"mode": "system", "ca": None}),
+    ]
+    for key, value in cases:
+        carrier = {"kind": "git", "provider": "github", "api_base": "https://git.invalid/api",
+                   "repository": "owner/repo", "object_format": "sha1",
+                   "commit_oid": "a" * 40, "root_tree_oid": "b" * 40,
+                   "tls": {"mode": "system"},
+                   "auth": {"mode": "external-env", "family": "github-read-token", "origin": "https://git.invalid:443"}}
+        carrier[key] = value
+        document["native"]["carrier"] = carrier
+        profile.write_text(json.dumps(document), encoding="utf-8")
+        captured = binding.capture_native_agent_binding(NoSecrets(env))
+        assert captured.intent and not captured.enabled
+        assert captured.error == binding.NATIVE_AGENT_BINDING_ERROR, (key, value)
+
+
+def test_native_git_binding_freezes_exact_provider_family(tmp_path):
+    env, profile, document = fixture(tmp_path)
+    document["schema"] = "m3c.enterprise-project-profile/v5"
+    env.update({"M3C_GITHUB_RO_TOKEN": "synthetic-github-read-value",
+                "M3C_GITLAB_RO_TOKEN": "synthetic-gitlab-read-value",
+                "ER1_API_KEY": "unselected-er1-value",
+                "HTTPS_PROXY": "https://proxy.invalid", "GIT_CONFIG": "unselected"})
+    for provider in ("github", "gitlab"):
+        for mode in ("none", "external-env"):
+            auth = {"mode": mode}
+            if mode == "external-env":
+                auth.update(family=provider + "-read-token", origin="https://git.invalid:443")
+            document["native"]["carrier"] = {
+                "kind": "git", "provider": provider, "api_base": "https://git.invalid/api",
+                "repository": "owner/repo", "object_format": "sha1",
+                "commit_oid": "a" * 40, "root_tree_oid": "b" * 40,
+                "tls": {"mode": "system"}, "auth": auth}
+            profile.write_text(json.dumps(document), encoding="utf-8")
+            captured = binding.capture_native_agent_binding(env)
+            assert captured.enabled and not captured.error, (provider, mode)
+            captured.recheck()
+            variable = "M3C_GITHUB_RO_TOKEN" if provider == "github" else "M3C_GITLAB_RO_TOKEN"
+            child = captured.child_environment()
+            assert set(child) == {"HOME", "USERPROFILE"} | ({variable} if mode != "none" else set())
+            if mode != "none":
+                assert child[variable] == env[variable]
+                child[variable] = "caller-mutated"
+                assert captured.child_environment()[variable] == env[variable]
