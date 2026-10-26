@@ -7,6 +7,7 @@ import hashlib
 import os
 from pathlib import Path
 import stat
+import sys
 import unicodedata
 from collections.abc import Mapping
 from urllib.parse import urlsplit, urlunsplit
@@ -84,6 +85,7 @@ class _FileObservation:
     ctime_ns: int
     mode: int
     sha256: str
+    handle_ctime_ns: int
 
 
 def _identity(info):
@@ -95,6 +97,23 @@ def _identity(info):
         info.st_ctime_ns,
         info.st_mode,
     )
+
+
+def _path_handle_same(path_info, held_info):
+    expected, actual = _identity(path_info), _identity(held_info)
+    if sys.platform == "win32":
+        # CPython's Windows path stat infers 0111 from executable extensions;
+        # fstat has no filename adjustment. Normalize only this cross-API
+        # difference. Path/path and handle/handle mode checks remain exact.
+        # Windows path stat retains legacy creation-time ctime; fstat reports
+        # change-time ctime. Compare the common explicit birthtime cross-API,
+        # while retaining both raw ctimes for same-API checks and recheck.
+        try:
+            expected = expected[:4] + (path_info.st_birthtime_ns, expected[-1] & ~0o111)
+            actual = actual[:4] + (held_info.st_birthtime_ns, actual[-1] & ~0o111)
+        except AttributeError:
+            raise NativeAgentBindingError() from None
+    return expected == actual
 
 
 def _observe(path: str, maximum: int, *, retain: bool = False):
@@ -116,7 +135,7 @@ def _observe(path: str, maximum: int, *, retain: bool = False):
     total = 0
     try:
         held = os.fstat(fd)
-        if not stat.S_ISREG(held.st_mode) or _identity(held) != _identity(before):
+        if not stat.S_ISREG(held.st_mode) or not _path_handle_same(before, held):
             raise NativeAgentBindingError()
         while True:
             chunk = os.read(fd, min(_CHUNK, maximum + 1 - total))
@@ -133,13 +152,15 @@ def _observe(path: str, maximum: int, *, retain: bool = False):
         if (
             total != held.st_size
             or _identity(after) != _identity(held)
-            or _identity(final) != _identity(held)
+            or _identity(final) != _identity(before)
         ):
             raise NativeAgentBindingError()
     finally:
         # Close errors invalidate startup/recheck; never return bytes on uncertainty.
         os.close(fd)
-    observation = _FileObservation(path, *_identity(held), digest.hexdigest())
+    observation = _FileObservation(
+        path, *_identity(before), digest.hexdigest(), held.st_ctime_ns
+    )
     return observation, b"".join(chunks) if retain else None
 
 

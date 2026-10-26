@@ -390,3 +390,179 @@ def test_native_agent_binding_critical_alias_before_secret_selection(tmp_path):
     doc["Schema"] = doc["schema"]
     profile.write_text(json.dumps(doc))
     assert not binding.capture_native_agent_binding(env).enabled
+
+
+def stat_copy(info, **changes):
+    from types import SimpleNamespace
+
+    values = {
+        name: getattr(info, name)
+        for name in (
+            "st_dev",
+            "st_ino",
+            "st_size",
+            "st_mtime_ns",
+            "st_ctime_ns",
+            "st_mode",
+        )
+    }
+    values["st_birthtime_ns"] = getattr(info, "st_birthtime_ns", info.st_ctime_ns)
+    values.update(changes)
+    return SimpleNamespace(**values)
+
+
+def test_native_agent_binding_windows_path_handle_execute_bit_difference(tmp_path):
+    env, _, _ = fixture(tmp_path)
+    real_fstat, real_lstat = binding.os.fstat, binding.os.lstat
+
+    def windows_handle(fd):
+        observed = real_fstat(fd)
+        return stat_copy(
+            observed,
+            st_mode=observed.st_mode & ~0o111,
+            st_ctime_ns=observed.st_ctime_ns + 100,
+        )
+
+    # Model the documented Windows stat/fstat difference without claiming that
+    # local execution establishes native Windows behavior.
+    with patch.object(binding.sys, "platform", "win32"):
+        with patch.object(binding.os, "fstat", side_effect=windows_handle):
+            with patch.object(
+                binding.os,
+                "lstat",
+                side_effect=lambda path: stat_copy(real_lstat(path)),
+            ):
+                captured = binding.capture_native_agent_binding(env)
+                assert captured.enabled
+                captured.recheck()
+                assert (
+                    captured._binary_observation.handle_ctime_ns
+                    != captured._binary_observation.ctime_ns
+                )
+    assert captured._binary_observation.mode == os.lstat(captured.binary).st_mode
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "st_dev",
+        "st_ino",
+        "st_size",
+        "st_mtime_ns",
+        "st_birthtime_ns",
+        "permissions",
+        "type",
+    ],
+)
+def test_native_agent_binding_windows_identity_fields_still_strict(tmp_path, field):
+    import stat
+
+    env, _, _ = fixture(tmp_path)
+    captured = binding.capture_native_agent_binding(env)
+    assert captured.enabled
+    original = stat_copy(os.lstat(captured.binary))
+    held = stat_copy(original, st_mode=original.st_mode & ~0o111)
+    if field == "permissions":
+        held.st_mode ^= stat.S_IWUSR
+    elif field == "type":
+        held.st_mode = stat.S_IFIFO | 0o600
+    else:
+        setattr(held, field, getattr(held, field) + 1)
+    with patch.object(binding.sys, "platform", "win32"):
+        assert not binding._path_handle_same(original, held)
+
+
+def test_native_agent_binding_posix_execute_bit_difference_still_denied(tmp_path):
+    env, _, _ = fixture(tmp_path)
+    original = os.lstat(str(Path(sys.executable).resolve()))
+    held = stat_copy(original, st_mode=original.st_mode ^ 0o111)
+    with patch.object(binding.sys, "platform", "linux"):
+        assert not binding._path_handle_same(original, held)
+
+
+@pytest.mark.parametrize("changed_side", ["path", "handle"])
+def test_native_agent_binding_windows_same_api_mode_changes_still_denied(
+    tmp_path, changed_side
+):
+    env, profile, _ = fixture(tmp_path)
+    real_lstat, real_fstat = binding.os.lstat, binding.os.fstat
+    calls = {"path": 0, "handle": 0}
+
+    def path_stat(path):
+        observed = real_lstat(path)
+        calls["path"] += 1
+        if changed_side == "path" and calls["path"] == 2:
+            return stat_copy(observed, st_mode=observed.st_mode ^ 0o111)
+        return stat_copy(observed)
+
+    def held_stat(fd):
+        observed = real_fstat(fd)
+        calls["handle"] += 1
+        mode = observed.st_mode & ~0o111
+        if changed_side == "handle" and calls["handle"] == 2:
+            mode ^= 0o111
+        return stat_copy(observed, st_mode=mode)
+
+    with patch.object(binding.sys, "platform", "win32"):
+        with patch.object(binding.os, "lstat", side_effect=path_stat):
+            with patch.object(binding.os, "fstat", side_effect=held_stat):
+                with pytest.raises(binding.NativeAgentBindingError):
+                    binding._observe(str(profile), 65536)
+
+
+@pytest.mark.parametrize("changed_side", ["path", "handle"])
+def test_native_agent_binding_windows_raw_ctime_changes_still_denied(
+    tmp_path, changed_side
+):
+    _, profile, _ = fixture(tmp_path)
+    real_lstat, real_fstat = binding.os.lstat, binding.os.fstat
+    calls = {"path": 0, "handle": 0}
+
+    def path_stat(path):
+        observed = stat_copy(real_lstat(path))
+        calls["path"] += 1
+        if changed_side == "path" and calls["path"] == 2:
+            observed.st_ctime_ns += 100
+        return observed
+
+    def held_stat(fd):
+        observed = real_fstat(fd)
+        calls["handle"] += 1
+        delta = 200 if changed_side == "handle" and calls["handle"] == 2 else 100
+        return stat_copy(
+            observed,
+            st_mode=observed.st_mode & ~0o111,
+            st_ctime_ns=observed.st_ctime_ns + delta,
+        )
+
+    with patch.object(binding.sys, "platform", "win32"):
+        with patch.object(binding.os, "lstat", side_effect=path_stat):
+            with patch.object(binding.os, "fstat", side_effect=held_stat):
+                with pytest.raises(binding.NativeAgentBindingError):
+                    binding._observe(str(profile), 65536)
+
+
+def test_native_agent_binding_windows_frozen_handle_ctime_rechecked(tmp_path):
+    env, _, _ = fixture(tmp_path)
+    real_lstat, real_fstat = binding.os.lstat, binding.os.fstat
+    delta = [100]
+
+    def held_stat(fd):
+        observed = real_fstat(fd)
+        return stat_copy(
+            observed,
+            st_mode=observed.st_mode & ~0o111,
+            st_ctime_ns=observed.st_ctime_ns + delta[0],
+        )
+
+    with patch.object(binding.sys, "platform", "win32"):
+        with patch.object(
+            binding.os, "lstat", side_effect=lambda path: stat_copy(real_lstat(path))
+        ):
+            with patch.object(binding.os, "fstat", side_effect=held_stat):
+                captured = binding.capture_native_agent_binding(env)
+                assert captured.enabled
+                captured.recheck()
+                delta[0] += 100
+                with pytest.raises(binding.NativeAgentBindingError):
+                    captured.recheck()

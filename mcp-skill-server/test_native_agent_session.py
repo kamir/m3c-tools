@@ -277,11 +277,12 @@ def test_native_agent_session_cleanup(tmp_path):
 
         # Cancelled spawn remains in custody until the late process is reaped.
         host, children, calls = child_host(binding)
-        host.SPAWN_SECONDS = 0.1
         original_spawn = host._spawn
         entered, release = asyncio.Event(), asyncio.Event()
 
         async def delayed_spawn(*args, **kwargs):
+            # Real binding observation has completed before this spawn seam.
+            host.SPAWN_SECONDS = 0.1
             entered.set()
             await release.wait()
             return await original_spawn(*args, **kwargs)
