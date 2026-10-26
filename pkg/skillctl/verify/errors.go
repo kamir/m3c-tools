@@ -12,7 +12,12 @@
 // owned by stream S8. S7's contract is "the parts S8 will reach for."
 package verify
 
-import "errors"
+import (
+	"context"
+	"errors"
+
+	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
+)
 
 // Exit codes reserved by SPEC-0188 §11.
 //
@@ -318,6 +323,16 @@ func ExitCode(err error) int {
 		return 0
 	}
 	switch {
+	case errors.Is(err, registry.ErrNativePersistence):
+		return 1
+	case errors.Is(err, registry.ErrNativeDependenciesUnavailable):
+		return nativeErrorExit(err, ExitDepsUnsatisfied)
+	case errors.Is(err, registry.ErrNativeSubjectRevoked):
+		return nativeErrorExit(err, ExitDataSourceDenied)
+	case errors.Is(err, registry.ErrNativeHistoryRequired), errors.Is(err, registry.ErrNativeHistoryInvalid), errors.Is(err, registry.ErrNativeHistoryStale), errors.Is(err, registry.ErrNativeHistoryExists), errors.Is(err, registry.ErrNativeSessionUnavailable):
+		return nativeErrorExit(err, ExitRevocationStale)
+	case errors.Is(err, registry.ErrNativeEvidenceInvalid), errors.Is(err, registry.ErrNativeConsentInvalid):
+		return nativeErrorExit(err, ExitRegistryNotTrusted)
 	case errors.Is(err, ErrDigestMismatch):
 		return ExitDigestMismatch
 	case errors.Is(err, ErrAuthorSigInvalid):
@@ -360,4 +375,13 @@ func ExitCode(err error) int {
 	default:
 		return 1
 	}
+}
+
+// Native context cancellation remains distinguishable from a trust decision.
+// Legacy verifier error precedence is unchanged.
+func nativeErrorExit(err error, decision int) int {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return 1
+	}
+	return decision
 }

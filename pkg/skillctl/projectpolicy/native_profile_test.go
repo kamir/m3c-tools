@@ -68,6 +68,71 @@ func TestNativeProfileStrictSelection(t *testing.T) {
 		}
 		return
 	}
+	t.Run("offline-selection-retains-pins-without-live-grant", func(t *testing.T) {
+		path, doc := nativePolicyFixture(t)
+		home := filepath.Dir(path)
+		pub, key, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		raw := []byte("registry: self\npubkey_b64: " + base64.StdEncoding.EncodeToString(pub) + "\ngovernance_minimum: green\ngovernance_quorum: 1\n")
+		if err = os.WriteFile(filepath.Join(home, "revoke.yaml"), raw, 0600); err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256(raw)
+		doc["native"].(map[string]any)["revocation_trust"].(map[string]any)["sha256"] = hex.EncodeToString(sum[:])
+		writeNativePolicyFixture(t, path, doc)
+		policy, err := LoadNative(path, home, home)
+		if err != nil {
+			t.Fatal(err)
+		}
+		selection, err := policy.OfflineInstallSelection()
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range []string{"native.json", "artifact.yaml", "revoke.yaml", "runtime.json"} {
+			if err = os.Remove(filepath.Join(home, name)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		journal, err := registry.OpenNativeJournal(selection)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = journal.Status(context.Background()); !errors.Is(err, registry.ErrNativeHistoryRequired) {
+			t.Fatalf("factory implicitly enrolled: %v", err)
+		}
+		head, err := registry.BuildRevocationHead(registry.RevocationHeadInput{Epoch: 1, IssuedAt: time.Now().UTC().Add(-time.Minute), Digests: []string{}, Emergency: []string{}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = registry.SignEnvelopeSignature(key, head); err != nil {
+			t.Fatal(err)
+		}
+		evidence, err := json.Marshal(map[string]any{"schema": "m3c.native-revocation-evidence/v1", "head": head, "revoked_digests": []string{}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		status, err := journal.Enroll(context.Background(), evidence)
+		if err != nil || status.HistoryAuthorityID != policy.HistoryAuthorityID() {
+			t.Fatalf("frozen selected authority lost: %v", err)
+		}
+		session, err := journal.BeginOfflineInstall(context.Background(), "sha256:"+strings.Repeat("1", 64))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = session.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if !errors.Is(artifact.RejectNativeEnterpriseMutation(policy.Intent()), artifact.ErrNativeMutationUnavailable) {
+			t.Fatal("offline factory enabled live mutation")
+		}
+		for _, invalid := range []*NativePolicy{nil, {}} {
+			if _, err = invalid.OfflineInstallSelection(); err == nil {
+				t.Fatal("nil/zero policy produced selection")
+			}
+		}
+	})
 	t.Run("git-carrier-selection-without-io", func(t *testing.T) {
 		var localWant error
 		if !filepath.IsAbs("/explicit-offline-repository") {

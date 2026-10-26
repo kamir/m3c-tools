@@ -420,16 +420,27 @@ func writeAgentBytes(w io.Writer, b []byte) error {
 	return e
 }
 
-func publishAgentEvidence(b *StagedBundle, skb []byte, opts InstallOpts) (result *InstallResult, resultErr error) {
-	published := false
-	defer func() {
-		if resultErr != nil {
-			resultErr = agentEvidenceDiagnostic(resultErr)
-			if published {
-				resultErr = agentPublicationFailure(resultErr)
-			}
-		}
-	}()
+type preparedAgent struct {
+	bundle                    *StagedBundle
+	archive, contextRaw, body []byte
+	roots                     *SelfTrustRoots
+	manifest                  skillbundle.BundleManifest
+	entries                   []skillbundle.Entry
+}
+
+func prepareAgentEvidence(b *StagedBundle, skb []byte, opts InstallOpts) (*preparedAgent, error) {
+	return prepareAgentEvidenceMode(b, skb, opts, false)
+}
+
+func prepareNativeAgentEvidence(b *StagedBundle, skb []byte, opts InstallOpts) (*preparedAgent, error) {
+	return prepareAgentEvidenceMode(b, skb, opts, true)
+}
+
+// nativeManifest selects stricter parsing only; it never grants publication.
+func prepareAgentEvidenceMode(b *StagedBundle, skb []byte, opts InstallOpts, nativeManifest bool) (*preparedAgent, error) {
+	if b == nil {
+		return nil, ErrAgentEvidenceInvalid
+	}
 	if !validAgentName(b.Name) {
 		return nil, ErrAgentEvidenceInvalid
 	}
@@ -456,18 +467,66 @@ func publishAgentEvidence(b *StagedBundle, skb []byte, opts InstallOpts) (result
 	if err = ctx.Err(); err != nil {
 		return nil, err
 	}
+	if nativeManifest {
+		if err = verifyAgentContext(roots, ctxSnapshot, b.Digest, b.Name, b.Version, agentClockOf(opts)); err != nil {
+			return nil, err
+		}
+	}
 	// The native byte cap is explicit and finite, including hidden tar metadata.
 	inflated := skillbundle.DefaultMaxExtractedBytes + int64(skillbundle.DefaultMaxExtractedFiles)*1024 + (1 << 20)
 	entries, _, err := skillbundle.UnpackBounded(ctx, skb, skillbundle.UnpackOptions{}, inflated)
 	if err != nil {
 		return nil, err
 	}
-	_, body, err := strictAgentManifest(entries, b)
+	if nativeManifest {
+		if err = nativeEmptyAgentDependencies(entries); err != nil {
+			return nil, err
+		}
+	}
+	manifest, body, err := strictAgentManifest(entries, b)
 	if err != nil {
 		return nil, err
 	}
 	if err = verifyAgentContext(roots, ctxSnapshot, b.Digest, b.Name, b.Version, agentClockOf(opts)); err != nil {
 		return nil, err
+	}
+
+	return &preparedAgent{bundle: b, archive: skb, contextRaw: contextRaw, body: body, roots: roots, manifest: manifest, entries: entries}, nil
+}
+
+func publishAgentEvidence(b *StagedBundle, skb []byte, opts InstallOpts) (*InstallResult, error) {
+	prepared, err := prepareAgentEvidence(b, skb, opts)
+	if err != nil {
+		return nil, agentEvidenceDiagnostic(err)
+	}
+	return publishPreparedAgent(prepared, opts, nil)
+}
+
+// Both legacy and native session installation use this checked C2 publisher.
+// A native capability is concrete and private, never a caller approval callback.
+func publishPreparedAgent(prepared *preparedAgent, opts InstallOpts, native *NativeInstallSession) (result *InstallResult, resultErr error) {
+	published := false
+	defer func() {
+		if resultErr != nil {
+			result = nil
+			resultErr = agentEvidenceDiagnostic(resultErr)
+			if published {
+				resultErr = agentPublicationFailure(resultErr)
+			}
+		}
+	}()
+	if prepared == nil || prepared.bundle == nil {
+		return nil, ErrAgentEvidenceInvalid
+	}
+	b, skb, contextRaw, body, roots := prepared.bundle, prepared.archive, prepared.contextRaw, prepared.body, prepared.roots
+	ctxSnapshot := b.Attestation
+	ctx := agentContextOf(opts)
+	var err error
+	if native != nil {
+		native.observe("before-artifact-write")
+		if err = native.recheckLocked(ctx, prepared); err != nil {
+			return nil, err
+		}
 	}
 	ops := agentOpsOf(opts)
 	l := opts.agentLease
@@ -532,6 +591,11 @@ func publishAgentEvidence(b *StagedBundle, skb []byte, opts InstallOpts) (result
 		resultErr = errors.Join(resultErr, e)
 	}()
 	h := agentRecordHeader{agentRecordSchema, "agent", b.Name, b.Version, b.Digest, int64(len(skb)), int64(len(contextRaw)), strings.TrimPrefix(agentDigest(contextRaw), "sha256:")}
+	if native != nil {
+		if err = native.recheckLocked(ctx, prepared); err != nil {
+			return nil, err
+		}
+	}
 	recordInfo, err := writeAgentStaged(ctx, stage, "record", 0600, ops, func(w io.Writer) error { return writeAgentRecord(w, h, skb, contextRaw) })
 	if err != nil {
 		return nil, err
@@ -590,6 +654,13 @@ func publishAgentEvidence(b *StagedBundle, skb []byte, opts InstallOpts) (result
 				return nil, agentPublicationFailure(err)
 			}
 			return nil, err
+		}
+		if native != nil {
+			native.observe("before-replace")
+			if err = native.recheckLocked(ctx, prepared); err != nil {
+				return nil, err
+			}
+			native.terminal = true
 		}
 		published = true
 		l.published = true
