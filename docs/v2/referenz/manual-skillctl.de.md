@@ -3824,6 +3824,14 @@ Kunden-Plattformabnahme und Recovery-Freigabe bleiben Voraussetzungen des Releas
 
 ### Initiale native Historie und Live-Installation eines Agenten
 
+`--evidence <absolute-file>` wählt den vollständigen signierten lokalen Nachweis für
+ausdrückliches initiales Enrollment. Das Flag wählt weder Reset noch Remote-Quelle.
+
+`--native-session` wählt die gehaltene Agenten-Zustimmung im selben `pull`-Prozess.
+Erforderlich sind ein ausdrückliches v4-Profil, Agenten-Art, exakter Digest sowie
+Installations- und Trust-Mode-Flags; bisherige prozessübergreifende
+Bestätigungsflags sind nicht unterstützt.
+
 Im Projektverzeichnis des Profils ausführen. Vor der Installation wird die Historie
 ausdrücklich aus einer vollständigen signierten lokalen Nachweisdatei initialisiert:
 

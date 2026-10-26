@@ -3522,6 +3522,13 @@ platform acceptance and recovery approval are still required for release.
 
 ### Initial native history and live agent installation
 
+`--evidence <absolute-file>` selects the complete signed local evidence for explicit
+initial enrollment. It does not select a reset or a remote source.
+
+`--native-session` selects held, same-process agent consent for `pull`. It requires
+an explicit v4 profile, agent kind, exact digest, installation and trust-mode flags;
+legacy cross-process confirmation flags are unsupported.
+
 Run from the profile's project directory. Bootstrap history explicitly from a
 complete signed local evidence file before installation:
 
