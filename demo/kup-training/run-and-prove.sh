@@ -302,29 +302,22 @@ fi
 # Step 02: Bob publishes (online stretch)
 # ============================================================================
 if [ "$SKIP_ONLINE" -eq 0 ]; then
-  run_step 02 "Bob publishes to aims" bash 02-bob-publish.sh
-  assert_file 02 "$LOG_DIR/admit.json"           "admit.json written"
-  if [ -f "$LOG_DIR/admit.json" ]; then
-    # Each known response is reported with its semantic verdict.
-    # See flask/modules/skill_registry/api.py admit_bundle for the full
-    # error-code catalog.
-    if grep -qE '"digest"\s*:' "$LOG_DIR/admit.json"; then
-      record 02 green "registry admitted bundle fresh (200/201 with digest)"
-    elif grep -qE '"code"\s*:\s*"already_admitted"' "$LOG_DIR/admit.json"; then
-      record 02 green "registry returned 'already_admitted' (idempotent re-run, normal)"
-    elif grep -qE '"code"\s*:\s*"already_exists"' "$LOG_DIR/admit.json"; then
-      record 02 green "registry returned 'already_exists' (HTTP 409, idempotent)"
-    elif grep -qE '"code"\s*:\s*"signature_invalid"' "$LOG_DIR/admit.json"; then
-      record 02 red "signature_invalid: registered Bob pubkey doesn't match local key (ran P0 with the right keypair?)"
-    elif grep -qE '"code"\s*:\s*"storage_failed"' "$LOG_DIR/admit.json"; then
-      record 02 yellow "storage_failed: server-side SKILL_REGISTRY_KEY not configured (chain proof in 05 doesn't depend on this)"
-    elif grep -qE '"code"\s*:\s*"identity_not_found"' "$LOG_DIR/admit.json"; then
-      record 02 red "identity_not_found, register Bob first via P0 (./register-identity.sh id:bob@m3c …)"
-    elif grep -qE '"code"\s*:\s*"VALIDATION_ERROR"' "$LOG_DIR/admit.json"; then
-      record 02 red "VALIDATION_ERROR, script may have wrong multipart field names (expected: bundle/signature/identity_id)"
-    else
-      record 02 yellow "registry response shape unrecognized: $(head -c 200 "$LOG_DIR/admit.json" | tr -d '\n')"
-    fi
+  run_step 02 "Bob publishes to ER1 self" bash 02-bob-publish.sh
+  # 02 publishes through the ER1 `self` transport (skillctl publish
+  # --registry self, SPEC-0246) and is best-effort by contract: it prints its
+  # outcome and exits 0 either way, and it never consults the skill registry's
+  # identities. It used to POST /api/skills/bundles into logs/admit.json, and
+  # this block graded that file; nothing has written it since, so a fresh
+  # workspace read MISSING and an older one re-read a stale response. $LOG is
+  # truncated per run, so grading what 02 printed cannot see an earlier run.
+  if grep -q "published to ER1 self" "$LOG"; then
+    record 02 green "published to ER1 self (skillctl publish --registry self)"
+  elif grep -q "skipping the ER1 self publish" "$LOG"; then
+    record 02 yellow "02 found no reachable registry and skipped itself (the chain proof in 05 doesn't depend on it)"
+  elif grep -q "publish --registry self exit" "$LOG"; then
+    record 02 yellow "ER1 self publish failed, best-effort (needs an ER1 login + target; see logs/full.log; 05 doesn't depend on it)"
+  else
+    record 02 red "02 printed no publish outcome, see $LOG"
   fi
 fi
 
