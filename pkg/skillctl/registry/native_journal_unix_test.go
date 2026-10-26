@@ -3,10 +3,47 @@
 package registry
 
 import (
+	"errors"
 	"golang.org/x/sys/unix"
 	"os"
+	"path/filepath"
 	"testing"
 )
+
+func nativeJournalCheckPlatformPermissions(t *testing.T) {
+	t.Helper()
+	t.Run("platform-private-permissions", func(t *testing.T) {
+		for _, directory := range []bool{false, true} {
+			path := filepath.Join(t.TempDir(), "private-object")
+			mode := os.FileMode(0600)
+			if directory {
+				mode = 0700
+				if err := os.Mkdir(path, mode); err != nil {
+					t.Fatal(err)
+				}
+			} else if err := os.WriteFile(path, []byte("fixture"), mode); err != nil {
+				t.Fatal(err)
+			}
+			info, err := os.Lstat(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = nativeJournalPermissions(path, info, directory); err != nil {
+				t.Fatal("private ordinary object rejected", err)
+			}
+			if err = os.Chmod(path, mode|0044); err != nil {
+				t.Fatal(err)
+			}
+			info, err = os.Lstat(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = nativeJournalPermissions(path, info, directory); !errors.Is(err, ErrNativeHistoryInvalid) {
+				t.Fatal("group/other access accepted", err)
+			}
+		}
+	})
+}
 
 func nativeJournalSpecialKinds() []string {
 	return []string{"directory", "fifo", "symlink-fifo", "hardlink"}

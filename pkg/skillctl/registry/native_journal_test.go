@@ -58,6 +58,7 @@ func (f *journalFixture) evidence(t *testing.T, epoch int, age time.Duration, se
 }
 func journalEmpty() []string { return []string{} }
 func TestNativeJournalEnrollmentAndHistory(t *testing.T) {
+	nativeJournalCheckPlatformPermissions(t)
 
 	t.Run("cancellation-and-invalid-context", func(t *testing.T) {
 		f := newJournalFixture(t)
