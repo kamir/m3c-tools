@@ -15,56 +15,56 @@ type nativeLiveBinding struct {
 	BaseURL, ContextID, AuthMode, AuthFamily, AuthOrigin, TLSMode, CASHA256 string
 }
 
-func parseNativeLiveSource(dir string, raw []byte) (*registry.NativeLiveAgentSource, nativeLiveBinding, error) {
+func parseNativeLiveSource(dir string, raw []byte) (*registry.NativeLiveAgentSource, *registry.NativeLiveSkillSource, nativeLiveBinding, error) {
 	var binding nativeLiveBinding
 	object, err := nativeObject(raw, "kind", "base_url", "context_id", "tls", "auth")
 	if err != nil {
-		return nil, binding, err
+		return nil, nil, binding, err
 	}
 	var kind string
 	if json.Unmarshal(object["kind"], &kind) != nil || kind != "er1" {
-		return nil, binding, ErrUnsupported
+		return nil, nil, binding, ErrUnsupported
 	}
 	if json.Unmarshal(object["base_url"], &binding.BaseURL) != nil || !nativeText(binding.BaseURL, 8192) || json.Unmarshal(object["context_id"], &binding.ContextID) != nil || !nativeText(binding.ContextID, 8192) {
-		return nil, binding, ErrInvalid
+		return nil, nil, binding, ErrInvalid
 	}
 	base, err := httpsafe.ParseAPIBase(binding.BaseURL, false)
 	if err != nil {
-		return nil, binding, ErrInvalid
+		return nil, nil, binding, ErrInvalid
 	}
 	binding.BaseURL = strings.TrimRight(base.URL, "/")
 	var tlsMode struct {
 		Mode string `json:"mode"`
 	}
 	if json.Unmarshal(object["tls"], &tlsMode) != nil {
-		return nil, binding, ErrInvalid
+		return nil, nil, binding, ErrInvalid
 	}
 	binding.TLSMode = tlsMode.Mode
 	var ca []byte
 	switch tlsMode.Mode {
 	case "system":
 		if _, err = nativeObject(object["tls"], "mode"); err != nil {
-			return nil, binding, err
+			return nil, nil, binding, err
 		}
 	case "pinned-pem":
 		tlsObject, e := nativeObject(object["tls"], "mode", "ca")
 		if e != nil {
-			return nil, binding, e
+			return nil, nil, binding, e
 		}
 		if _, e = nativeObject(tlsObject["ca"], "path", "sha256"); e != nil {
-			return nil, binding, e
+			return nil, nil, binding, e
 		}
 		var ref fileRef
 		if json.Unmarshal(tlsObject["ca"], &ref) != nil {
-			return nil, binding, ErrInvalid
+			return nil, nil, binding, ErrInvalid
 		}
 		ca, err = readNativeRef(dir, ref, maxProfileBytes)
 		if err != nil {
-			return nil, binding, err
+			return nil, nil, binding, err
 		}
 		binding.CASHA256 = strings.ToLower(ref.SHA256)
 	default:
-		return nil, binding, ErrUnsupported
+		return nil, nil, binding, ErrUnsupported
 	}
 	var auth struct {
 		Mode   string `json:"mode"`
@@ -72,32 +72,36 @@ func parseNativeLiveSource(dir string, raw []byte) (*registry.NativeLiveAgentSou
 		Origin string `json:"origin"`
 	}
 	if json.Unmarshal(object["auth"], &auth) != nil {
-		return nil, binding, ErrInvalid
+		return nil, nil, binding, ErrInvalid
 	}
 	switch auth.Mode {
 	case "none":
 		if _, err = nativeObject(object["auth"], "mode"); err != nil {
-			return nil, binding, err
+			return nil, nil, binding, err
 		}
 	case "external-env":
 		if _, err = nativeObject(object["auth"], "mode", "family", "origin"); err != nil {
-			return nil, binding, err
+			return nil, nil, binding, err
 		}
 		if auth.Family != "api-key" && auth.Family != "bearer" {
-			return nil, binding, ErrUnsupported
+			return nil, nil, binding, ErrUnsupported
 		}
 		if !nativeText(auth.Origin, 8192) {
-			return nil, binding, ErrInvalid
+			return nil, nil, binding, ErrInvalid
 		}
 	default:
-		return nil, binding, ErrUnsupported
+		return nil, nil, binding, ErrUnsupported
 	}
 	binding.AuthMode, binding.AuthFamily, binding.AuthOrigin = auth.Mode, auth.Family, auth.Origin
 	source, err := registry.NewNativeLiveAgentSource(registry.NativeLiveAgentSourceOptions{BaseURL: binding.BaseURL, ContextID: binding.ContextID, AuthMode: binding.AuthMode, AuthFamily: binding.AuthFamily, AuthOrigin: binding.AuthOrigin, TLSMode: binding.TLSMode, CAPEM: ca})
 	if err != nil {
-		return nil, binding, ErrInvalid
+		return nil, nil, binding, ErrInvalid
 	}
-	return source, binding, nil
+	skillSource, err := registry.NewNativeLiveSkillSource(registry.NativeLiveSkillSourceOptions{BaseURL: binding.BaseURL, ContextID: binding.ContextID, AuthMode: binding.AuthMode, AuthFamily: binding.AuthFamily, AuthOrigin: binding.AuthOrigin, TLSMode: binding.TLSMode, CAPEM: ca})
+	if err != nil {
+		return nil, nil, binding, ErrInvalid
+	}
+	return source, skillSource, binding, nil
 }
 
 // BeginER1AgentInstall holds an existing fresh native journal before reading a

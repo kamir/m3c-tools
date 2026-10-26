@@ -155,6 +155,9 @@ func (s *NativeLiveAgentSource) bindingID() string {
 type nativeLiveWork struct {
 	bytes  int64
 	tokens int
+	// Private phase observation for resource regression tests, never a grant,
+	// callback, public schema field or telemetry surface.
+	verificationCalls int
 }
 
 func (b *nativeLiveWork) charge(n int64) error {
@@ -193,6 +196,22 @@ func (s *NativeLiveAgentSource) Fetch(ctx context.Context, session *NativeInstal
 	if err := ctx.Err(); err != nil {
 		return nil, nativeLiveIO(err)
 	}
+	wire, err := s.fetchCandidate(ctx, session.journal, session.rootDigest, skillbundle.KindAgent)
+	if err != nil {
+		return nil, err
+	}
+	return &NativeLiveAgentCandidate{Archive: wire.Archive, Bundle: wire.Bundle, workBytes: wire.workBytes}, nil
+}
+
+type nativeLiveWireCandidate struct {
+	Archive   []byte
+	Bundle    *StagedBundle
+	workBytes int64
+}
+
+// fetchCandidate shares only untrusted transport and wire decoding. Each concrete
+// session checks its held native lease before calling this private mechanism.
+func (s *NativeLiveAgentSource) fetchCandidate(ctx context.Context, journal *NativeJournal, digest, kind string) (candidate *nativeLiveWireCandidate, resultErr error) {
 	responseMax := nativeLiveResponseMax
 	if s.responseMax != 0 {
 		if s.responseMax < 1 || s.responseMax > nativeLiveResponseMax {
@@ -281,7 +300,7 @@ func (s *NativeLiveAgentSource) Fetch(ctx context.Context, session *NativeInstal
 	if err = ctx.Err(); err != nil {
 		return nil, nativeLiveIO(err)
 	}
-	return nativeLiveParse(raw, secret, session, budget)
+	return nativeLiveParseSelected(raw, secret, journal, digest, kind, budget)
 }
 
 // nativeLiveJSON validates the entire wire tree before its map materialization.
@@ -444,6 +463,14 @@ func nativeLiveBody(item map[string]any) (string, string, error) {
 }
 
 func nativeLiveParse(raw []byte, secret string, s *NativeInstallSession, budget *nativeLiveWork) (*NativeLiveAgentCandidate, error) {
+	wire, err := nativeLiveParseSelected(raw, secret, s.journal, s.rootDigest, skillbundle.KindAgent, budget)
+	if err != nil {
+		return nil, err
+	}
+	return &NativeLiveAgentCandidate{Archive: wire.Archive, Bundle: wire.Bundle, workBytes: wire.workBytes}, nil
+}
+
+func nativeLiveParseSelected(raw []byte, secret string, journal *NativeJournal, rootDigest, kind string, budget *nativeLiveWork) (*nativeLiveWireCandidate, error) {
 	value, err := nativeLiveJSON(raw, nativeLiveResponseMax, secret, budget)
 	if err != nil {
 		return nil, err
@@ -483,10 +510,10 @@ func nativeLiveParse(raw []byte, secret string, s *NativeInstallSession, budget 
 			return nil, ErrNativeEvidenceInvalid
 		}
 		digest, ok := event["bundle_digest"].(string)
-		if !ok || digest != s.rootDigest {
+		if !ok || digest != rootDigest {
 			continue
 		}
-		if err = nativeLiveTenant(event, s); err != nil {
+		if err = nativeLiveTenantSelected(event, journal); err != nil {
 			return nil, err
 		}
 		admitted := false
@@ -544,8 +571,20 @@ func nativeLiveParse(raw []byte, secret string, s *NativeInstallSession, budget 
 	if err = budget.charge(8 * nativeLiveContextMax); err != nil {
 		return nil, err
 	}
-	context, _, err = snapshotAgentContext(context)
-	if err != nil || verifyAgentContext(s.journal.selection.artifactRoots, context, s.rootDigest, name, version, s.journal.now().UTC()) != nil {
+	var contextRaw []byte
+	context, contextRaw, err = snapshotAgentContext(context)
+	if err != nil {
+		return nil, ErrNativeEvidenceInvalid
+	}
+	if kind == skillbundle.KindSkill {
+		// Verification canonicalizes retained events per selected signer. Its
+		// source-phase cost must be prepaid here, not by a later skill Plan.
+		if err = budget.charge(4 * int64(len(contextRaw)) * int64(len(journal.selection.artifactRoots.Signers)+1)); err != nil {
+			return nil, err
+		}
+	}
+	budget.verificationCalls++
+	if verifyAgentContext(journal.selection.artifactRoots, context, rootDigest, name, version, journal.now().UTC()) != nil {
 		return nil, ErrNativeEvidenceInvalid
 	}
 	if len(archiveBody) > base64.StdEncoding.EncodedLen(nativeLiveArchiveMax)+(nativeLiveArchiveMax/50) || strings.ContainsRune(archiveBody, '\r') {
@@ -563,14 +602,14 @@ func nativeLiveParse(raw []byte, secret string, s *NativeInstallSession, budget 
 		return nil, ErrNativeEvidenceInvalid
 	}
 	hash := sha256.Sum256(archive)
-	if "sha256:"+hex.EncodeToString(hash[:]) != s.rootDigest {
+	if "sha256:"+hex.EncodeToString(hash[:]) != rootDigest {
 		return nil, ErrNativeEvidenceInvalid
 	}
-	return &NativeLiveAgentCandidate{Archive: archive, Bundle: &StagedBundle{Name: name, Version: version, Kind: skillbundle.KindAgent, Digest: s.rootDigest, Governance: s.journal.selection.artifactRoots.GovernanceMinimum, SourceDocID: sourceID, AuthorIdentity: identity, Attestation: context}, workBytes: budget.bytes}, nil
+	return &nativeLiveWireCandidate{Archive: archive, Bundle: &StagedBundle{Name: name, Version: version, Kind: kind, Digest: rootDigest, Governance: journal.selection.artifactRoots.GovernanceMinimum, SourceDocID: sourceID, AuthorIdentity: identity, Attestation: context}, workBytes: budget.bytes}, nil
 }
 
-func nativeLiveTenant(event map[string]any, s *NativeInstallSession) error {
-	a := s.journal.selection.authority
+func nativeLiveTenantSelected(event map[string]any, journal *NativeJournal) error {
+	a := journal.selection.authority
 	tenant, exists := event["tenant_scope"]
 	if !exists || (a.tenant == nil && tenant != nil) || (a.tenant != nil && tenant != *a.tenant) {
 		return ErrNativeEvidenceInvalid

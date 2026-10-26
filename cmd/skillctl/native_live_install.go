@@ -25,16 +25,17 @@ type nativePullFlags struct {
 func runSelectedNativePull(ctx context.Context, fs *flag.FlagSet, options nativePullFlags, input io.Reader, stdout, stderr io.Writer) int {
 	profile, pin, home, selector, digest, kind := options.profile, options.pin, options.home, options.selector, options.digest, options.kind
 	allowed := map[string]bool{"enterprise-profile": true, "enterprise-profile-sha256": true, "home": true, "registry": true, "digest": true, "kind": true, "install": true, "trust-mode": true, "native-session": true}
-	valid, profileSelected, pinSelected, homeSelected, registrySelected := true, false, false, false, false
+	valid, profileSelected, pinSelected, homeSelected, registrySelected, kindSelected := true, false, false, false, false, false
 	fs.Visit(func(f *flag.Flag) {
 		valid = valid && allowed[f.Name]
 		profileSelected = profileSelected || f.Name == "enterprise-profile"
 		pinSelected = pinSelected || f.Name == "enterprise-profile-sha256"
 		homeSelected = homeSelected || f.Name == "home"
 		registrySelected = registrySelected || f.Name == "registry"
+		kindSelected = kindSelected || f.Name == "kind"
 	})
-	if !valid || fs.NArg() != 0 || !options.nativeSession || !options.install || !options.trustMode || kind != "agent" || !profileSelected || profile == "" || digest == "" {
-		fmt.Fprintln(stderr, "Native installation requires --native-session --enterprise-profile ABS --kind agent --digest sha256:HEX --install --trust-mode; unrelated pull flags are unsupported.")
+	if !valid || fs.NArg() != 0 || !options.nativeSession || !options.install || !options.trustMode || (kind != "agent" && kind != "skill") || !kindSelected || !profileSelected || profile == "" || digest == "" {
+		fmt.Fprintln(stderr, "Native installation requires --native-session --enterprise-profile ABS --kind agent|skill --digest sha256:HEX --install --trust-mode; unrelated pull flags are unsupported.")
 		return exitUsage
 	}
 	if !filepath.IsAbs(profile) || (homeSelected && home == "") {
@@ -64,6 +65,9 @@ func runSelectedNativePull(ctx context.Context, fs *flag.FlagSet, options native
 	}
 	if err = policy.ValidateSelection(cwd, home, selector); err != nil {
 		return nativePullFailure(stderr, err)
+	}
+	if kind == "skill" {
+		return runNativeSkillPull(ctx, input, stdout, stderr, policy, digest)
 	}
 	return runNativeAgentPull(ctx, input, stdout, stderr, policy, digest)
 }
@@ -156,6 +160,10 @@ func readNativeConsentLine(ctx context.Context, r io.Reader) (string, error) {
 		var raw [45]byte
 		for i := range raw {
 			n, err := r.Read(raw[i : i+1])
+			if err != nil && !errors.Is(err, io.EOF) {
+				done <- result{err: errors.Join(registry.ErrNativeLiveSourceIO, err)}
+				return
+			}
 			if n == 1 && raw[i] == '\n' {
 				if i == 43 || (i == 44 && raw[43] == '\r') {
 					token := string(raw[:43])

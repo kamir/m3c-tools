@@ -3434,8 +3434,8 @@ The current working directory and artifact home must match the selected native
 profile. These flags are explicit CLI selections; the MCP server separately
 captures its operator configuration at startup.
 
-The explicit v4 native agent session described below supports one exact-digest,
-fully signed agent without dependencies. All other native CLI installation modes,
+The explicit v4 native sessions described below support one exact-digest,
+fully signed agent or SKILL bundle without dependencies. All other native CLI installation modes,
 including legacy dry-runs and cross-process token confirmation, remain blocked.
 Native publication, admit, attest, revoke and batch modes remain blocked with exit
 code 12. A valid profile or revocation diagnostic alone never grants installation.
@@ -3593,7 +3593,7 @@ changed. Inspect the destination before retrying. Profile/authentication/consent
 failures return 12, unavailable or stale history 22, and source/persistence/output
 I/O failures 1. Unrelated legacy pull flags are unsupported in this mode.
 
-Native SKILL, dependencies, Git carriers and native publishing remain unavailable.
+Native dependencies, Git carriers and native publishing remain unavailable.
 The generic MCP mutation tools also remain guarded. Customer platform and
 release-binary acceptance remain separate requirements.
 
@@ -3636,3 +3636,60 @@ bytes might have been delivered, failure or cancellation can leave changed files
 plan; missing output never establishes rollback. Session tokens are not persisted
 or resumed after restart. The selected client and local operator remain trusted;
 this provides no sandbox for running untrusted skills.
+
+
+### Native SKILL bundles through CLI and MCP
+
+Use the same selected v4 ER1 profile and held CLI process as above, with
+`--kind skill`. Review `native-skill-plan` and enter its exact token in that
+process. The bundle must contain canonical root `SKILL.md`, `bundle.json` and
+complete `CHECKSUMS`; signed bytes are never rewritten. The signed subject is the
+SHA256 of the final archive, which can differ from the embedded Pack digest.
+`depends_on: []` is mandatory. `data_dependencies` may be absent or `[]`; any
+`package_dependencies` field is unsupported, even `[]`. With valid critical
+evidence, null, wrong-type, alias or hidden dependency declarations return 14.
+No package, skill, agent or interpreter is provisioned.
+
+MCP requires the separate `SKILLCTL_NATIVE_SKILL_INSTALL=1` opt-in and exposes
+`native_skill_install_plan`, `native_skill_install_confirm` and
+`native_skill_install_close`. Agent opt-in does not enable SKILL installation or
+vice versa. If both are enabled, they share one startup profile, executable and
+credential snapshot and one retained process slot. A malformed present opt-in
+blocks native grants and legacy discovery. Wrong-client or wrong-kind confirm
+and close calls cannot consume another held plan. The generic mutation tools
+remain guarded.
+
+The active target is `<artifact-home>/.claude/skills/<signed-name>/`. It retains
+the original `<signed-name>.skb`, complete `.skillctl-attest.json` and advisory
+`.m3c-provenance.json`. Overwriting requires valid managed native proof, a fresh
+plan and consent to the entire current tree, including local edits, metadata and
+empty directories. Unmanaged or malformed old targets require manual migration
+or repair. A downgrade is refused.
+
+An overwrite retains the old tree at the exact `BackupPath` displayed in the
+plan, under `.claude/skills/.native-skill/transactions/<transaction>/backup`.
+These backups accumulate; operators must plan storage and retention. They are
+recovery material and do not authorize automatic restore or reinstallation.
+The overwrite uses two renames and does not promise atomic directory replacement
+or a power-loss filesystem snapshot.
+
+A pending reservation blocks a fresh attempt for that target until checked
+cancellation or completion. Inspect a leftover reservation with Scalytics-DevOps
+under the documented four-eyes recovery process; never delete it to retry blindly.
+A rename, sync, close or completion-output failure may leave changed files and
+returns an error. A failed pending-marker removal may itself be uncertain; marker
+absence never proves prior success. Every new attempt requires fresh trust,
+complete proof validation and new target-bound consent. This feature provides
+management and trust checking, with no sandbox or untrusted-execution guarantee.
+
+The native subset bounds the archive at 16 MiB, complete context and CHECKSUMS
+at 1 MiB each, and extraction at 100 MiB and 10,000 entries. Per-operation
+cumulative work limits can refuse a bundle even when each individual limit is
+met. Refusal never authorizes a fallback to legacy installation.
+
+Native SKILL versions use `numeric-release/v1`: one through four canonical
+unsigned 64-bit decimal components, compared with missing components as zero.
+Leading zeros, `v`, prerelease/build suffixes, whitespace and overflow are
+unsupported. For example, `1.2.3` is supported; `1.2.3-rc.1` is refused. Unknown
+versions are never silently normalized for downgrade checks. The combined
+implicit and explicit archive path-prefix inventory is limited to 100,000.

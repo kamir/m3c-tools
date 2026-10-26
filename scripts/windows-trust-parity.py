@@ -77,6 +77,8 @@ PROJECT_CASES = {
         'TestNativeEnterpriseIntentDenials',
     ),
     'github.com/kamir/m3c-tools/pkg/skillctl/projectpolicy': (
+        'TestNativeLiveSkillAcquisition',
+        'TestNativeLiveSkillConsentBoundary',
         'TestNativeProfileStrictSelection',
         'TestNativeEvidenceProfileSourceBinding',
         'TestNativeEvidenceExplicitAdopt',
@@ -98,6 +100,10 @@ PROJECT_CASES = {
         'TestStateRealProcessLock',
     ),
     'github.com/kamir/m3c-tools/pkg/skillctl/registry': (
+        'TestNativeSkillRetainedEvidence',
+        'TestNativeSkillConsentAndTargets',
+        'TestNativeSkillPublicationFailures',
+        'TestNativeSkillSessionPublicationBoundary',
         'TestNativeEvidenceHTTPSReaderContract',
         'TestNativeLiveSessionRetainedConsent',
         'TestNativeLiveSessionFailClosed',
@@ -151,6 +157,8 @@ PROJECT_CASES = {
         'TestManagedRegistryTransportSnapshotAndErrors',
     ),
     'github.com/kamir/m3c-tools/cmd/skillctl': (
+        'TestNativeSkillInstallActualCLI',
+        'TestNativeSkillRetainedMCPSubprocess',
         'TestTrustNativeEvidenceAdoptActualCLI',
         'TestTrustNativeStateEnrollActualCLI',
         'TestNativeLiveInstallActualCLI',

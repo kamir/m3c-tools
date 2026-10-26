@@ -326,14 +326,14 @@ func TestNativeEvidenceProfileSourceBinding(t *testing.T) {
 func TestNativeEvidenceExplicitAdopt(t *testing.T) {
 	t.Run("authentic-stale-history-refresh", func(t *testing.T) {
 		f := qaNewEvidenceFixture(t)
-		f.doc["native"].(map[string]any)["revocation_policy"].(map[string]any)["max_age_seconds"] = 1
+		f.doc["native"].(map[string]any)["revocation_policy"].(map[string]any)["max_age_seconds"] = 30
 		p := f.load(t)
 		j := qaEvidenceJournal(t, p)
-		issued := time.Now().UTC()
+		issued := time.Now().UTC().Truncate(time.Second)
 		if _, e := j.Enroll(context.Background(), qaEvidenceBytes(t, f.revocation, 1, issued, []string{}, []string{}, nil)); e != nil {
 			t.Fatal(e)
 		}
-		time.Sleep(time.Until(issued.Add(1100 * time.Millisecond)))
+		time.Sleep(time.Until(issued.Add(31 * time.Second)))
 		if _, e := j.BeginOfflineInstall(context.Background(), "sha256:"+strings.Repeat("a", 64)); !errors.Is(e, registry.ErrNativeHistoryStale) {
 			t.Fatal("old authenticated state must actually be stale", e)
 		}
@@ -342,8 +342,8 @@ func TestNativeEvidenceExplicitAdopt(t *testing.T) {
 			f.setResponse(qaEvidenceBytes(t, f.revocation, 2, time.Now().UTC(), []string{}, []string{}, nil))
 		}
 		f.mu.Unlock()
-		// Supply fresh proof before the request; the earlier fixed response is older
-		// than this deliberately short policy after waiting for genuine staleness.
+		// Supply fresh proof before the request and again at serving time. The
+		// thirty-second policy leaves headroom for TLS and durable journal writes.
 		f.setResponse(qaEvidenceBytes(t, f.revocation, 2, time.Now().UTC(), []string{}, []string{}, nil))
 		before := qaEvidenceInventory(t, f.home, true)
 		status, e := p.AdoptFromSource(context.Background())

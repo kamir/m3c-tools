@@ -89,7 +89,9 @@
           "TestNativeEvidenceExplicitAdopt",
           "TestNativeLiveProfileBinding",
           "TestNativeLiveAgentAcquisition",
-          "TestNativeLiveInstallConsentBoundary"
+          "TestNativeLiveInstallConsentBoundary",
+          "TestNativeLiveSkillAcquisition",
+          "TestNativeLiveSkillConsentBoundary"
         ],
         "./pkg/skillctl/mutationstate": [
           "TestSessionRecheckFreshClockFloorAndOriginalBinding",
@@ -161,7 +163,11 @@
           "TestNativeEvidenceHTTPSReaderContract",
           "TestNativeLiveSessionRetainedConsent",
           "TestNativeLiveSessionFailClosed",
-          "TestNativeLiveAgentSourceContract"
+          "TestNativeLiveAgentSourceContract",
+          "TestNativeSkillRetainedEvidence",
+          "TestNativeSkillConsentAndTargets",
+          "TestNativeSkillPublicationFailures",
+          "TestNativeSkillSessionPublicationBoundary"
         ],
         "./pkg/httpsafe": [
           "TestGETBoundaryContract"
@@ -259,7 +265,9 @@
           "TestNativeEvidenceExplicitAdopt",
           "TestNativeLiveProfileBinding",
           "TestNativeLiveAgentAcquisition",
-          "TestNativeLiveInstallConsentBoundary"
+          "TestNativeLiveInstallConsentBoundary",
+          "TestNativeLiveSkillAcquisition",
+          "TestNativeLiveSkillConsentBoundary"
         ],
         "./pkg/skillctl/mutationstate": [
           "TestSessionRecheckFreshClockFloorAndOriginalBinding",
@@ -316,7 +324,8 @@
           "TestPublishNativeEnterpriseProfilePreflightActualCLI",
           "TestTrustNativeEvidenceAdoptActualCLI",
           "TestTrustNativeStateEnrollActualCLI",
-          "TestNativeLiveInstallActualCLI"
+          "TestNativeLiveInstallActualCLI",
+          "TestNativeSkillInstallActualCLI"
         ],
         "./pkg/skillctl/verify": [
           "TestSnapshotSameBytesScopes",
@@ -348,7 +357,11 @@
           "TestNativeEvidenceHTTPSReaderContract",
           "TestNativeLiveSessionRetainedConsent",
           "TestNativeLiveSessionFailClosed",
-          "TestNativeLiveAgentSourceContract"
+          "TestNativeLiveAgentSourceContract",
+          "TestNativeSkillRetainedEvidence",
+          "TestNativeSkillConsentAndTargets",
+          "TestNativeSkillPublicationFailures",
+          "TestNativeSkillSessionPublicationBoundary"
         ],
         "./pkg/httpsafe": [
           "TestGETBoundaryContract"
@@ -445,6 +458,10 @@
         {
           "classname": "test_native_agent_session",
           "name": "test_native_agent_retained_session_stdio"
+        },
+        {
+          "classname": "test_native_skill_session",
+          "name": "test_native_skill_retained_session_stdio"
         }
       ]
     },

@@ -128,14 +128,16 @@ class ArtifactContracts(unittest.TestCase):
         # The real lane runs pytest with cwd=mcp-skill-server, not repo root.
         # Keep this producer identity independent of catalog-generated fixtures.
         raw, metadata_path = self.paths["python-mcp"]
-        report = ('<testsuite tests="4" errors="0" failures="0" skipped="0">'
+        report = ('<testsuite tests="5" errors="0" failures="0" skipped="0">'
                   '<testcase classname="test_other" name="passing_control"/>'
                   '<testcase classname="test_enterprise_profile" '
                   'name="test_real_cli_enterprise_profile_and_stdio"/>'
                   '<testcase classname="test_native_enterprise_profile" '
                   'name="test_native_enterprise_profile_denied_before_exec"/>'
                   '<testcase classname="test_native_agent_session" '
-                  'name="test_native_agent_retained_session_stdio"/></testsuite>')
+                  'name="test_native_agent_retained_session_stdio"/>'
+                  '<testcase classname="test_native_skill_session" '
+                  'name="test_native_skill_retained_session_stdio"/></testsuite>')
         raw.write_text(report)
         metadata = json.loads(metadata_path.read_text())
         metadata["result_sha256"] = hashlib.sha256(raw.read_bytes()).hexdigest()
@@ -279,34 +281,37 @@ class ArtifactContracts(unittest.TestCase):
                          dict(total=1, skipped=0, failed=0))
 
     def test_native_mcp_bridge_required_with_rebound_valid_report_metadata(self):
-        required = {"classname": "test_native_agent_session", "name": "test_native_agent_retained_session_stdio"}
-        self.assertIn(required, self.config["lanes"]["python-mcp"]["required_cases"])
-        raw, metadata = self.paths["python-mcp"]
-        original, original_meta = raw.read_bytes(), metadata.read_bytes()
-        for change in ("missing", "skip", "duplicate"):
-            with self.subTest(change=change):
-                xml = ET.fromstring(original)
-                parent = next(p for p in xml.iter() if any(c.tag == "testcase" and
-                              all(c.get(k) == v for k, v in required.items()) for c in p))
-                target = next(c for c in parent if c.tag == "testcase" and all(c.get(k) == v for k, v in required.items()))
-                if change == "missing":
-                    parent.remove(target)
-                elif change == "skip":
-                    ET.SubElement(target, "skipped")
-                else:
-                    parent.append(copy.deepcopy(target))
-                # Preserve unrelated successful cases and valid metadata, so the
-                # refusal establishes this exact identity rather than a stale hash.
-                blob = ET.tostring(xml)
-                raw.write_bytes(blob)
-                measured = GATE.python_counts(blob)
-                meta = json.loads(original_meta)
-                meta.update(result_sha256=hashlib.sha256(blob).hexdigest(), test_counts=measured)
-                metadata.write_text(json.dumps(meta))
-                with self.assertRaisesRegex(ValueError, "required Python case"):
-                    self.run_gate()
-        raw.write_bytes(original)
-        metadata.write_bytes(original_meta)
+        for required in (
+            {"classname": "test_native_agent_session", "name": "test_native_agent_retained_session_stdio"},
+            {"classname": "test_native_skill_session", "name": "test_native_skill_retained_session_stdio"},
+        ):
+            self.assertIn(required, self.config["lanes"]["python-mcp"]["required_cases"])
+            raw, metadata = self.paths["python-mcp"]
+            original, original_meta = raw.read_bytes(), metadata.read_bytes()
+            for change in ("missing", "skip", "duplicate"):
+                with self.subTest(change=change):
+                    xml = ET.fromstring(original)
+                    parent = next(p for p in xml.iter() if any(c.tag == "testcase" and
+                                  all(c.get(k) == v for k, v in required.items()) for c in p))
+                    target = next(c for c in parent if c.tag == "testcase" and all(c.get(k) == v for k, v in required.items()))
+                    if change == "missing":
+                        parent.remove(target)
+                    elif change == "skip":
+                        ET.SubElement(target, "skipped")
+                    else:
+                        parent.append(copy.deepcopy(target))
+                    # Preserve unrelated successful cases and valid metadata, so the
+                    # refusal establishes this exact identity rather than a stale hash.
+                    blob = ET.tostring(xml)
+                    raw.write_bytes(blob)
+                    measured = GATE.python_counts(blob)
+                    meta = json.loads(original_meta)
+                    meta.update(result_sha256=hashlib.sha256(blob).hexdigest(), test_counts=measured)
+                    metadata.write_text(json.dumps(meta))
+                    with self.assertRaisesRegex(ValueError, "required Python case"):
+                        self.run_gate()
+            raw.write_bytes(original)
+            metadata.write_bytes(original_meta)
 
     def test_prior_attempt_artifacts_require_all_producers_to_rerun(self):
         self.context["attempt"] = "3"

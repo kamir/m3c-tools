@@ -18,6 +18,7 @@ from native_agent_protocol import (
 @dataclass(eq=False)
 class _ClosedOutcome:
     owner: object
+    kind: str
     possible_change: bool
     confirm_succeeded: bool
 
@@ -25,6 +26,7 @@ class _ClosedOutcome:
 @dataclass(eq=False)
 class _Session:
     owner: object
+    kind: str
     digest: str
     deadline: float
     phase: str = "STARTING"
@@ -59,8 +61,9 @@ class NativeAgentSessionHost:
     STDERR_BYTES = 16384
     READ_CHUNK = 4096
 
-    def __init__(self, binding):
+    def __init__(self, binding, skill_binding=None):
         self._binding = binding
+        self._skill_binding = skill_binding
         self._lock = asyncio.Lock()
         self._session = None
         self._last_closed = None
@@ -85,29 +88,30 @@ class NativeAgentSessionHost:
             "remediation": "Inspect installed state and trust history before starting a new plan.",
         }
 
-    async def plan(self, digest, owner):
+    async def plan(self, digest, owner, *, kind="agent"):
         try:
             validate_digest(digest)
-            if owner is None:
+            if kind not in ("agent", "skill") or owner is None:
                 return self._failure()
         except (NativeAgentProtocolError, ValueError, TypeError):
             return self._failure(kind="protocol")
         async with self._lock:
             if self._stopped or self._session is not None:
                 return self._failure()
-            session = _Session(owner, digest, self._monotonic() + self.SESSION_SECONDS)
+            session = _Session(owner, kind, digest, self._monotonic() + self.SESSION_SECONDS)
             self._session = session
             self._last_closed = None
         try:
-            if not self._binding.enabled:
+            binding = self._binding if kind == "agent" else self._skill_binding
+            if binding is None or not binding.enabled or binding.kind != kind:
                 raise NativeAgentBindingError()
-            session.observation = asyncio.create_task(asyncio.to_thread(self._binding.recheck))
+            session.observation = asyncio.create_task(asyncio.to_thread(binding.recheck))
             await asyncio.wait_for(asyncio.shield(session.observation), self.SPAWN_SECONDS)
             if session.phase != "STARTING":
                 raise NativeAgentBindingError()
             session.spawn = asyncio.create_task(self._spawn(
-                *self._binding.argv(digest), cwd=self._binding.project,
-                env=self._binding.child_environment(), stdin=asyncio.subprocess.PIPE,
+                *binding.argv(digest), cwd=binding.project,
+                env=binding.child_environment(), stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
                 limit=self.READ_CHUNK,
             ))
@@ -116,7 +120,11 @@ class NativeAgentSessionHost:
             )
             self._start_readers(session)
             frame = await self._frame(session)
-            session.plan = parse_plan_frame(frame, self._binding, digest)
+            if kind == "skill":
+                from native_skill_protocol import parse_plan_frame as parse_skill_plan
+                session.plan = parse_skill_plan(frame, binding, digest)
+            else:
+                session.plan = parse_plan_frame(frame, binding, digest)
             remaining = (session.plan.expires_utc - datetime.now(timezone.utc)).total_seconds()
             session.deadline = min(session.deadline, self._monotonic() + remaining)
             if remaining <= 0 or session.stream_error:
@@ -141,12 +149,12 @@ class NativeAgentSessionHost:
             await self._dispose(session)
             return self._failure(session, code=1, kind="io")
 
-    async def confirm(self, token, owner):
+    async def confirm(self, token, owner, *, kind="agent"):
         async with self._lock:
             session = self._session
             if session is None:
                 return self._failure()
-            if owner is not session.owner:
+            if owner is not session.owner or kind != session.kind:
                 return self._failure(code=12, kind="owner")
             if session.phase != "PLANNED":
                 return self._failure(session)
@@ -166,7 +174,12 @@ class NativeAgentSessionHost:
                 self.DRAIN_SECONDS, self._remaining(session),
             ))
             session.process.stdin.close()
-            result = parse_result_frame(await self._frame(session), session.plan)
+            frame = await self._frame(session)
+            if session.kind == "skill":
+                from native_skill_protocol import parse_result_frame as parse_skill_result
+                result = parse_skill_result(frame, session.plan)
+            else:
+                result = parse_result_frame(frame, session.plan)
             # A parsed frame alone cannot establish application Close or exit success.
             extra = await self._frame(session, allow_eof=True)
             if extra is not None:
@@ -192,12 +205,12 @@ class NativeAgentSessionHost:
             await self._dispose(session)
             return self._failure(session, code=1, kind="io")
 
-    async def close(self, owner):
+    async def close(self, owner, *, kind="agent"):
         async with self._lock:
             session = self._session
             previous = self._last_closed
             selected = session if session is not None else previous
-            if selected is not None and owner is not selected.owner:
+            if selected is not None and (owner is not selected.owner or kind != selected.kind):
                 return self._failure(kind="owner")
         if session is None:
             return self._closed_outcome(previous)
@@ -411,7 +424,7 @@ class NativeAgentSessionHost:
                 self._session = None
                 # Retain only disposition, never a process, plan or token.
                 session.outcome = _ClosedOutcome(
-                    session.owner, session.possible_change, session.confirm_succeeded,
+                    session.owner, session.kind, session.possible_change, session.confirm_succeeded,
                 )
                 self._last_closed = session.outcome
         return True
