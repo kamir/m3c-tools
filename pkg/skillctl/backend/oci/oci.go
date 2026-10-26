@@ -131,6 +131,9 @@ func sanitizeTag(s string) string {
 // --- Publish ---
 
 func (b *ociBackend) Publish(ctx context.Context, req artifact.PublishRequest) (*artifact.PublishResult, error) {
+	if err := artifact.RejectNativeEnterpriseMutation(req.NativeEnterpriseIntent); err != nil {
+		return nil, err
+	}
 	// CD-13: Publish is the only write op. Swap the shared oras client from its
 	// read-only default (baked at Open) to the WRITE credential. No-op for a local
 	// oci.Store (authRepo nil) and for a single-token operator (ModeWrite resolves

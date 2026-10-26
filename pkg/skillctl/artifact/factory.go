@@ -34,6 +34,9 @@ func Register(scheme string, fn OpenFunc) {
 // It normalizes spec to a scheme, looks up the registered driver, and builds
 // the backend. Unknown schemes return a helpful error naming what IS known.
 func Open(spec string, opts OpenOptions) (Backend, error) {
+	if err := RejectNativeEnterpriseMutation(opts.NativeEnterpriseIntent); err != nil {
+		return nil, err
+	}
 	scheme := SchemeOf(spec)
 	fn, ok := drivers[scheme]
 	if !ok {
@@ -91,6 +94,8 @@ func knownSchemes() []string {
 // interfaces so this package stays a leaf and the CLI wires the concrete
 // implementations (pkg/skillctl/artifactauth, pkg/skillctl/verify).
 type OpenOptions struct {
+	// NativeEnterpriseIntent denies selection before any driver or credential resolution.
+	NativeEnterpriseIntent *NativeEnterpriseIntent
 	// ER1 knobs (er1 backend). Resolved today by resolveER1Config/er1Endpoint;
 	// those move behind the er1 backend's OpenFunc.
 	ER1Target  string

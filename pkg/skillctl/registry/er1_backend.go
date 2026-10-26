@@ -77,6 +77,9 @@ func (b *ER1Backend) ref(m artifact.ArtifactMeta, nativeID string) artifact.Arti
 }
 
 func (b *ER1Backend) Publish(ctx context.Context, req artifact.PublishRequest) (*artifact.PublishResult, error) {
+	if err := artifact.RejectNativeEnterpriseMutation(req.NativeEnterpriseIntent); err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC()
 	skill := b.skillMeta(req.Meta)
 	switch req.Kind {

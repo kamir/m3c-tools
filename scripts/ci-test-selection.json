@@ -83,7 +83,8 @@
         "./pkg/skillctl/projectpolicy": [
           "TestProjectProfileSnapshotsAndSelection",
           "TestProjectProfileStrictInputs",
-          "TestProjectProfilePinnedRolesAndYAML"
+          "TestProjectProfilePinnedRolesAndYAML",
+          "TestNativeProfileStrictSelection"
         ],
         "./pkg/skillctl/mutationstate": [
           "TestSessionRecheckFreshClockFloorAndOriginalBinding",
@@ -143,10 +144,16 @@
           "TestAgentEvidenceProcessLock",
           "TestAgentRetainedProofSameBytesAndContext",
           "TestAgentRetainedProofIdentityAndBounds",
-          "TestAgentRetainedProofPublicationFailures"
+          "TestAgentRetainedProofPublicationFailures",
+          "TestNativeRootRoleSnapshots",
+          "TestNativeRevocationEvidenceBounds",
+          "TestNativeEnterpriseProfileEarlyDenial"
         ],
         "./pkg/httpsafe": [
           "TestGETBoundaryContract"
+        ],
+        "./pkg/skillctl/artifact": [
+          "TestNativeEnterpriseIntentDenials"
         ]
       }
     },
@@ -232,7 +239,8 @@
         "./pkg/skillctl/projectpolicy": [
           "TestProjectProfileSnapshotsAndSelection",
           "TestProjectProfileStrictInputs",
-          "TestProjectProfilePinnedRolesAndYAML"
+          "TestProjectProfilePinnedRolesAndYAML",
+          "TestNativeProfileStrictSelection"
         ],
         "./pkg/skillctl/mutationstate": [
           "TestSessionRecheckFreshClockFloorAndOriginalBinding",
@@ -284,7 +292,9 @@
           "TestInstallRetainedRootSnapshotActualCLI",
           "TestInstallRegistryIdentityActualCLI",
           "TestInstallManagedTransportActualCLI",
-          "TestPullInstallAgentRetainedProofActualCLI"
+          "TestPullInstallAgentRetainedProofActualCLI",
+          "TestPullNativeEnterpriseProfilePreflightActualCLI",
+          "TestPublishNativeEnterpriseProfilePreflightActualCLI"
         ],
         "./pkg/skillctl/verify": [
           "TestSnapshotSameBytesScopes",
@@ -304,10 +314,16 @@
           "TestAgentEvidenceProcessLock",
           "TestAgentRetainedProofSameBytesAndContext",
           "TestAgentRetainedProofIdentityAndBounds",
-          "TestAgentRetainedProofPublicationFailures"
+          "TestAgentRetainedProofPublicationFailures",
+          "TestNativeRootRoleSnapshots",
+          "TestNativeRevocationEvidenceBounds",
+          "TestNativeEnterpriseProfileEarlyDenial"
         ],
         "./pkg/httpsafe": [
           "TestGETBoundaryContract"
+        ],
+        "./pkg/skillctl/artifact": [
+          "TestNativeEnterpriseIntentDenials"
         ]
       }
     },
@@ -390,6 +406,10 @@
         {
           "classname": "test_enterprise_profile",
           "name": "test_real_cli_enterprise_profile_and_stdio"
+        },
+        {
+          "classname": "test_native_enterprise_profile",
+          "name": "test_native_enterprise_profile_denied_before_exec"
         }
       ]
     },

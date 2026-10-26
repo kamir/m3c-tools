@@ -99,6 +99,9 @@ func ownerPrefixedContext(ctx string) string {
 func runPublish(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("publish", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	enterpriseProfile := fs.String("enterprise-profile", "", "Explicit native Enterprise project profile; native operations remain unavailable until durable trust sessions are supported.")
+	enterpriseProfileSHA := fs.String("enterprise-profile-sha256", "", "Expected lowercase SHA-256 of --enterprise-profile bytes.")
+	enterpriseHome := fs.String("home", "", "Artifact home bound by the native Enterprise profile; defaults to $HOME.")
 
 	var (
 		// Selection
@@ -189,6 +192,14 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "  WER veroeffentlicht hat. Sie wird bewusst nicht geraten.")
 		fmt.Fprintln(stderr, "  Beispiel: --identity id:you@your-org")
 		return 2
+	}
+
+	if err := nativeEnterprisePreflight(fs, *enterpriseProfile, *enterpriseProfileSHA, *enterpriseHome, *registryName); err != nil {
+		fmt.Fprintf(stderr, "publish: %v\n", err)
+		if errors.Is(err, errNativeProfileUsage) {
+			return 2
+		}
+		return 12
 	}
 
 	// Prefix bare namespaces from explicit owner context after usage validation.

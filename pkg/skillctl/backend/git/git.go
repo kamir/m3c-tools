@@ -409,6 +409,9 @@ func writeRepoFile(dir, rel string, data []byte) error {
 // --- Publish ---
 
 func (b *gitBackend) Publish(ctx context.Context, req artifact.PublishRequest) (*artifact.PublishResult, error) {
+	if err := artifact.RejectNativeEnterpriseMutation(req.NativeEnterpriseIntent); err != nil {
+		return nil, err
+	}
 	switch req.Kind {
 	case artifact.KindAdmit:
 		if len(req.Blob) == 0 {

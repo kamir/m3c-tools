@@ -146,6 +146,14 @@ title = "m3c-tools secret scanning"
       "^abcdef0123456789$",
     ]
 
+
+  [[rules.allowlists]]
+    description = "Public environment variable name in native-profile test; not a credential value"
+    condition = "AND"
+    regexTarget = "secret"
+    paths = ["^cmd/skillctl/native_enterprise_profile_preflight_test\\.go$"]
+    regexes = ["^M3C_ER1_KEYCHAIN$"]
+
 [[rules]]
   id = "gitlab-pat"
 

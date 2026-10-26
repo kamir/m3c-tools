@@ -833,16 +833,44 @@ class _EnterpriseInstallBinding:
     home: str = ""
     binary: str = ""
     error: str = ""
+    native_blocked: bool = False
 
 
-def _enterprise_profile_digest(path: str) -> str:
+_NATIVE_ENTERPRISE_UNAVAILABLE = (
+    "native Enterprise mutation requires durable verified revocation history; "
+    "this version denies the operation"
+)
+
+
+def _enterprise_profile_snapshot(path: str) -> tuple[str, bool]:
+    """Classify operator intent only; parsing here never grants native trust."""
     if not Path(path).is_file():
         raise ValueError("enterprise profile is not a regular file")
     with open(path, "rb") as stream:
         raw = stream.read((64 << 10) + 1)
     if not raw or len(raw) > 64 << 10:
         raise ValueError("enterprise profile size is invalid")
-    return hashlib.sha256(raw).hexdigest()
+
+    def unique_object(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("duplicate enterprise profile key")
+            result[key] = value
+        return result
+
+    document = json.loads(raw.decode("utf-8"), object_pairs_hook=unique_object)
+    if not isinstance(document, dict):
+        raise ValueError("enterprise profile must be an object")
+    schema = document.get("schema")
+    if "schema" in document and (not isinstance(schema, str) or schema not in {"m3c.enterprise-project-profile/v1", "m3c.enterprise-project-profile/v2"}):
+        raise ValueError("unsupported enterprise profile schema")
+    native = schema == "m3c.enterprise-project-profile/v2"
+    return hashlib.sha256(raw).hexdigest(), native
+
+
+def _enterprise_profile_digest(path: str) -> str:
+    return _enterprise_profile_snapshot(path)[0]
 
 
 def _capture_enterprise_install_binding() -> _EnterpriseInstallBinding:
@@ -861,12 +889,18 @@ def _capture_enterprise_install_binding() -> _EnterpriseInstallBinding:
         home = str(Path(home).resolve(strict=True))
         if not Path(project).is_dir() or not Path(home).is_dir():
             raise ValueError("invalid operator directories")
-        digest = _enterprise_profile_digest(profile)
+        digest, native = _enterprise_profile_snapshot(profile)
+        if native:
+            # No native mutation is enabled. Keep the startup disposition even
+            # if ambient variables or the file change; never resolve credentials
+            # or a child binary for a selection that must be refused.
+            return _EnterpriseInstallBinding(configured=True, profile=profile, digest=digest,
+                                             project=project, home=home, native_blocked=True)
         binary, error = _resolve_skillctl_bin()
         if error:
             raise ValueError("operator skillctl unavailable")
         return _EnterpriseInstallBinding(True, profile, digest, project, home, str(Path(binary).resolve(strict=True)))
-    except (OSError, ValueError, RuntimeError):
+    except (OSError, ValueError, RuntimeError, RecursionError):
         return _EnterpriseInstallBinding(configured=True, error="Enterprise operator binding is invalid; configure profile, project root, artifact home and skillctl before starting the server.")
 
 
@@ -876,6 +910,15 @@ _ENTERPRISE_INSTALL_BINDING = _capture_enterprise_install_binding()
 def _enterprise_install_failure(message: str) -> dict:
     return {"ok": False, "exit_code": 12, "error_class": "registry_not_trusted", "stderr": message,
             "remediation": "Ask the operator to configure the Enterprise project profile and restart the server; tool requests cannot replace it."}
+
+
+def _native_enterprise_mutation_failure() -> dict | None:
+    binding = _ENTERPRISE_INSTALL_BINDING
+    if binding.configured and binding.error:
+        return _enterprise_install_failure(binding.error)
+    if binding.configured and binding.native_blocked:
+        return _enterprise_install_failure(_NATIVE_ENTERPRISE_UNAVAILABLE)
+    return None
 
 
 def _run_skillctl_blocking(argv: list[str], timeout: int = 120, *, cwd: str | None = None) -> dict:
@@ -1097,6 +1140,9 @@ async def skill_install(
     if governance_min and governance_min not in _VALID_LEVELS:
         return {"ok": False, "exit_code": 2, "error_class": "validation_error", "stderr": f"governance_min must be one of {sorted(_VALID_LEVELS)}", "remediation": "Use 'green', 'yellow', or 'red'."}
 
+    denied = _native_enterprise_mutation_failure()
+    if denied is not None:
+        return denied
     binding = _ENTERPRISE_INSTALL_BINDING
     if binding.configured:
         if binding.error:
@@ -1108,7 +1154,7 @@ async def skill_install(
         try:
             if _enterprise_profile_digest(binding.profile) != binding.digest:
                 return _enterprise_install_failure("Enterprise profile bytes changed after server startup.")
-        except (OSError, ValueError):
+        except (OSError, ValueError, RecursionError):
             return _enterprise_install_failure("Enterprise profile is unavailable after server startup.")
     elif enterprise_profile:
         return _enterprise_install_failure("The server has no operator-bound Enterprise profile.")
@@ -1442,6 +1488,10 @@ async def skill_attest(
     reviewer_id on success; ok=False with exit_code/error_class/stderr/
     remediation on failure.
     """
+    denied = _native_enterprise_mutation_failure()
+    if denied is not None:
+        return denied
+
     # ----- input validation BEFORE exec -----
     if not isinstance(digest, str) or not _DIGEST_RE.fullmatch(digest or ""):
         return {"ok": False, "exit_code": 2, "error_class": "validation_error", "stderr": "digest must match sha256:[0-9a-f]{64}", "remediation": "Pass a canonical 'sha256:<64-hex-chars>' digest string."}
@@ -1514,6 +1564,10 @@ async def skill_awareness_sync(
     Returns a structured outcome from the JSON-shape stderr lines the CLI
     emits (one envelope per skill in dry-run, one admit summary in confirm).
     """
+    denied = _native_enterprise_mutation_failure()
+    if denied is not None:
+        return denied
+
     if source not in {"claude", "user", "plugins", "all"}:
         return {"ok": False, "exit_code": 2, "error_class": "validation_error",
                 "stderr": f"source must be claude|user|plugins|all; got {source!r}",
@@ -1706,6 +1760,10 @@ async def skill_revoke(
       - governance_reviewer: requires actor_identity
       - registry_operator: unsigned; HTTP-layer admin auth at the registry
     """
+    denied = _native_enterprise_mutation_failure()
+    if denied is not None:
+        return denied
+
     if not digest or not digest.startswith("sha256:"):
         return {"ok": False, "exit_code": 2, "error_class": "validation_error",
                 "stderr": "digest must be 'sha256:<64 hex>'",
