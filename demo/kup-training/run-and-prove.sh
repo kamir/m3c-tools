@@ -155,6 +155,30 @@ assert_exit() {
   fi
 }
 
+# P0: is <id> registered in the skill registry with the local key?
+# register-identity.sh confirms an existing registration with a plain read and
+# needs an admin session (AIMS_ADMIN_COOKIE) only to create one: the shared
+# ER1_API_KEY is never admin, whatever X-User-ID says. Its instruction for
+# exit 3 (no admin session) and its diagnosis for exit 4 (different or revoked
+# key) go to the terminal, not just the log: nothing later in the run fixes them.
+prove_identity() {
+  local id="$1" pub="$2" name="$3" out rc
+  out=$(mktemp)
+  "$SCRIPT_DIR/register-identity.sh" "$id" "$pub" "$name" > "$out" 2>&1
+  rc=$?
+  cat "$out" >> "$LOG"
+  case "$rc" in
+    0) record P0 green "$id registered with the local key" ;;
+    3) record P0 red "$id not confirmed registered, and registering it needs an admin session (AIMS_ADMIN_COOKIE)"
+       sed -n '/✗/,$p' "$out" | sed 's/^/    /' >&2
+       c_dim "    or export AIMS_ADMIN_COOKIE (step 3) and re-run ./run-and-prove.sh: P0 registers what is missing" ;;
+    4) record P0 red "$id registered with a different or revoked key"
+       sed -n '/✗/,$p' "$out" | sed 's/^/    /' >&2 ;;
+    *) record P0 yellow "$id registration returned $rc, see $LOG" ;;
+  esac
+  rm -f "$out"
+}
+
 # Fail-fast helper
 finished() {
   if [ "$CHECKS_FAIL" -gt 0 ] && [ "$KEEP_GOING" -ne 1 ]; then
@@ -237,17 +261,7 @@ if [ "$SKIP_ONLINE" -eq 0 ]; then
   c_bold "═══════════════════════════════════════"
   # Only register if keys already exist (otherwise this fails: let 01/03 generate first)
   if [ -f "$KEYS_DIR/bob.pub" ]; then
-    if "$SCRIPT_DIR/register-identity.sh" id:bob@m3c "$KEYS_DIR/bob.pub" \
-       "Bob (KuP demo author)" >> "$LOG" 2>&1; then
-      record P0 green "Bob identity registered or already exists"
-    else
-      rc=$?
-      if [ $rc -eq 0 ] || grep -q "already_exists\|HTTP 201\|HTTP 409" "$LOG" 2>/dev/null; then
-        record P0 green "Bob identity ok (idempotent)"
-      else
-        record P0 yellow "Bob identity registration returned $rc, will retry post-01"
-      fi
-    fi
+    prove_identity id:bob@m3c "$KEYS_DIR/bob.pub" "Bob (KuP demo author)"
   else
     record P0 yellow "skipping Bob registration (keys not yet generated, will run after step 01)"
   fi
@@ -281,12 +295,7 @@ finished
 # (Re-)register Bob now that keys exist
 # ============================================================================
 if [ "$SKIP_ONLINE" -eq 0 ]; then
-  if "$SCRIPT_DIR/register-identity.sh" id:bob@m3c "$KEYS_DIR/bob.pub" \
-     "Bob (KuP demo author)" >> "$LOG" 2>&1; then
-    record P0 green "Bob identity active in registry"
-  else
-    record P0 yellow "Bob identity registration not OK, 02 will likely return signature_invalid"
-  fi
+  prove_identity id:bob@m3c "$KEYS_DIR/bob.pub" "Bob (KuP demo author)"
 fi
 
 # ============================================================================
@@ -331,10 +340,7 @@ finished
 
 # Register reviewer too (online)
 if [ "$SKIP_ONLINE" -eq 0 ] && [ -f "$KEYS_DIR/reviewer.pub" ]; then
-  if "$SCRIPT_DIR/register-identity.sh" id:reviewer@m3c "$KEYS_DIR/reviewer.pub" \
-     "Reviewer (KuP demo)" >> "$LOG" 2>&1; then
-    record P0 green "Reviewer identity active in registry"
-  fi
+  prove_identity id:reviewer@m3c "$KEYS_DIR/reviewer.pub" "Reviewer (KuP demo)"
 fi
 
 # ============================================================================

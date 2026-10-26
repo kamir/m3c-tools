@@ -18,6 +18,13 @@
 #   (b) the planned `--simulate-decay <days>` flag on the endpoint (NOT YET
 #       IMPLEMENTED: tracked as a follow-up in the lifecycle SPEC).
 # Until (b) lands, decay is verified in unit tests, not in this E2E demo.
+#
+# Auth: the route is @require_admin, so it needs an admin's Flask-Login session
+# (AIMS_ADMIN_COOKIE, see admin_curl in lib/common.sh). An API-key caller is
+# never admin, whatever X-User-ID says. Without the cookie this step skips
+# itself and says how to get one. skill_registry_bp is CSRF-exempt behind an
+# origin check; whether the skillprofile blueprint is too was not checked from
+# here. If it is not, the body of the refusal printed below says so.
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -29,11 +36,11 @@ if ! online_mode_available; then
   exit 0
 fi
 
-USER_ID=$(grep -E '^ER1_CONTEXT_ID=' "$HOME/.m3c-tools.env" 2>/dev/null \
-  | head -1 | cut -d= -f2- | tr -d '"' | sed 's/___mft$//')
-if [[ -z "$USER_ID" ]]; then
-  fail "ER1 user-id not derivable from ~/.m3c-tools.env"
-  exit 2
+if [[ -z "${AIMS_ADMIN_COOKIE:-}" ]]; then
+  warn "recalculate-all is an admin route and AIMS_ADMIN_COOKIE is unset: skipping"
+  admin_session_hint
+  note "  4. ./12-decay.sh"
+  exit 0
 fi
 
 header "12, DECAY: trigger /profile/recalculate-all"
@@ -41,17 +48,19 @@ note "endpoint:  POST $REGISTRY_URL/api/v2/skills/profile/recalculate-all"
 note "rules:     fluent→practiced @ 45d inactive, practiced→aware @ 90d inactive"
 
 RESP_FILE="$LOG_DIR/recalculate-all.json"
-HTTP=$(curl -sk \
-  -H "X-API-KEY: ${ER1_API_KEY}" \
-  -H "X-User-ID: ${USER_ID}" \
-  -H "Content-Type: application/json" \
+HTTP=$(admin_curl \
   -X POST "$REGISTRY_URL/api/v2/skills/profile/recalculate-all" \
   -d '{}' \
   -o "$RESP_FILE" -w "%{http_code}") || true
 
 if [[ "$HTTP" != "200" ]]; then
-  warn "recalculate-all returned HTTP $HTTP (admin auth required?). Body: $(head -c 200 "$RESP_FILE")"
-  warn "this is expected if the operator user is not in the admin allowlist"
+  warn "recalculate-all returned HTTP $HTTP. Body: $(head -c 200 "$RESP_FILE")"
+  case "$HTTP" in
+    302|401|403)
+      warn "the registry did not take AIMS_ADMIN_COOKIE as an admin session (expired, or not admin by RBAC)"
+      admin_session_hint
+      ;;
+  esac
   exit 0
 fi
 

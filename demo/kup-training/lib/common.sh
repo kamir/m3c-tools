@@ -154,3 +154,34 @@ auth_curl() {
     -H "Content-Type: application/json" \
     "$@"
 }
+
+# Admin routes (POST /api/skills/identities, POST /api/v2/skills/profile/
+# recalculate-all) are @require_admin: they need an authenticated Flask-Login
+# session whose user is admin by RBAC. An API-key caller is never admin,
+# whatever X-User-ID says, so ER1_API_KEY cannot reach them. AIMS_ADMIN_COOKIE
+# carries an admin's browser session instead: the value of the Cookie request
+# header the browser sends to $REGISTRY_URL after signing in.
+#
+# Usage:  admin_curl <curl args...>
+# The cookie travels on stdin (-H @-), not argv, so `ps` does not show it. No
+# X-API-KEY rides along, so the server has only the session to resolve. curl
+# sends no Origin header, which is what lets this POST through the origin check
+# on the CSRF-exempt skill_registry_bp. A pasted "Cookie: " prefix is dropped,
+# since copying the whole header line instead of its value is an easy slip.
+admin_curl() {
+  local cookie="${AIMS_ADMIN_COOKIE:-}"
+  cookie="${cookie#[Cc]ookie: }"
+  printf 'Cookie: %s\n' "$cookie" \
+    | curl -sk -H @- -H "Content-Type: application/json" "$@"
+}
+
+# How to supply AIMS_ADMIN_COOKIE. Printed wherever an admin route was needed
+# and no admin session was available.
+admin_session_hint() {
+  note "admin routes need an admin's browser session; the shared ER1_API_KEY is never admin:"
+  note "  1. open $REGISTRY_URL/v2/skills/admin in a browser and sign in as an admin"
+  note "  2. browser developer tools, Network tab: open any request to $REGISTRY_URL"
+  note "     and copy the value of its Cookie request header"
+  note "  3. read -rs AIMS_ADMIN_COOKIE && export AIMS_ADMIN_COOKIE"
+  note "     (paste, then Enter: nothing is echoed or kept in shell history)"
+}
