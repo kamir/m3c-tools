@@ -186,6 +186,10 @@ const (
 // CLI translates to the numeric exit code via errors.Is so wrapped errors
 // continue to work.
 var (
+	// ErrNativeEvidenceSourceIO identifies source transport/body failures. It is
+	// distinct from authenticated trust decisions and maps to generic I/O exit 1.
+	ErrNativeEvidenceSourceIO = registry.ErrNativeEvidenceSourceIO
+
 	// ErrDigestMismatch, the bundle's recomputed digest doesn't match
 	// what the signature was over. Exit code 10.
 	ErrDigestMismatch = errors.New("digest mismatch")
@@ -323,7 +327,7 @@ func ExitCode(err error) int {
 		return 0
 	}
 	switch {
-	case errors.Is(err, registry.ErrNativePersistence):
+	case errors.Is(err, ErrNativeEvidenceSourceIO), errors.Is(err, registry.ErrNativePersistence):
 		return 1
 	case errors.Is(err, registry.ErrNativeDependenciesUnavailable):
 		return nativeErrorExit(err, ExitDepsUnsatisfied)

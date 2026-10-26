@@ -42,7 +42,7 @@ def test_native_enterprise_profile_denied_before_exec(monkeypatch, tmp_path):
 
     # Unsupported schemas are controlled operator errors, including unhashable JSON types.
     invalid_bindings = []
-    for raw in ('{"schema":[]}', '{"schema":{}}', '{"schema":null}',
+    for raw in ('{"schema":"m3c.enterprise-project-profile/v3"}', '{"schema":[]}', '{"schema":{}}', '{"schema":null}',
                 '{"schema":"m3c.enterprise-project-profile/v2","schema":"m3c.enterprise-project-profile/v1"}'):
         profile.write_text(raw)
         monkeypatch.setenv("SKILLCTL_ENTERPRISE_PROFILE", str(profile))

@@ -6,10 +6,14 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
+	"math/big"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -67,6 +71,110 @@ func TestNativeProfileStrictSelection(t *testing.T) {
 			t.Fatal("special file did not fail regular-file boundary", e)
 		}
 		return
+	}
+	t.Run("explicit-source-selection-and-history-separation", func(t *testing.T) {
+		path, doc := nativePolicyFixture(t)
+		home := filepath.Dir(path)
+		doc["schema"] = NativeEvidenceSchema
+		mapping := doc["native"].(map[string]any)
+		source := map[string]any{"kind": "https-native-evidence", "url": "https://source.invalid/full.json", "auth": "none", "tls": map[string]any{"mode": "system"}}
+		mapping["revocation_source"] = source
+		writeNativePolicyFixture(t, path, doc)
+		first, err := LoadNative(path, home, home)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = first.AdoptFromSource(context.Background()); !errors.Is(err, registry.ErrNativeHistoryRequired) {
+			t.Fatalf("missing history did not deny before source fetch: %v", err)
+		}
+		source["url"] = "https://other.invalid/full.json"
+		writeNativePolicyFixture(t, path, doc)
+		second, err := LoadNative(path, home, home)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if first.SelectionID() == second.SelectionID() || first.ProfileDigest() == second.ProfileDigest() || first.HistoryAuthorityID() != second.HistoryAuthorityID() {
+			t.Fatal("source consent and stable authority history were conflated")
+		}
+		// A genuine CA validates the pinned role, and byte changes alter consent
+		// without inventing a different revocation authority.
+		pub, key, err := ed25519.GenerateKey(rand.Reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cert := &x509.Certificate{SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "synthetic source CA"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign}
+		der, err := x509.CreateCertificate(rand.Reader, cert, cert, pub, key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ca := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+		caPath := filepath.Join(home, "source-ca.pem")
+		if err = os.WriteFile(caPath, ca, 0600); err != nil {
+			t.Fatal(err)
+		}
+		sum := sha256.Sum256(ca)
+		ref := map[string]any{"path": "source-ca.pem", "sha256": hex.EncodeToString(sum[:])}
+		source["tls"] = map[string]any{"mode": "pinned-pem", "ca": ref}
+		writeNativePolicyFixture(t, path, doc)
+		pinned, err := LoadNative(path, home, home)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if pinned.SelectionID() == second.SelectionID() || pinned.HistoryAuthorityID() != second.HistoryAuthorityID() {
+			t.Fatal("TLS role changed history authority or failed to bind consent")
+		}
+		if err = os.WriteFile(caPath, []byte("drift"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err = LoadNative(path, home, home); !errors.Is(err, ErrSelection) {
+			t.Fatal("CA SHA drift accepted", err)
+		}
+		for _, name := range []string{"source-ca.pem", "native.json", "artifact.yaml", "revoke.yaml", "runtime.json"} {
+			if err = os.Remove(filepath.Join(home, name)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if _, err = pinned.AdoptFromSource(context.Background()); !errors.Is(err, registry.ErrNativeHistoryRequired) {
+			t.Fatal("immutable policy reloaded deleted pins or fetched before enrollment", err)
+		}
+		if !errors.Is(artifact.RejectNativeEnterpriseMutation(pinned.Intent()), artifact.ErrNativeMutationUnavailable) {
+			t.Fatal("source profile granted live mutation")
+		}
+	})
+	for _, invalid := range []string{"v2-source", "v3-missing", "null", "alias", "auth", "http", "path", "system-ca", "tls-unknown", "pinned-missing"} {
+		t.Run("source-schema-"+invalid, func(t *testing.T) {
+			path, doc := nativePolicyFixture(t)
+			doc["schema"] = NativeEvidenceSchema
+			mapping := doc["native"].(map[string]any)
+			source := map[string]any{"kind": "https-native-evidence", "url": "https://source.invalid/full.json", "auth": "none", "tls": map[string]any{"mode": "system"}}
+			mapping["revocation_source"] = source
+			switch invalid {
+			case "v2-source":
+				doc["schema"] = NativeSchema
+			case "v3-missing":
+				delete(mapping, "revocation_source")
+			case "null":
+				mapping["revocation_source"] = nil
+			case "alias":
+				source["URL"] = source["url"]
+			case "auth":
+				source["auth"] = "ambient"
+			case "http":
+				source["url"] = "http://127.0.0.1/full.json"
+			case "path":
+				source["url"] = "https://source.invalid/a/../full.json"
+			case "system-ca":
+				source["tls"].(map[string]any)["ca"] = map[string]any{"path": "unused", "sha256": strings.Repeat("0", 64)}
+			case "tls-unknown":
+				source["tls"] = map[string]any{"mode": "insecure"}
+			case "pinned-missing":
+				source["tls"] = map[string]any{"mode": "pinned-pem"}
+			}
+			writeNativePolicyFixture(t, path, doc)
+			if p, err := LoadNative(path, filepath.Dir(path), filepath.Dir(path)); p != nil || err == nil {
+				t.Fatal("ambiguous or unsupported source profile accepted")
+			}
+		})
 	}
 	t.Run("offline-selection-retains-pins-without-live-grant", func(t *testing.T) {
 		path, doc := nativePolicyFixture(t)

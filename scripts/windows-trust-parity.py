@@ -78,6 +78,8 @@ PROJECT_CASES = {
     ),
     'github.com/kamir/m3c-tools/pkg/skillctl/projectpolicy': (
         'TestNativeProfileStrictSelection',
+        'TestNativeEvidenceProfileSourceBinding',
+        'TestNativeEvidenceExplicitAdopt',
         'TestProjectProfileSnapshotsAndSelection',
         'TestProjectProfileStrictInputs',
         'TestProjectProfilePinnedRolesAndYAML',
@@ -93,6 +95,7 @@ PROJECT_CASES = {
         'TestStateRealProcessLock',
     ),
     'github.com/kamir/m3c-tools/pkg/skillctl/registry': (
+        'TestNativeEvidenceHTTPSReaderContract',
         'TestNativeJournalEnrollmentAndHistory',
         'TestNativeJournalEpochClockAndFullSet',
         'TestNativeJournalLockAndPersistence',
@@ -142,6 +145,7 @@ PROJECT_CASES = {
         'TestManagedRegistryTransportSnapshotAndErrors',
     ),
     'github.com/kamir/m3c-tools/cmd/skillctl': (
+        'TestTrustNativeEvidenceAdoptActualCLI',
         'TestPullNativeEnterpriseProfilePreflightActualCLI',
         'TestPublishNativeEnterpriseProfilePreflightActualCLI',
         'TestInstallEnterpriseProfileActualCLI',
