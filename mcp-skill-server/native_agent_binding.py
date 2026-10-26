@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 import hashlib
 import os
 from pathlib import Path
@@ -263,13 +263,15 @@ class NativeAgentBinding:
     _profile_observation: _FileObservation | None = field(default=None, repr=False)
     _binary_observation: _FileObservation | None = field(default=None, repr=False)
 
+    kind: str = "agent"
+
     def child_environment(self) -> dict[str, str]:
         if not self.enabled:
             raise NativeAgentBindingError()
         return dict(self._env)
 
     def argv(self, digest: str) -> tuple[str, ...]:
-        if not self.enabled:
+        if not self.enabled or self.kind not in ("agent", "skill"):
             raise NativeAgentBindingError()
         validate_digest(digest)
         return (
@@ -282,7 +284,7 @@ class NativeAgentBinding:
             "--home",
             self.home,
             "--kind",
-            "agent",
+            self.kind,
             "--digest",
             digest,
             "--install",
@@ -313,17 +315,8 @@ class NativeAgentBinding:
             raise NativeAgentBindingError() from None
 
 
-def capture_native_agent_binding(
-    environ: Mapping[str, str] | None = None,
-) -> NativeAgentBinding:
-    environ = os.environ if environ is None else environ
-    windows = os.name == "nt"
+def _capture_selected_native_binding(environ, *, windows: bool) -> NativeAgentBinding:
     try:
-        opt_in = _selected_env(environ, _OPT_IN, windows=windows)
-        if opt_in is _MISSING:
-            return NativeAgentBinding()
-        if type(opt_in) is not str or opt_in != "1":
-            raise NativeAgentBindingError()
         selected = {}
         for name in (
             "SKILLCTL_ENTERPRISE_PROFILE",
@@ -368,3 +361,49 @@ def capture_native_agent_binding(
         )
     except (OSError, ValueError, UnicodeError, RuntimeError):
         return NativeAgentBinding(intent=True, error=NATIVE_AGENT_BINDING_ERROR)
+
+
+def capture_native_agent_binding(
+    environ: Mapping[str, str] | None = None,
+) -> NativeAgentBinding:
+    environ = os.environ if environ is None else environ
+    windows = os.name == "nt"
+    try:
+        opt_in = _selected_env(environ, _OPT_IN, windows=windows)
+        if opt_in is _MISSING:
+            return NativeAgentBinding()
+        if type(opt_in) is not str or opt_in != "1":
+            raise NativeAgentBindingError()
+        return _capture_selected_native_binding(environ, windows=windows)
+    except (OSError, ValueError, UnicodeError, RuntimeError):
+        return NativeAgentBinding(intent=True, error=NATIVE_AGENT_BINDING_ERROR)
+
+
+def capture_native_install_bindings(
+    environ: Mapping[str, str] | None = None,
+) -> tuple[NativeAgentBinding, NativeAgentBinding]:
+    """Classify both intents before observing one common immutable selection.
+
+    A malformed present flag disables both native grants and legacy discovery.
+    No credential provider or referenced profile file is read here.
+    """
+    environ = os.environ if environ is None else environ
+    windows = os.name == "nt"
+    try:
+        flags = tuple(_selected_env(environ, name, windows=windows) for name in (
+            _OPT_IN, "SKILLCTL_NATIVE_SKILL_INSTALL",
+        ))
+        if all(value is _MISSING for value in flags):
+            return NativeAgentBinding(), NativeAgentBinding(kind="skill")
+        if any(value is not _MISSING and (type(value) is not str or value != "1")
+               for value in flags):
+            raise NativeAgentBindingError()
+        selected = _capture_selected_native_binding(environ, windows=windows)
+        return tuple(
+            replace(selected, kind=kind) if flag is not _MISSING
+            else NativeAgentBinding(kind=kind)
+            for kind, flag in zip(("agent", "skill"), flags, strict=True)
+        )
+    except (OSError, ValueError, UnicodeError, RuntimeError):
+        return tuple(NativeAgentBinding(intent=True, error=NATIVE_AGENT_BINDING_ERROR,
+                                        kind=kind) for kind in ("agent", "skill"))

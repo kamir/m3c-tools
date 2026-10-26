@@ -48,6 +48,7 @@ type NativePolicy struct {
 	runtime                          dependencies.Profile
 	source                           *registry.NativeEvidenceSource
 	live                             *registry.NativeLiveAgentSource
+	liveSkill                        *registry.NativeLiveSkillSource
 	liveBinding                      nativeLiveBinding
 }
 type nativeDocument struct {
@@ -228,9 +229,10 @@ func loadNative(path, expected, actualProject, actualHome string) (*NativePolicy
 		}
 	}
 	var live *registry.NativeLiveAgentSource
+	var liveSkill *registry.NativeLiveSkillSource
 	var liveBinding nativeLiveBinding
 	if schema == NativeLiveSchema {
-		live, liveBinding, e = parseNativeLiveSource(dir, mapping["carrier"])
+		live, liveSkill, liveBinding, e = parseNativeLiveSource(dir, mapping["carrier"])
 		if e != nil {
 			return nil, e
 		}
@@ -306,7 +308,7 @@ func loadNative(path, expected, actualProject, actualHome string) (*NativePolicy
 		}
 	}
 	selectionSHA := sha256.Sum256(selectionBytes)
-	return &NativePolicy{project: project, home: home, digest: hex.EncodeToString(sum[:]), selection: hex.EncodeToString(selectionSHA[:]), carrier: carrier, roots: roots, authority: authority, runtime: runtimeProfile, source: source, live: live, liveBinding: liveBinding}, nil
+	return &NativePolicy{project: project, home: home, digest: hex.EncodeToString(sum[:]), selection: hex.EncodeToString(selectionSHA[:]), carrier: carrier, roots: roots, authority: authority, runtime: runtimeProfile, source: source, live: live, liveSkill: liveSkill, liveBinding: liveBinding}, nil
 }
 func nativeObject(raw []byte, keys ...string) (map[string]json.RawMessage, error) {
 	var object map[string]json.RawMessage

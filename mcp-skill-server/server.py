@@ -28,13 +28,16 @@ from anyio import CancelScope
 from mcp.server.fastmcp import Context, FastMCP
 
 from api_connection import APIConnection, parse_api_base, resolve_api_connection
-from native_agent_binding import capture_native_agent_binding
+from native_agent_binding import capture_native_install_bindings
 from native_agent_session import NativeAgentSessionHost
 
 logger = logging.getLogger("skill-server")
 
 # Native intent is captured before unrelated binary or REST credential lookup.
-_NATIVE_AGENT_BINDING = capture_native_agent_binding()
+_NATIVE_AGENT_BINDING, _NATIVE_SKILL_BINDING = capture_native_install_bindings()
+_NATIVE_INSTALL_INTENT = _NATIVE_AGENT_BINDING.intent or _NATIVE_SKILL_BINDING.intent
+_NATIVE_INSTALL_BINDING = (_NATIVE_AGENT_BINDING if _NATIVE_AGENT_BINDING.enabled
+                           else _NATIVE_SKILL_BINDING)
 _NATIVE_AGENT_HOST: NativeAgentSessionHost | None = None
 
 # ── Configuration ──────────────────────────────────────────────────────
@@ -72,7 +75,7 @@ def _discover_skillctl() -> str:
     return ""
 
 
-SKILLCTL = (_NATIVE_AGENT_BINDING.binary if _NATIVE_AGENT_BINDING.enabled else "") if _NATIVE_AGENT_BINDING.intent else (
+SKILLCTL = (_NATIVE_INSTALL_BINDING.binary if _NATIVE_INSTALL_BINDING.enabled else "") if _NATIVE_INSTALL_INTENT else (
     os.environ.get("SKILLCTL_BIN") or _discover_skillctl()
 )
 GRAPH_DB = os.environ.get(
@@ -99,8 +102,8 @@ def _read_legacy_api_key() -> str:
 
 
 _api_connection = (
-    APIConnection(error="Legacy REST access is disabled for native agent startup.")
-    if _NATIVE_AGENT_BINDING.intent
+    APIConnection(error="Legacy REST access is disabled for native startup.")
+    if _NATIVE_INSTALL_INTENT
     else resolve_api_connection(os.environ.get, _read_legacy_api_key)
 )
 API_URL = _api_connection.base_url
@@ -117,7 +120,7 @@ async def _native_agent_lifespan(_app):
     global _NATIVE_AGENT_HOST
     if _NATIVE_AGENT_HOST is not None:
         raise RuntimeError("Native agent host from the previous session is not closed.")
-    host = NativeAgentSessionHost(_NATIVE_AGENT_BINDING)
+    host = NativeAgentSessionHost(_NATIVE_AGENT_BINDING, _NATIVE_SKILL_BINDING)
     _NATIVE_AGENT_HOST = host
     try:
         yield
@@ -193,6 +196,44 @@ async def native_agent_install_close(ctx: Context) -> dict:
     if owner is None or _NATIVE_AGENT_HOST is None:
         return _native_agent_unavailable()
     return await _NATIVE_AGENT_HOST.close(owner)
+
+
+@mcp.tool()
+async def native_skill_install_plan(digest: str, ctx: Context) -> dict:
+    """Plan an exact native SKILL bundle and retain its Go journal session.
+
+    Requires separate operator opt-in and the fixed project profile. Return the
+    complete target-tree and backup plan before requesting explicit consent.
+    """
+    owner = _native_agent_caller(ctx)
+    if owner is None or _NATIVE_AGENT_HOST is None:
+        return _native_agent_unavailable()
+    return await _NATIVE_AGENT_HOST.plan(digest, owner, kind="skill")
+
+
+@mcp.tool()
+async def native_skill_install_confirm(token: str, ctx: Context) -> dict:
+    """Forward the exact caller token once to the held native SKILL process.
+
+    Go rechecks evidence, history and the entire old target tree before the
+    first rename. Uncertain results require inspection, never automatic retry.
+    """
+    owner = _native_agent_caller(ctx)
+    if owner is None or _NATIVE_AGENT_HOST is None:
+        return _native_agent_unavailable()
+    return await _NATIVE_AGENT_HOST.confirm(token, owner, kind="skill")
+
+
+@mcp.tool()
+async def native_skill_install_close(ctx: Context) -> dict:
+    """Cancel this client's SKILL plan and await checked child cleanup.
+
+    Closing does not roll back a confirmation already delivered to Go.
+    """
+    owner = _native_agent_caller(ctx)
+    if owner is None or _NATIVE_AGENT_HOST is None:
+        return _native_agent_unavailable()
+    return await _NATIVE_AGENT_HOST.close(owner, kind="skill")
 
 
 # ── Tool: skill_scan ──────────────────────────────────────────────────
@@ -875,14 +916,14 @@ def _resolve_skillctl_bin() -> tuple[str | None, str | None]:
     failure, path is None and error is a human-readable message with a
     remediation hint that the MCP caller can surface to the user.
     """
-    if _NATIVE_AGENT_BINDING.intent:
-        if not _NATIVE_AGENT_BINDING.enabled:
+    if _NATIVE_INSTALL_INTENT:
+        if not _NATIVE_INSTALL_BINDING.enabled:
             return None, "Native agent startup binding is unavailable."
         try:
-            _NATIVE_AGENT_BINDING.recheck()
+            _NATIVE_INSTALL_BINDING.recheck()
         except (OSError, ValueError, RuntimeError):
             return None, "Native agent startup binary changed or is unavailable."
-        return _NATIVE_AGENT_BINDING.binary, None
+        return _NATIVE_INSTALL_BINDING.binary, None
     env_path = os.environ.get("SKILLCTL_BIN")
     if env_path:
         if os.path.isfile(env_path) and os.access(env_path, os.X_OK):
@@ -974,8 +1015,8 @@ def _enterprise_profile_digest(path: str) -> str:
 
 
 def _capture_enterprise_install_binding() -> _EnterpriseInstallBinding:
-    if _NATIVE_AGENT_BINDING.intent:
-        binding = _NATIVE_AGENT_BINDING
+    if _NATIVE_INSTALL_INTENT:
+        binding = _NATIVE_INSTALL_BINDING
         return _EnterpriseInstallBinding(
             configured=True, profile=binding.profile, digest=binding.profile_sha256,
             project=binding.project, home=binding.home, error=binding.error,

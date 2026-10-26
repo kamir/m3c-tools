@@ -230,7 +230,8 @@ def parse_plan_frame(
     from native_agent_binding import NativeAgentBinding
 
     try:
-        if not isinstance(binding, NativeAgentBinding) or not binding.enabled:
+        if (not isinstance(binding, NativeAgentBinding) or not binding.enabled
+                or binding.kind != "agent"):
             raise NativeAgentProtocolError()
         validate_digest(digest)
         value = _frame(raw)

@@ -3725,9 +3725,9 @@ zugesicherte Keychain-/Secret-Manager-/Umgebungskette für alle Befehle.
 gewählten nativen Profil passen. Die CLI verlangt diese ausdrückliche Auswahl;
 der MCP-Server hält seine Betreiberkonfiguration beim Start fest.
 
-Die unten beschriebene ausdrückliche native Agenten-Session mit Profil v4
-unterstützt genau einen vollständig signierten Agenten per exaktem Digest ohne
-Abhängigkeiten. Andere native CLI-Installationsmodi einschließlich bisheriger
+Die unten beschriebenen ausdrücklichen nativen Sessions mit Profil v4
+unterstützen genau einen vollständig signierten Agenten oder ein SKILL-Bundle
+per exaktem Digest ohne Abhängigkeiten. Andere native CLI-Installationsmodi einschließlich bisheriger
 Dry-Runs und prozessübergreifender Token-Bestätigung bleiben gesperrt. Native
 Veröffentlichung, Admit, Attest, Revoke und Batches bleiben mit Exitcode 12 gesperrt.
 Ein gültiges Profil oder ein Widerrufsdiagnoseergebnis allein berechtigt nicht zur
@@ -3902,7 +3902,7 @@ Profil-, Authentisierungs- und Zustimmungsfehler ergeben 12, fehlende oder veral
 Historie 22 und Quellen-/Persistenz-/Ausgabe-I/O-Fehler 1. Andere bisherige Pull-Flags
 sind in diesem Modus nicht unterstützt.
 
-Native SKILLs, Abhängigkeiten, Git-Carrier und native Veröffentlichung bleiben
+Native Abhängigkeiten, Git-Carrier und native Veröffentlichung bleiben
 gesperrt. Auch die allgemeinen MCP-Mutationswerkzeuge bleiben geschützt.
 Kundenplattform- und Release-Binary-Abnahme bleiben gesonderte Anforderungen.
 
@@ -3951,3 +3951,65 @@ Zielprüfung vor einem neuen ausdrücklichen Plan; fehlende Ausgabe beweist kein
 Rollback. Session-Tokens werden weder dauerhaft gespeichert noch nach Neustart
 fortgesetzt. Gewählter Client und lokaler Betreiber bleiben vertrauenswürdig;
 eine Sandbox zur Ausführung fremder Skills wird damit nicht zugesagt.
+
+
+### Native SKILL-Bundles über CLI und MCP
+
+Verwende das oben beschriebene v4-ER1-Profil und denselben gehaltenen CLI-Prozess
+mit `--kind skill`. Prüfe `native-skill-plan` und gib dessen exakten Token in
+diesem Prozess ein. Das Bundle muss `SKILL.md` im Wurzelverzeichnis, `bundle.json`
+und vollständige `CHECKSUMS` enthalten; signierte Bytes werden niemals umgeschrieben.
+Signiert wird die SHA256 des fertigen Archivs; sie kann vom eingebetteten
+Pack-Digest abweichen. `depends_on: []` ist verpflichtend.
+`data_dependencies` darf fehlen oder `[]` sein; jedes Feld
+`package_dependencies` ist nicht unterstützt, auch `[]`. Bei gültigen kritischen
+Nachweisen ergeben null, falsche Typen, Aliase oder versteckte
+Abhängigkeitsdeklarationen 14. Pakete, Skills, Agenten oder Interpreter werden
+nicht automatisch bereitgestellt.
+
+MCP benötigt die gesonderte Freigabe `SKILLCTL_NATIVE_SKILL_INSTALL=1` und bietet
+`native_skill_install_plan`, `native_skill_install_confirm` und
+`native_skill_install_close`. Die Agentenfreigabe aktiviert keine SKILL-Installation
+und umgekehrt. Sind beide aktiviert, teilen sie ein Startup-Profil, eine Binärdatei,
+einen Zugangsdaten-Snapshot und genau einen gehaltenen Prozessplatz. Ein vorhandener
+ungültiger Freigabewert sperrt native Berechtigungen und Legacy-Suche. Confirm und
+Close eines anderen Clients oder einer anderen Art verbrauchen den gehaltenen
+Plan nicht. Allgemeine Mutationswerkzeuge bleiben geschützt.
+
+Aktives Ziel ist `<Artefakt-Home>/.claude/skills/<signierter-Name>/`. Es enthält das
+Originalarchiv `<signierter-Name>.skb`, den vollständigen Kontext
+`.skillctl-attest.json` und die beratende `.m3c-provenance.json`. Überschreiben
+verlangt gültige verwaltete native Nachweise, einen neuen Plan und Zustimmung zum
+gesamten aktuellen Baum einschließlich lokaler Änderungen, Metadaten und leerer
+Verzeichnisse. Unverwaltete oder fehlerhafte alte Ziele verlangen manuelle
+Migration oder Reparatur. Ein Downgrade wird abgewiesen.
+
+Beim Überschreiben bleibt der alte Baum am im Plan angezeigten exakten
+`BackupPath` unter `.claude/skills/.native-skill/transactions/<Transaktion>/backup`
+erhalten. Diese Backups sammeln sich an; Betreiber müssen Speicher und Aufbewahrung
+planen. Sie dienen der Wiederherstellung und erlauben kein automatisches Restore
+oder erneutes Installieren. Zwei Renames ersetzen das Verzeichnis; atomarer
+Verzeichnisaustausch oder ein Dateisystem-Snapshot bei Stromausfall werden nicht zugesagt.
+
+Eine ausstehende Reservierung sperrt neue Versuche für dieses Ziel bis zum
+geprüften Abbruch oder Abschluss. Prüfe zurückgebliebene Reservierungen mit
+Scalytics-DevOps im dokumentierten Vier-Augen-Recovery-Verfahren; lösche sie nicht
+für einen blinden Wiederholungsversuch. Rename-, Sync-, Close- oder Abschlussausgabefehler
+können veränderte Dateien hinterlassen und ergeben einen Fehler. Auch das Entfernen
+der Reservierung kann fehlschlagen; ihr Fehlen beweist keinen früheren Erfolg.
+Jeder neue Versuch verlangt frischen Trust, vollständige Nachweisprüfung und neue
+zielgebundene Zustimmung. Die Funktion verwaltet und prüft Trust; sie bietet keine
+Sandbox oder Sicherheitszusage für die Ausführung fremder Skills.
+
+Die native Teilmenge begrenzt das Archiv auf 16 MiB, vollständigen Kontext und
+CHECKSUMS auf jeweils 1 MiB sowie das Entpacken auf 100 MiB und 10.000 Einträge.
+Kumulative Arbeitsgrenzen je Vorgang können ein Bundle auch dann ablehnen, wenn
+es jede Einzelgrenze erfüllt. Eine Ablehnung erlaubt keinen Legacy-Fallback.
+
+Native SKILL-Versionen verwenden `numeric-release/v1`: ein bis vier kanonische
+vorzeichenlose 64-Bit-Dezimalkomponenten; fehlende Komponenten werden beim
+Vergleich als null ergänzt. Führende Nullen, `v`, Vorab-/Build-Suffixe, Leerzeichen
+und Überläufe sind nicht unterstützt. `1.2.3` wird beispielsweise unterstützt,
+`1.2.3-rc.1` abgewiesen. Unbekannte Versionen werden für die Downgrade-Prüfung
+niemals still normalisiert. Das gemeinsame Inventar impliziter und expliziter
+Archiv-Pfadpräfixe ist auf 100.000 begrenzt.
