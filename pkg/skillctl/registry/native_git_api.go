@@ -182,11 +182,11 @@ func nativeGitInteger(v any, max int) (int, error) {
 		return 0, ErrNativeEvidenceInvalid
 	}
 	text := string(n)
-	i, err := strconv.ParseInt(text, 10, 64)
-	if err != nil || i < 0 || i > int64(max) || strconv.FormatInt(i, 10) != text {
+	i, err := strconv.Atoi(text)
+	if err != nil || i < 0 || i > max || strconv.Itoa(i) != text {
 		return 0, ErrNativeEvidenceInvalid
 	}
-	return int(i), nil
+	return i, nil
 }
 func (f *nativeGitFetch) checkCommit() error {
 	suffix := "/git/commits/" + f.source.commit

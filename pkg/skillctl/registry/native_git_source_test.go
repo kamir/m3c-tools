@@ -521,6 +521,59 @@ func TestNativeGitSourceCompletenessAndBounds(t *testing.T) {
 			t.Fatal("API alias granted")
 		}
 	})
+	t.Run("canonicalNativeWidthIntegerBounds", func(t *testing.T) {
+		hostMax := int(^uint(0) >> 1)
+		hostBeyond := strconv.FormatUint(uint64(hostMax)+1, 10)
+		cases := []struct {
+			name  string
+			value any
+			limit int
+			want  int
+			valid bool
+		}{
+			{"zero", json.Number("0"), 0, 0, true},
+			{"maximum", json.Number("7"), 7, 7, true},
+			{"maximumPlusOne", json.Number("8"), 7, 0, false},
+			{"negativeMaximum", json.Number("0"), -1, 0, false},
+			{"negativeValue", json.Number("-1"), 7, 0, false},
+			{"hostMaximum", json.Number(strconv.Itoa(hostMax)), hostMax, hostMax, true},
+			{"hostOverflow", json.Number(hostBeyond), hostMax, 0, false},
+			{"int32Maximum", json.Number("2147483647"), hostMax, 2147483647, true},
+			{"int32Next", json.Number("2147483648"), hostMax, 0, strconv.IntSize > 32},
+			{"stringIsNotNumber", "1", 7, 0, false},
+			{"floatIsNotNumber", float64(1), 7, 0, false},
+			{"integerIsNotJSONNumber", 1, 7, 0, false},
+			{"boolIsNotNumber", true, 7, 0, false},
+			{"nullIsNotNumber", nil, 7, 0, false},
+			{"leadingZero", json.Number("01"), 7, 0, false},
+			{"leadingPlus", json.Number("+1"), 7, 0, false},
+			{"negativeZero", json.Number("-0"), 7, 0, false},
+			{"decimal", json.Number("1.0"), 7, 0, false},
+			{"exponent", json.Number("1e0"), 7, 0, false},
+			{"empty", json.Number(""), 7, 0, false},
+			{"whitespace", json.Number(" 1"), 7, 0, false},
+			{"veryLarge", json.Number(strings.Repeat("9", 100)), hostMax, 0, false},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				got, err := nativeGitInteger(tc.value, tc.limit)
+				if tc.name == "int32Next" && tc.valid {
+					if err != nil || uint64(got) != uint64(2147483648) {
+						t.Fatalf("native64 positive boundary: %v", err)
+					}
+					return
+				}
+				if tc.valid {
+					if err != nil || got != tc.want {
+						t.Fatalf("valid canonical boundary: got=%d err=%v", got, err)
+					}
+				} else if !errors.Is(err, ErrNativeEvidenceInvalid) {
+					t.Fatalf("invalid canonical/native-width value accepted: got=%d err=%v", got, err)
+				}
+			})
+		}
+	})
+
 	t.Run("capsPreallocation", func(t *testing.T) {
 		f := &nativeGitFetch{work: nativeLiveWork{bytes: nativeLiveWorkMax - 1}, seenObjects: map[string]bool{}}
 		if !errors.Is(f.object(strings.Repeat("a", 40)), ErrNativeEvidenceInvalid) || len(f.seenObjects) != 0 {
