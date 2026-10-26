@@ -62,6 +62,14 @@ func TestNativeSkillConsentAndTargets(t *testing.T) {
 	t.Run("physicalHomeReplacementBeforeFirstRename", func(t *testing.T) {
 		f := qaNativeSkillRegistryNew(t)
 		s := nativeSkillAuthorBegin(t, f)
+		closed := false
+		t.Cleanup(func() {
+			if !closed {
+				if err := s.Close(); err != nil {
+					t.Errorf("checked emergency session cleanup: %v", err)
+				}
+			}
+		})
 		p, err := s.Plan(context.Background())
 		if err != nil {
 			t.Fatal(err)
@@ -75,13 +83,22 @@ func TestNativeSkillConsentAndTargets(t *testing.T) {
 			}
 			err := os.Rename(home, moved)
 			if err != nil {
-				if runtime.GOOS != "windows" || !errors.Is(err, syscall.Errno(5)) {
+				// Windows can prevent the attempted mutation while the live
+				// handles remain held. This branch proves OS prevention, not
+				// detection of a replacement that actually occurred.
+				if runtime.GOOS != "windows" || (!errors.Is(err, syscall.Errno(5)) && !errors.Is(err, syscall.Errno(32))) {
 					t.Fatal("unexpected home rename failure", err)
 				}
 				path, e := os.Lstat(home)
 				held, he := s.fs.home.Stat(".")
 				if e != nil || he != nil || !os.SameFile(path, held) || !os.SameFile(path, f.base.journal.selection.homeInfo) || f.base.journal.selection.validate() != nil {
 					t.Fatal("OS-prevention control lost unchanged home")
+				}
+				if _, e := os.Lstat(moved); !errors.Is(e, os.ErrNotExist) {
+					t.Fatal("OS prevention unexpectedly moved home", e)
+				}
+				if _, e := os.Lstat(f.target); !errors.Is(e, os.ErrNotExist) || s.published {
+					t.Fatal("OS prevention control lost absent target", e)
 				}
 				prevented = true
 				return
@@ -91,7 +108,7 @@ func TestNativeSkillConsentAndTargets(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		_, err = s.Confirm(context.Background(), p.Token)
+		installed, err := s.Confirm(context.Background(), p.Token)
 		if changed {
 			if err == nil || s.published {
 				t.Fatal("replaced home reached publication", err)
@@ -102,7 +119,9 @@ func TestNativeSkillConsentAndTargets(t *testing.T) {
 			if _, e := os.Lstat(filepath.Join(moved, ".claude", "skills", f.base.agent.name)); !errors.Is(e, os.ErrNotExist) {
 				t.Fatal("published into detached old home", e)
 			}
-			if e := s.Close(); !errors.Is(e, ErrNativePersistence) {
+			e := s.Close()
+			closed = true
+			if !errors.Is(e, ErrNativePersistence) {
 				t.Fatal("detached workspace uncertainty lost", e)
 			}
 			if e := os.Remove(home); e != nil {
@@ -112,7 +131,17 @@ func TestNativeSkillConsentAndTargets(t *testing.T) {
 			if !prevented || err != nil {
 				t.Fatal("OS prevention control failed", prevented, err)
 			}
-			if e := s.Close(); e != nil {
+			if len(installed) != 1 || installed[0] == nil || installed[0].SkillPath != f.target {
+				t.Fatal("OS prevention control lost actual installed result")
+			}
+			archive, archiveErr := os.ReadFile(filepath.Join(f.target, s.prepared.bundle.Name+".skb"))
+			contextRaw, contextErr := os.ReadFile(filepath.Join(f.target, AttestationStashName))
+			if archiveErr != nil || contextErr != nil || !bytes.Equal(archive, s.prepared.archive) || !bytes.Equal(contextRaw, s.prepared.contextRaw) {
+				t.Fatal("OS prevention control lost retained installed proof", archiveErr, contextErr)
+			}
+			e := s.Close()
+			closed = true
+			if e != nil {
 				t.Fatal(e)
 			}
 			if e := os.Rename(home, moved); e != nil {
