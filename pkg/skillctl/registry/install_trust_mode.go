@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/kamir/m3c-tools/pkg/skillbundle"
+	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
 	"github.com/kamir/m3c-tools/pkg/skillctl/secfile"
 	"github.com/kamir/m3c-tools/pkg/skillctl/semver"
 )
@@ -82,6 +83,7 @@ type SignatureSidecar struct {
 
 // InstallOpts describes a trust-mode install.
 type InstallOpts struct {
+	NativeEnterpriseIntent *artifact.NativeEnterpriseIntent
 	// NativeTrustRoots is explicit authority for new agent retention. Neither a
 	// fingerprint nor a missing signed context can stand in for these keys.
 	NativeTrustRoots *SelfTrustRoots
@@ -196,6 +198,9 @@ func PlanInstall(bundles []*StagedBundle, skillsDir string) (*InstallPlan, error
 // caller's token matches, and only then writes. Drift in the create/overwrite
 // set ⇒ refuse with ErrPlanDrift. Stale token ⇒ refuse with ErrTokenExpired.
 func ConfirmInstall(bundles []*StagedBundle, providedToken string, opts InstallOpts) (results []*InstallResult, resultErr error) {
+	if err := artifact.RejectNativeEnterpriseMutation(opts.NativeEnterpriseIntent); err != nil {
+		return nil, err
+	}
 	hasAgent := false
 	agentNames := map[string]bool{}
 	for _, b := range bundles {

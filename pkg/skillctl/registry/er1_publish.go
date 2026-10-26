@@ -25,6 +25,7 @@ import (
 
 	"github.com/kamir/m3c-tools/pkg/er1"
 	"github.com/kamir/m3c-tools/pkg/httpsafe"
+	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
 	"github.com/kamir/m3c-tools/pkg/skillctl/netguard"
 )
 
@@ -100,6 +101,7 @@ type SkillMeta struct {
 
 // PublishAdmittedOpts captures the inputs PublishAdmitted needs.
 type PublishAdmittedOpts struct {
+	NativeEnterpriseIntent *artifact.NativeEnterpriseIntent
 	// ER1Cfg is the resolved ER1 client config (the cmd handler builds it
 	// from ER1_TARGET via pkg/session.ER1Endpoint + Keychain creds).
 	ER1Cfg *er1.Config
@@ -144,6 +146,9 @@ type PublishAdmittedResult struct {
 // /upload_2. Returns ErrAlreadyPublished (with a result carrying the existing
 // DocID) when an admitted item for this digest already exists.
 func PublishAdmitted(opts PublishAdmittedOpts) (*PublishAdmittedResult, error) {
+	if err := artifact.RejectNativeEnterpriseMutation(opts.NativeEnterpriseIntent); err != nil {
+		return nil, err
+	}
 	if opts.ER1Cfg == nil {
 		return nil, errors.New("PublishAdmitted: ER1Cfg required")
 	}
@@ -216,16 +221,20 @@ func PublishAdmitted(opts PublishAdmittedOpts) (*PublishAdmittedResult, error) {
 
 // PublishAttestedOpts captures the inputs for the attested-event publish path.
 type PublishAttestedOpts struct {
-	ER1Cfg    *er1.Config
-	ContextID string
-	Event     map[string]any // signed AttestationPublishedEvent
-	Skill     SkillMeta
-	Now       time.Time
+	NativeEnterpriseIntent *artifact.NativeEnterpriseIntent
+	ER1Cfg                 *er1.Config
+	ContextID              string
+	Event                  map[string]any // signed AttestationPublishedEvent
+	Skill                  SkillMeta
+	Now                    time.Time
 }
 
 // PublishAttested POSTs an AttestationPublishedEvent item. Not deduped
 // (the history of attestations is the point; `registry show` renders it).
 func PublishAttested(opts PublishAttestedOpts) (string, error) {
+	if err := artifact.RejectNativeEnterpriseMutation(opts.NativeEnterpriseIntent); err != nil {
+		return "", err
+	}
 	if opts.ER1Cfg == nil || opts.Event == nil {
 		return "", errors.New("PublishAttested: ER1Cfg + Event required")
 	}
@@ -245,27 +254,32 @@ func PublishAttested(opts PublishAttestedOpts) (string, error) {
 
 // PublishRevokedOpts captures the inputs for the revoked-event publish path.
 type PublishRevokedOpts struct {
-	ER1Cfg    *er1.Config
-	ContextID string
-	Event     map[string]any // signed BundleRevokedEvent
-	Skill     SkillMeta
-	Now       time.Time
+	NativeEnterpriseIntent *artifact.NativeEnterpriseIntent
+	ER1Cfg                 *er1.Config
+	ContextID              string
+	Event                  map[string]any // signed BundleRevokedEvent
+	Skill                  SkillMeta
+	Now                    time.Time
 }
 
 // PublishInstalledOpts captures the inputs for the install-event publish path.
 type PublishInstalledOpts struct {
-	ER1Cfg          *er1.Config
-	ContextID       string
-	Event           map[string]any // signed BundleInstalledEvent
-	Skill           SkillMeta
-	InstalledOnHost string
-	Now             time.Time
+	NativeEnterpriseIntent *artifact.NativeEnterpriseIntent
+	ER1Cfg                 *er1.Config
+	ContextID              string
+	Event                  map[string]any // signed BundleInstalledEvent
+	Skill                  SkillMeta
+	InstalledOnHost        string
+	Now                    time.Time
 }
 
 // PublishInstalled POSTs a BundleInstalledEvent item with the install-event
 // tag set (skill-event:installed, host:<installed-on>). Called by
 // `pull --install --emit-installed` so the other machine sees the install.
 func PublishInstalled(opts PublishInstalledOpts) (string, error) {
+	if err := artifact.RejectNativeEnterpriseMutation(opts.NativeEnterpriseIntent); err != nil {
+		return "", err
+	}
 	if opts.ER1Cfg == nil || opts.Event == nil {
 		return "", errors.New("PublishInstalled: ER1Cfg + Event required")
 	}
@@ -297,6 +311,9 @@ func PublishInstalled(opts PublishInstalledOpts) (string, error) {
 
 // PublishRevoked POSTs a BundleRevokedEvent item.
 func PublishRevoked(opts PublishRevokedOpts) (string, error) {
+	if err := artifact.RejectNativeEnterpriseMutation(opts.NativeEnterpriseIntent); err != nil {
+		return "", err
+	}
 	if opts.ER1Cfg == nil || opts.Event == nil {
 		return "", errors.New("PublishRevoked: ER1Cfg + Event required")
 	}

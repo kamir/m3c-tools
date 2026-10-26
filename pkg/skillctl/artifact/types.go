@@ -35,11 +35,12 @@ type ArtifactMeta struct {
 // registry event builders, no re-typing, so the canonical signed bytes never
 // drift.
 type PublishRequest struct {
-	Kind           EventKind
-	Event          map[string]any // signed; envelope_signature already set
-	Meta           ArtifactMeta
-	Blob           []byte // REQUIRED iff Kind == KindAdmit; else nil
-	InlineMaxBytes int    // claim-check threshold hint; backend may ignore
+	NativeEnterpriseIntent *NativeEnterpriseIntent
+	Kind                   EventKind
+	Event                  map[string]any // signed; envelope_signature already set
+	Meta                   ArtifactMeta
+	Blob                   []byte // REQUIRED iff Kind == KindAdmit; else nil
+	InlineMaxBytes         int    // claim-check threshold hint; backend may ignore
 }
 
 // PublishResult reports where the event landed on the backend's native address

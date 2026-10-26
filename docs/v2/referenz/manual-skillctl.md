@@ -3425,3 +3425,28 @@ environment chain across all commands.
 - **[Tutorial: the first signed skill](../nutzer/tutorial-szenario-02-erster-signierter-skill.en.md)**: separate author, reviewer and consumer roles.
 - **[Quickstart: the offline demo](../nutzer/quickstart-skillctl-demo.md)**: the `skillctl-demo` Kata walkthrough (CISO/booth).
 - **[Manual: m3c-tools](manual-m3c-tools.md)**: the memory-capture toolkit `skillctl` ships alongside.
+
+### Explicit native Enterprise selection
+
+`pull` and `publish` accept `--enterprise-profile <file>`, optionally
+`--enterprise-profile-sha256 <lowercase-sha256>` and `--home <artifact-home>`.
+The current working directory and artifact home must match the selected native
+profile. These flags are explicit CLI selections; the MCP server separately
+captures its operator configuration at startup.
+
+Native Enterprise operations are currently blocked with exit code 12, including
+pull dry-runs and publish admit, attest, revoke and batch modes. A valid profile
+or a cryptographically valid native revocation diagnostic does not grant
+permission to install or publish. Durable native revocation history and mutation
+sessions are required before these operations can be enabled. Invalid selection
+is refused before credential, signing-key, backend or install-state access.
+A profile hash or home flag without a profile is a usage error (exit code 2).
+
+With a native profile bound at MCP startup, install, attest, revoke and awareness
+sync calls return a structured refusal before child execution or registry calls.
+Changing request fields, environment variables or profile bytes cannot remove
+this startup refusal. HTTP profile v1 and unselected legacy native operations
+retain their existing contracts; they do not become native Enterprise operations.
+Native signatures bind the selected key and tenant, not the physical registry
+transport address. Cross-signing and unsupported native mappings are refused in
+this increment. Customer platform acceptance remains a separate release gate.

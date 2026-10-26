@@ -37,6 +37,9 @@ import (
 func runPull(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("pull", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	enterpriseProfile := fs.String("enterprise-profile", "", "Explicit native Enterprise project profile; native operations remain unavailable until durable trust sessions are supported.")
+	enterpriseProfileSHA := fs.String("enterprise-profile-sha256", "", "Expected lowercase SHA-256 of --enterprise-profile bytes.")
+	enterpriseHome := fs.String("home", "", "Artifact home bound by the native Enterprise profile; defaults to $HOME.")
 
 	var (
 		registryName = fs.String("registry", "self", "Registry spec. Only `self` / `er1://…` are handled here; HTTP registries route through `skillctl install`.")
@@ -96,6 +99,14 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "  Das Installationsereignis sagt, WER installiert hat, und wird signiert.")
 		fmt.Fprintln(stderr, "  Beispiel: --identity id:you@your-org")
 		return 2
+	}
+
+	if err := nativeEnterprisePreflight(fs, *enterpriseProfile, *enterpriseProfileSHA, *enterpriseHome, *registryName); err != nil {
+		fmt.Fprintf(stderr, "pull: %v\n", err)
+		if errors.Is(err, errNativeProfileUsage) {
+			return 2
+		}
+		return 12
 	}
 
 	tr, peerName, err := resolvePullTrustRoots(*registryName, *trustPath)

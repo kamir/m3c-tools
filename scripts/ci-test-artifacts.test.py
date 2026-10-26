@@ -89,34 +89,37 @@ class ArtifactContracts(unittest.TestCase):
     def test_required_python_case_cannot_hide_behind_passing_other_cases(self):
         raw, meta_path = self.paths["python-mcp"]
         original, metadata = raw.read_bytes(), meta_path.read_bytes()
-        identity = self.config["lanes"]["python-mcp"]["required_cases"][0]
-        for mode in ("missing", "skip", "duplicate", "foreign_class"):
-            with self.subTest(mode=mode):
-                suite = ET.Element("testsuite")
-                ET.SubElement(suite, "testcase", dict(classname="other", name="passing_control"))
-                if mode != "missing":
-                    attrs = dict(identity)
-                    if mode == "foreign_class":
-                        attrs["classname"] = "other"
-                    case = ET.SubElement(suite, "testcase", attrs)
-                    if mode == "skip":
-                        ET.SubElement(case, "skipped")
-                    if mode == "duplicate":
-                        ET.SubElement(suite, "testcase", attrs)
-                raw.write_bytes(ET.tostring(suite))
-                meta = json.loads(metadata)
-                meta["result_sha256"] = hashlib.sha256(raw.read_bytes()).hexdigest()
-                meta["test_counts"] = GATE.python_counts(raw.read_bytes())
-                meta_path.write_text(json.dumps(meta))
-                with self.assertRaisesRegex(ValueError, "required Python case"):
-                    self.run_gate()
-                command = [sys.executable, str(ROOT / "scripts/ci-test-artifacts.py"), str(self.root)]
-                for key, value in self.context.items():
-                    command.extend(["--" + key.replace("_", "-"), value])
-                environment = dict(os.environ, TEST_PRODUCER_RESULTS=json.dumps(self.needs))
-                result = subprocess.run(command, env=environment, capture_output=True, text=True)
-                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-                self.assertIn("required Python case", result.stderr)
+        for identity in self.config["lanes"]["python-mcp"]["required_cases"]:
+            for mode in ("missing", "skip", "duplicate", "foreign_class"):
+                with self.subTest(mode=mode):
+                    suite = ET.Element("testsuite")
+                    ET.SubElement(suite, "testcase", dict(classname="other", name="passing_control"))
+                    for other in self.config["lanes"]["python-mcp"]["required_cases"]:
+                        if other != identity:
+                            ET.SubElement(suite, "testcase", dict(other))
+                    if mode != "missing":
+                        attrs = dict(identity)
+                        if mode == "foreign_class":
+                            attrs["classname"] = "other"
+                        case = ET.SubElement(suite, "testcase", attrs)
+                        if mode == "skip":
+                            ET.SubElement(case, "skipped")
+                        if mode == "duplicate":
+                            ET.SubElement(suite, "testcase", attrs)
+                    raw.write_bytes(ET.tostring(suite))
+                    meta = json.loads(metadata)
+                    meta["result_sha256"] = hashlib.sha256(raw.read_bytes()).hexdigest()
+                    meta["test_counts"] = GATE.python_counts(raw.read_bytes())
+                    meta_path.write_text(json.dumps(meta))
+                    with self.assertRaisesRegex(ValueError, "required Python case"):
+                        self.run_gate()
+                    command = [sys.executable, str(ROOT / "scripts/ci-test-artifacts.py"), str(self.root)]
+                    for key, value in self.context.items():
+                        command.extend(["--" + key.replace("_", "-"), value])
+                    environment = dict(os.environ, TEST_PRODUCER_RESULTS=json.dumps(self.needs))
+                    result = subprocess.run(command, env=environment, capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                    self.assertIn("required Python case", result.stderr)
         raw.write_bytes(original)
         meta_path.write_bytes(metadata)
         self.assertEqual(set(self.run_gate()), set(self.config["lanes"]))
@@ -125,10 +128,12 @@ class ArtifactContracts(unittest.TestCase):
         # The real lane runs pytest with cwd=mcp-skill-server, not repo root.
         # Keep this producer identity independent of catalog-generated fixtures.
         raw, metadata_path = self.paths["python-mcp"]
-        report = ('<testsuite tests="2" errors="0" failures="0" skipped="0">'
+        report = ('<testsuite tests="3" errors="0" failures="0" skipped="0">'
                   '<testcase classname="test_other" name="passing_control"/>'
                   '<testcase classname="test_enterprise_profile" '
-                  'name="test_real_cli_enterprise_profile_and_stdio"/></testsuite>')
+                  'name="test_real_cli_enterprise_profile_and_stdio"/>'
+                  '<testcase classname="test_native_enterprise_profile" '
+                  'name="test_native_enterprise_profile_denied_before_exec"/></testsuite>')
         raw.write_text(report)
         metadata = json.loads(metadata_path.read_text())
         metadata["result_sha256"] = hashlib.sha256(raw.read_bytes()).hexdigest()
@@ -440,6 +445,18 @@ class ArtifactContracts(unittest.TestCase):
             ('security', 'TestAgentRetainedProofIdentityAndBounds'),
             ('security', 'TestAgentRetainedProofPublicationFailures'),
             ('security', 'TestPullInstallAgentRetainedProofActualCLI'),
+            ('unit', 'TestNativeProfileStrictSelection'),
+            ('unit', 'TestNativeRootRoleSnapshots'),
+            ('unit', 'TestNativeRevocationEvidenceBounds'),
+            ('unit', 'TestNativeEnterpriseProfileEarlyDenial'),
+            ('unit', 'TestNativeEnterpriseIntentDenials'),
+            ('security', 'TestNativeProfileStrictSelection'),
+            ('security', 'TestNativeRootRoleSnapshots'),
+            ('security', 'TestNativeRevocationEvidenceBounds'),
+            ('security', 'TestNativeEnterpriseProfileEarlyDenial'),
+            ('security', 'TestNativeEnterpriseIntentDenials'),
+            ('security', 'TestPullNativeEnterpriseProfilePreflightActualCLI'),
+            ('security', 'TestPublishNativeEnterpriseProfilePreflightActualCLI'),
             ("unit", "TestStateRealProcessLock"),
             ("security", "TestStateRealProcessLock"),
             ('unit', 'TestInstalledSkillSourceSignedActiveProof'),

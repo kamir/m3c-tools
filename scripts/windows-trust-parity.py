@@ -73,7 +73,11 @@ PROJECT_CASES = {
     'github.com/kamir/m3c-tools/pkg/skillbundle': (
         'TestUnpackInflatedBudget',
     ),
+    'github.com/kamir/m3c-tools/pkg/skillctl/artifact': (
+        'TestNativeEnterpriseIntentDenials',
+    ),
     'github.com/kamir/m3c-tools/pkg/skillctl/projectpolicy': (
+        'TestNativeProfileStrictSelection',
         'TestProjectProfileSnapshotsAndSelection',
         'TestProjectProfileStrictInputs',
         'TestProjectProfilePinnedRolesAndYAML',
@@ -89,6 +93,9 @@ PROJECT_CASES = {
         'TestStateRealProcessLock',
     ),
     'github.com/kamir/m3c-tools/pkg/skillctl/registry': (
+        'TestNativeRootRoleSnapshots',
+        'TestNativeRevocationEvidenceBounds',
+        'TestNativeEnterpriseProfileEarlyDenial',
         'TestBoundIdentityReaderResponses',
         'TestBoundIdentityReaderPhases',
         'TestBoundIdentityReaderTransport',
@@ -130,6 +137,8 @@ PROJECT_CASES = {
         'TestManagedRegistryTransportSnapshotAndErrors',
     ),
     'github.com/kamir/m3c-tools/cmd/skillctl': (
+        'TestPullNativeEnterpriseProfilePreflightActualCLI',
+        'TestPublishNativeEnterpriseProfilePreflightActualCLI',
         'TestInstallEnterpriseProfileActualCLI',
         'TestInstallEnterpriseProfileUsageBeforeReads',
         'TestInstallEnterpriseProfileHTTPPreflightActualCLI',

@@ -3716,3 +3716,31 @@ zugesicherte Keychain-/Secret-Manager-/Umgebungskette für alle Befehle.
 - **[Tutorial: der erste signierte Skill](../nutzer/tutorial-szenario-02-erster-signierter-skill.de.md)**: getrennte Rollen für Autor, Reviewer und Consumer.
 - **[Schnellstart: Offline-Demo](../nutzer/quickstart-skillctl-demo.de.md)**: Kata-Anleitung für `skillctl-demo`, für CISO und Messestand.
 - **[Handbuch: m3c-tools](manual-m3c-tools.de.md)**: gemeinsam mit `skillctl` ausgelieferte Werkzeuge zur Erinnerungserfassung.
+
+### Ausdrückliche native Enterprise-Auswahl
+
+`pull` und `publish` akzeptieren `--enterprise-profile <Datei>`, optional
+`--enterprise-profile-sha256 <kleingeschriebene-sha256>` und
+`--home <Artefakt-Home>`. Arbeitsverzeichnis und Artefakt-Home müssen zum
+gewählten nativen Profil passen. Die CLI verlangt diese ausdrückliche Auswahl;
+der MCP-Server hält seine Betreiberkonfiguration beim Start fest.
+
+Native Enterprise-Operationen bleiben derzeit mit Exitcode 12 gesperrt,
+einschließlich Pull-Dry-Runs und Publish für Admit, Attest, Revoke und Batches.
+Ein gültiges Profil oder ein kryptografisch gültiger nativer Widerrufsnachweis
+berechtigt nicht zur Installation oder Veröffentlichung. Dafür fehlen noch die
+dauerhafte native Widerrufshistorie und gehaltene Mutationssessions. Ungültige
+Auswahl wird vor Credential-, Signaturschlüssel-, Backend- oder
+Installationszustandszugriffen abgewiesen. Hash- oder Home-Flag ohne Profil ist
+ein Verwendungsfehler (Exitcode 2).
+
+Bei einem beim MCP-Start gebundenen nativen Profil liefern Install, Attest,
+Revoke und Awareness-Sync eine strukturierte Ablehnung vor Kindprozess- oder
+Registry-Aufrufen. Request-Felder, Umgebungsvariablen oder geänderte Profilbytes
+können diese Startentscheidung nicht aufheben. HTTP-Profil v1 und nicht als
+Enterprise ausgewählte native Legacy-Operationen behalten ihre bisherigen
+Verträge; sie werden dadurch nicht zu nativen Enterprise-Operationen. Native
+Signaturen binden den gewählten Schlüssel und Tenant, nicht die physische
+Transportadresse der Registry. Cross-Signing und nicht unterstützte native
+Zuordnungen werden in diesem Schritt abgewiesen. Die Kunden-Plattformabnahme
+bleibt ein eigenes Release-Gate.
