@@ -323,7 +323,7 @@ func TestNativeGitSourceSnapshot(t *testing.T) {
 		want := f.tree("", entries)
 		consumer := []nativeGitEntry{}
 		for _, e := range entries {
-			consumer = append(consumer, nativeGitEntry{e.name, e.mode, e.kind, e.oid})
+			consumer = append(consumer, nativeGitEntry(e))
 		}
 		work := &nativeLiveWork{}
 		raw, e := nativeGitTreeBytes(consumer, work)

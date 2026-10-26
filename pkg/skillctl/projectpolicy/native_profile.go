@@ -160,19 +160,20 @@ func loadNative(path, expected, actualProject, actualHome string) (*NativePolicy
 		return nil, ErrInvalid
 	}
 	carrier := NativeCarrierSelection{Kind: n.Carrier.Kind}
-	if schema == NativeLiveSchema {
+	switch schema {
+	case NativeLiveSchema:
 		if n.Carrier.Kind != "er1" {
 			return nil, ErrUnsupported
 		}
 		carrier.Locator = n.LogicalRegistry
 		carrier.BaseURL = n.Carrier.BaseURL
 		carrier.ContextID = n.Carrier.ContextID
-	} else if schema == NativeGitSchema {
+	case NativeGitSchema:
 		if n.Carrier.Kind != "git" {
 			return nil, ErrUnsupported
 		}
 		carrier.Locator = n.LogicalRegistry
-	} else {
+	default:
 		switch n.Carrier.Kind {
 		case "er1":
 			if _, e = nativeObject(mapping["carrier"], "kind", "base_url", "context_id", "allow_loopback_http"); e != nil {
