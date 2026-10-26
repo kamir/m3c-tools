@@ -147,7 +147,12 @@
           "TestAgentRetainedProofPublicationFailures",
           "TestNativeRootRoleSnapshots",
           "TestNativeRevocationEvidenceBounds",
-          "TestNativeEnterpriseProfileEarlyDenial"
+          "TestNativeEnterpriseProfileEarlyDenial",
+          "TestNativeJournalEnrollmentAndHistory",
+          "TestNativeJournalEpochClockAndFullSet",
+          "TestNativeJournalLockAndPersistence",
+          "TestNativeOfflineInstallSessionBinding",
+          "TestNativeOfflineInstallPublicationBoundary"
         ],
         "./pkg/httpsafe": [
           "TestGETBoundaryContract"
@@ -317,7 +322,12 @@
           "TestAgentRetainedProofPublicationFailures",
           "TestNativeRootRoleSnapshots",
           "TestNativeRevocationEvidenceBounds",
-          "TestNativeEnterpriseProfileEarlyDenial"
+          "TestNativeEnterpriseProfileEarlyDenial",
+          "TestNativeJournalEnrollmentAndHistory",
+          "TestNativeJournalEpochClockAndFullSet",
+          "TestNativeJournalLockAndPersistence",
+          "TestNativeOfflineInstallSessionBinding",
+          "TestNativeOfflineInstallPublicationBoundary"
         ],
         "./pkg/httpsafe": [
           "TestGETBoundaryContract"

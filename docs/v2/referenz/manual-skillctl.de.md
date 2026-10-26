@@ -3725,11 +3725,11 @@ zugesicherte Keychain-/Secret-Manager-/Umgebungskette für alle Befehle.
 gewählten nativen Profil passen. Die CLI verlangt diese ausdrückliche Auswahl;
 der MCP-Server hält seine Betreiberkonfiguration beim Start fest.
 
-Native Enterprise-Operationen bleiben derzeit mit Exitcode 12 gesperrt,
+Native Enterprise-CLI-Operationen bleiben mit Exitcode 12 gesperrt,
 einschließlich Pull-Dry-Runs und Publish für Admit, Attest, Revoke und Batches.
 Ein gültiges Profil oder ein kryptografisch gültiger nativer Widerrufsnachweis
-berechtigt nicht zur Installation oder Veröffentlichung. Dafür fehlen noch die
-dauerhafte native Widerrufshistorie und gehaltene Mutationssessions. Ungültige
+berechtigt nicht zur Installation oder Veröffentlichung. Für diese CLI-Pfade
+fehlt noch die Anbindung der Live-Registry. Ungültige
 Auswahl wird vor Credential-, Signaturschlüssel-, Backend- oder
 Installationszustandszugriffen abgewiesen. Hash- oder Home-Flag ohne Profil ist
 ein Verwendungsfehler (Exitcode 2).
@@ -3744,3 +3744,30 @@ Signaturen binden den gewählten Schlüssel und Tenant, nicht die physische
 Transportadresse der Registry. Cross-Signing und nicht unterstützte native
 Zuordnungen werden in diesem Schritt abgewiesen. Die Kunden-Plattformabnahme
 bleibt ein eigenes Release-Gate.
+
+Das Go-SDK unterstützt gesondert die Offline-Installation genau eines vollständig
+signierten Agenten ohne Abhängigkeiten. Das signierte Manifest muss ausdrücklich `depends_on: []` enthalten;
+`data_dependencies` darf fehlen oder `[]` sein. Jedes Feld
+`package_dependencies` ist nicht unterstützt, auch mit leerem Array.
+
+Lade das ausdrückliche native Profil,
+rufe `OfflineInstallSelection()` und danach
+`registry.OpenNativeJournal(selection)` auf. Der Betreiber muss frische,
+signierte vollständige Widerrufsnachweise ausdrücklich mit `Enroll` eintragen;
+`Adopt` aktualisiert vorhandene authentisierte Historie. Fehlende oder defekte
+Historie wird niemals automatisch initialisiert oder repariert. Lokaler
+Betreiber und OS-Uhr müssen vertrauenswürdig sein; bei verlorener Historie gilt
+das dokumentierte Recovery-Verfahren von DevOps.
+
+Rufe `BeginOfflineInstall(ctx, digest)`, `PlanInstall` und `ConfirmInstall` mit
+dem Token dieses Plans auf. Prüfe stets `Close`, auch nach erfolgreicher
+Installation. Jeder Bestätigungsversuch verbraucht das Token; nach einer
+Ablehnung ist ein neuer Plan nötig. Die Zustimmung gilt höchstens fünf Minuten
+und ist auch für neue Dateien erforderlich. Die Planung hält das exakte
+signierte Archiv und alle Reviewer-Nachweise fest. Nicht unterstützte
+Abhängigkeiten, veralteter oder widerrufener Trust, geänderte Ziele und ungültige
+Zustimmung verhindern die Veröffentlichung. Bei Publikations- oder
+Abschlussfehlern können Dateien bereits verändert sein; prüfe vor einem erneuten
+Versuch das Ziel. Dieser SDK-Pfad aktiviert weder CLI/MCP-Operationen noch
+Skill-Installation, automatische Abhängigkeiten, Isolation nicht
+vertrauenswürdiger Ausführung oder Kunden-Plattformabnahme.

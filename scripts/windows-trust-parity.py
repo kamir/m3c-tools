@@ -93,6 +93,11 @@ PROJECT_CASES = {
         'TestStateRealProcessLock',
     ),
     'github.com/kamir/m3c-tools/pkg/skillctl/registry': (
+        'TestNativeJournalEnrollmentAndHistory',
+        'TestNativeJournalEpochClockAndFullSet',
+        'TestNativeJournalLockAndPersistence',
+        'TestNativeOfflineInstallSessionBinding',
+        'TestNativeOfflineInstallPublicationBoundary',
         'TestNativeRootRoleSnapshots',
         'TestNativeRevocationEvidenceBounds',
         'TestNativeEnterpriseProfileEarlyDenial',

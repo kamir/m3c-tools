@@ -1,9 +1,12 @@
 package verify
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
+
+	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 )
 
 func TestExitCode_Nil(t *testing.T) {
@@ -18,6 +21,19 @@ func TestExitCode_Sentinels(t *testing.T) {
 		err  error
 		want int
 	}{
+		{"native stale and persistence", errors.Join(registry.ErrNativeHistoryStale, registry.ErrNativePersistence), 1},
+		{"native stale and cancel", errors.Join(registry.ErrNativeHistoryStale, context.Canceled), 1},
+		{"legacy trust precedence retained", errors.Join(ErrRegistryNotTrusted, context.Canceled), 12},
+		{"native session unavailable", registry.ErrNativeSessionUnavailable, 22},
+		{"native enrollment exists", registry.ErrNativeHistoryExists, 22},
+		{"native dependencies", fmt.Errorf("wrapped: %w", registry.ErrNativeDependenciesUnavailable), 14},
+		{"native revoked", fmt.Errorf("wrapped: %w", registry.ErrNativeSubjectRevoked), 17},
+		{"native history missing", fmt.Errorf("wrapped: %w", registry.ErrNativeHistoryRequired), 22},
+		{"native history invalid", fmt.Errorf("wrapped: %w", registry.ErrNativeHistoryInvalid), 22},
+		{"native history stale", fmt.Errorf("wrapped: %w", registry.ErrNativeHistoryStale), 22},
+		{"native persistence", fmt.Errorf("wrapped: %w", registry.ErrNativePersistence), 1},
+		{"native evidence invalid", fmt.Errorf("wrapped: %w", registry.ErrNativeEvidenceInvalid), 12},
+		{"native consent", fmt.Errorf("wrapped: %w", registry.ErrNativeConsentInvalid), 12},
 		{"digest mismatch", ErrDigestMismatch, ExitDigestMismatch},
 		{"author sig invalid", ErrAuthorSigInvalid, ExitAuthorSigInvalid},
 		{"registry not trusted", ErrRegistryNotTrusted, ExitRegistryNotTrusted},

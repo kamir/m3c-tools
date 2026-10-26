@@ -3434,11 +3434,11 @@ The current working directory and artifact home must match the selected native
 profile. These flags are explicit CLI selections; the MCP server separately
 captures its operator configuration at startup.
 
-Native Enterprise operations are currently blocked with exit code 12, including
+Native Enterprise CLI operations remain blocked with exit code 12, including
 pull dry-runs and publish admit, attest, revoke and batch modes. A valid profile
 or a cryptographically valid native revocation diagnostic does not grant
-permission to install or publish. Durable native revocation history and mutation
-sessions are required before these operations can be enabled. Invalid selection
+permission to install or publish. Live carrier integration is still required
+before these CLI operations can be enabled. Invalid selection
 is refused before credential, signing-key, backend or install-state access.
 A profile hash or home flag without a profile is a usage error (exit code 2).
 
@@ -3450,3 +3450,26 @@ retain their existing contracts; they do not become native Enterprise operations
 Native signatures bind the selected key and tenant, not the physical registry
 transport address. Cross-signing and unsupported native mappings are refused in
 this increment. Customer platform acceptance remains a separate release gate.
+
+The Go SDK separately supports offline installation of one fully signed agent
+with no dependencies. The signed manifest must explicitly contain `depends_on: []`; omit
+`data_dependencies` or set it to `[]`. Any `package_dependencies` field is
+unsupported, including an empty array.
+
+Load the explicit native policy, obtain
+`OfflineInstallSelection()`, and call `registry.OpenNativeJournal(selection)`.
+The operator must explicitly `Enroll` fresh signed full revocation evidence;
+`Adopt` updates existing authenticated history. Missing or corrupt history is
+never silently initialized or repaired. Keep the local operator and OS clock
+trusted; use the documented DevOps recovery procedure for lost history.
+
+Call `BeginOfflineInstall(ctx, digest)`, `PlanInstall`, then `ConfirmInstall`
+with that plan's token, and always check `Close`, including after success.
+Every attempted confirmation consumes the token; create a new plan to retry a
+refused attempt. Consent lasts at most five minutes and is required even for
+new files. Planning retains the exact signed archive and complete reviewer
+context. Unsupported dependencies, stale or revoked trust, target drift and
+invalid consent prevent publication. Publication or checked-close failures may
+mean files changed; inspect the destination before retrying. This SDK path does
+not enable CLI/MCP operations, skill installation, automatic dependencies,
+untrusted execution isolation or customer platform acceptance.

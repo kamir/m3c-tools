@@ -20,7 +20,7 @@ import (
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 )
 
-// NativeSchema selects the native, deny-only Enterprise mapping. HTTP v1 is separate.
+// NativeSchema selects the native Enterprise mapping. HTTP v1 is separate.
 const NativeSchema = "m3c.enterprise-project-profile/v2"
 
 // NativeCarrierSelection is copied operator provenance, not signed carrier origin.
@@ -33,7 +33,7 @@ type NativeCarrierSelection struct {
 }
 
 // NativePolicy retains private role-separated authority and runtime snapshots.
-// It cannot grant mutations before the native durable journal is implemented.
+// Offline mutations require the separate enrolled journal and held SDK session.
 type NativePolicy struct {
 	project, home, digest, selection string
 	carrier                          NativeCarrierSelection
@@ -351,6 +351,15 @@ func (p *NativePolicy) InspectRevocationEvidence(raw []byte) (*registry.NativeEv
 		return nil, ErrInvalid
 	}
 	return registry.InspectNativeRevocationEvidence(raw, p.authority)
+}
+
+// OfflineInstallSelection binds the SDK's explicit native journal/session path.
+// Live carrier mutation remains separately guarded by Intent.
+func (p *NativePolicy) OfflineInstallSelection() (*registry.NativeInstallSelection, error) {
+	if p == nil {
+		return nil, ErrInvalid
+	}
+	return registry.NewNativeInstallSelection(p.digest, p.selection, p.project, p.home, p.roots, p.authority, p.runtime)
 }
 
 // nativeTokenBudget bounds decoding work before object materialization.

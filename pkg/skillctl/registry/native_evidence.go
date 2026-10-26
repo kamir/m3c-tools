@@ -98,7 +98,27 @@ func InspectNativeRevocationEvidence(raw []byte, authority *NativeRevocationAuth
 }
 
 func inspectNativeRevocationEvidence(raw []byte, a *NativeRevocationAuthority, now time.Time) (*NativeEvidenceSnapshot, error) {
-	if a == nil || len(a.key) != ed25519.PublicKeySize || a.minimumEpoch < 1 || a.maxAge <= 0 || a.maxAge > 24*time.Hour || now.IsZero() {
+	if a == nil || a.minimumEpoch < 1 || a.maxAge <= 0 || a.maxAge > 24*time.Hour || now.IsZero() {
+		return nil, ErrNativeEvidenceInvalid
+	}
+	evidence, err := authenticateNativeEvidence(raw, a)
+	if err != nil || evidence.epoch < a.minimumEpoch || evidence.issued.After(now) || now.Sub(evidence.issued) > a.maxAge {
+		return nil, ErrNativeEvidenceInvalid
+	}
+	return &NativeEvidenceSnapshot{raw: evidence.raw, observation: NativeEvidenceObservation{strings.TrimPrefix(agentDigest(evidence.raw), "sha256:"), evidence.epoch, evidence.issued, len(evidence.set)}}, nil
+}
+
+// Historical authentication deliberately excludes current age and epoch policy.
+// Only explicit journal adoption may replace authenticated retained history.
+type nativeAuthenticatedEvidence struct {
+	raw            []byte
+	epoch          int64
+	issued         time.Time
+	set, emergency []string
+}
+
+func authenticateNativeEvidence(raw []byte, a *NativeRevocationAuthority) (*nativeAuthenticatedEvidence, error) {
+	if a == nil || len(a.key) != ed25519.PublicKeySize {
 		return nil, ErrNativeEvidenceInvalid
 	}
 	object, e := readAgentJSON(raw, 1<<20)
@@ -133,7 +153,7 @@ func inspectNativeRevocationEvidence(raw []byte, a *NativeRevocationAuthority, n
 		}
 	}
 	epoch, e := nativeInteger(head["epoch"])
-	if e != nil || epoch < a.minimumEpoch {
+	if e != nil || epoch < 1 {
 		return nil, ErrNativeEvidenceInvalid
 	}
 	count, e := nativeInteger(head["revoked_count"])
@@ -141,7 +161,7 @@ func inspectNativeRevocationEvidence(raw []byte, a *NativeRevocationAuthority, n
 		return nil, ErrNativeEvidenceInvalid
 	}
 	issued, e := time.Parse(time.RFC3339Nano, head["issued_at"].(string))
-	if e != nil || issued.IsZero() || issued.After(now) || now.Sub(issued) > a.maxAge {
+	if e != nil || issued.IsZero() {
 		return nil, ErrNativeEvidenceInvalid
 	}
 	if _, e = time.Parse(time.RFC3339Nano, head["occurred_at"].(string)); e != nil {
@@ -189,7 +209,7 @@ func inspectNativeRevocationEvidence(raw []byte, a *NativeRevocationAuthority, n
 		return nil, ErrNativeEvidenceInvalid
 	}
 	// Copy only after all limits and native signature/set binding pass.
-	return &NativeEvidenceSnapshot{raw: append([]byte(nil), raw...), observation: NativeEvidenceObservation{strings.TrimPrefix(agentDigest(raw), "sha256:"), epoch, issued.UTC(), len(set)}}, nil
+	return &nativeAuthenticatedEvidence{raw: append([]byte(nil), raw...), epoch: epoch, issued: issued.UTC(), set: set, emergency: emergency}, nil
 }
 func nativeInteger(v any) (int64, error) {
 	n, ok := v.(json.Number)
