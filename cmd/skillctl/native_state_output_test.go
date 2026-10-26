@@ -49,7 +49,7 @@ func TestNativeStateDiagnosticsAndUsage(t *testing.T) {
 		}
 	}
 	var out bytes.Buffer
-	if got := runTrust([]string{"native-state", "help"}, &out, io.Discard); got != 0 || !strings.Contains(out.String(), "No enrollment") {
+	if got := runTrust([]string{"native-state", "help"}, &out, io.Discard); got != 0 || !strings.Contains(out.String(), "native-state adopt") || !strings.Contains(out.String(), "native-state enroll") || !strings.Contains(out.String(), "Neither operation resets history or grants installation") {
 		t.Fatalf("native dispatcher help: %d %q", got, out.String())
 	}
 }
