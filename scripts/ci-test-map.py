@@ -170,6 +170,60 @@ def workflow_errors(root, config):
         if len(uploads) != 1 or uploads[0].get("if") != condition or \
                 uploads[0].get("with", {}).get("if-no-files-found") != "error":
             errors.append("missing or conditional result upload: " + job_id)
+    errors.extend(native_mcp_workflow_errors(root))
+    return errors
+
+
+def native_mcp_workflow_errors(root):
+    """The required native bridge cannot silently lose its Python producer."""
+    import yaml
+
+    errors = []
+    data = yaml.safe_load((root / ".github/workflows/windows-gate.yml").read_text())
+    events = data.get("on", data.get(True, {}))
+    if not isinstance(events, dict) or "pull_request" not in events or events["pull_request"] not in (None, {}):
+        errors.append("requires unfiltered native MCP pull_request")
+    for name, prefix in (("windows-trust", "win"), ("drift-guard", "lin")):
+        job = data.get("jobs", {}).get(name, {})
+        if "if" in job or job.get("continue-on-error", False) or job.get("runs-on") != (
+            "windows-latest" if prefix == "win" else "ubuntu-latest"
+        ):
+            errors.append("conditional or wrong-platform native MCP job: " + name)
+        steps = job.get("steps", [])
+        setup = [(i, s) for i, s in enumerate(steps) if s.get("id") == "dependency-python"]
+        provision = [(i, s) for i, s in enumerate(steps) if s.get("name") == "Provision native MCP fixture Python"]
+        units = [(i, s) for i, s in enumerate(steps) if s.get("name") == "Native MCP process and lifecycle unit contracts"]
+        go = [(i, s) for i, s in enumerate(steps) if "go test " in s.get("run", "") and
+              ("Tee-Object -FilePath win-trust.json" in s["run"] or "tee lin-trust.json" in s["run"])]
+        if any(len(rows) != 1 for rows in (setup, provision, units, go)):
+            errors.append("missing native MCP producer: " + name)
+            continue
+        indices = [rows[0][0] for rows in (setup, provision, units, go)]
+        if indices != sorted(indices) or len(set(indices)) != 4:
+            errors.append("native MCP producer order changed: " + name)
+        if (setup[0][1].get("uses") != "actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1"
+                or setup[0][1].get("with", {}).get("python-version") != "3.14.9"):
+            errors.append("unpinned native MCP Python: " + name)
+        if any("if" in step or step.get("continue-on-error", False) for _, step in (setup[0], go[0])):
+            errors.append("conditional native MCP runtime or integration: " + name)
+        interpreter = '"${{ steps.dependency-python.outputs.python-path }}"'
+        lead = "& " if prefix == "win" else ""
+        commands = [lead + interpreter + ' scripts/setup-native-mcp-python.py --directory "${{ runner.temp }}/native-mcp-python"',
+                    lead + interpreter + f' scripts/setup-native-mcp-python.py --run-tests "${{{{ github.workspace }}}}/{prefix}-native-mcp.xml"']
+        for (_, step), expected in zip((provision[0], units[0]), commands):
+            lines = step.get("run", "").strip().splitlines()
+            wanted = [expected] + (["if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"] if prefix == "win" else [])
+            if lines != wanted or "if" in step or step.get("continue-on-error", False):
+                errors.append("conditional or changed native MCP invocation: " + name)
+        for scope in [job, *[s for _, s in (setup[0], provision[0], units[0], go[0])]]:
+            if any(key in scope.get("env", {}) for key in ("M3C_MCP_TEST_PYTHON", "M3C_REQUIRE_NATIVE_MCP_TESTS")):
+                errors.append("native MCP prerequisite overridden: " + name)
+        uploads = [s for s in steps if s.get("uses", "").startswith("actions/upload-artifact@") and
+                   f"{prefix}-native-mcp.xml" in s.get("with", {}).get("path", "").splitlines()]
+        if (len(uploads) != 1 or uploads[0].get("if") != "always()" or uploads[0].get("continue-on-error", False) or
+                uploads[0].get("with", {}).get("if-no-files-found") != "error" or
+                f"{prefix}-native-mcp.xml.meta.json" not in uploads[0].get("with", {}).get("path", "").splitlines()):
+            errors.append("native MCP raw evidence upload missing: " + name)
     return errors
 
 

@@ -70,7 +70,7 @@ class WorkflowTests(unittest.TestCase):
         self.addCleanup(temp.cleanup)
         self.root = Path(temp.name)
         self.config = json.loads(GATE.CONFIG.read_text())
-        for name in [".github/workflows/ci.yml", ".github/workflows/pin-guard.yml",
+        for name in [".github/workflows/ci.yml", ".github/workflows/pin-guard.yml", ".github/workflows/windows-gate.yml",
                      "docs/security/required-checks.txt", "scripts/check-python.sh"]:
             dest = self.root / name
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -84,6 +84,39 @@ class WorkflowTests(unittest.TestCase):
 
     def test_current_wiring(self):
         self.assertEqual(GATE.workflow_errors(self.root, self.config), [])
+
+    def test_native_mcp_runtime_and_unit_producer_cannot_be_skipped(self):
+        path = self.root / ".github/workflows/windows-gate.yml"
+        original = path.read_text()
+        for name in ("windows-trust", "drift-guard"):
+            for mutation in ("remove", "skip", "wrong-pin", "ambient", "override", "late", "missing-upload", "skip-job"):
+                with self.subTest(job=name, mutation=mutation):
+                    data = yaml.safe_load(original)
+                    job = data["jobs"][name]
+                    steps = job["steps"]
+                    provision = next(s for s in steps if s.get("name") == "Provision native MCP fixture Python")
+                    units = next(s for s in steps if s.get("name") == "Native MCP process and lifecycle unit contracts")
+                    if mutation == "remove":
+                        steps.remove(provision)
+                    elif mutation == "skip":
+                        units["if"] = "false"
+                    elif mutation == "wrong-pin":
+                        next(s for s in steps if s.get("id") == "dependency-python")["with"]["python-version"] = "3.x"
+                    elif mutation == "ambient":
+                        provision["run"] = "python scripts/setup-native-mcp-python.py --directory /tmp/unused"
+                    elif mutation == "override":
+                        job["env"] = {"M3C_REQUIRE_NATIVE_MCP_TESTS": "0"}
+                    elif mutation == "late":
+                        steps.remove(units)
+                        steps.append(units)
+                    elif mutation == "missing-upload":
+                        for step in steps:
+                            if step.get("uses", "").startswith("actions/upload-artifact@"):
+                                step.get("with", {}).pop("path", None)
+                    else:
+                        job["if"] = "false"
+                    path.write_text(yaml.safe_dump(data))
+                    self.assertTrue(GATE.native_mcp_workflow_errors(self.root))
 
     def test_removed_invocation_even_when_comment_mentions_it(self):
         def remove(data):

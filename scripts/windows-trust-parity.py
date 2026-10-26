@@ -154,6 +154,7 @@ PROJECT_CASES = {
         'TestTrustNativeEvidenceAdoptActualCLI',
         'TestTrustNativeStateEnrollActualCLI',
         'TestNativeLiveInstallActualCLI',
+        'TestNativeAgentRetainedMCPSubprocess',
         'TestPullNativeEnterpriseProfilePreflightActualCLI',
         'TestPublishNativeEnterpriseProfilePreflightActualCLI',
         'TestInstallEnterpriseProfileActualCLI',

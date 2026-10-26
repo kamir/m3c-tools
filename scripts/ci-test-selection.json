@@ -441,6 +441,10 @@
         {
           "classname": "test_native_enterprise_profile",
           "name": "test_native_enterprise_profile_denied_before_exec"
+        },
+        {
+          "classname": "test_native_agent_session",
+          "name": "test_native_agent_retained_session_stdio"
         }
       ]
     },
@@ -510,6 +514,12 @@
       "file": "scripts/setup-dependency-python.test.py",
       "job": "python-gate",
       "command": "python3 scripts/setup-dependency-python.test.py",
+      "workflow": "ci.yml"
+    },
+    {
+      "file": "scripts/setup-native-mcp-python.test.py",
+      "job": "python-gate",
+      "command": "python3 scripts/setup-native-mcp-python.test.py",
       "workflow": "ci.yml"
     }
   ],

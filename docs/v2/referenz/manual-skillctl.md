@@ -3593,7 +3593,43 @@ changed. Inspect the destination before retrying. Profile/authentication/consent
 failures return 12, unavailable or stale history 22, and source/persistence/output
 I/O failures 1. Unrelated legacy pull flags are unsupported in this mode.
 
-Native SKILL, dependencies, Git carriers, native publishing and MCP mutation remain
-unavailable. MCP captures v4 as a native refusal before child or registry execution;
-it does not reuse a CLI token across processes. Customer platform and release-binary
-acceptance remain separate requirements.
+Native SKILL, dependencies, Git carriers and native publishing remain unavailable.
+The generic MCP mutation tools also remain guarded. Customer platform and
+release-binary acceptance remain separate requirements.
+
+### Held native agent installation through MCP
+
+`SKILLCTL_NATIVE_AGENT_INSTALL=1` explicitly enables only the three native agent
+session tools. Configure a trusted MCP client with the required user approval
+controls before enabling it: token possession does not prove human approval.
+An absent setting leaves these tools disabled; an empty or invalid setting fails
+closed without legacy REST credentials or binary discovery.
+
+Start the stdio server with absolute `SKILLCTL_BIN`, `SKILLCTL_ENTERPRISE_PROFILE`
+(v4), `SKILLCTL_PROJECT_ROOT` and `SKILLCTL_ARTIFACT_HOME` paths. The operator must
+first enroll or refresh trust history with the CLI. MCP never enrolls, adopts or
+resets it automatically. The server freezes profile bytes, project/home, executable
+identity and the selected external credential family at startup. Changed files
+require a server restart. Legacy REST access is disabled in this selected mode;
+request parameters cannot replace the startup binding.
+
+1. Call `native_agent_install_plan` with the exact `sha256:<64 lowercase hex>` digest.
+   Read the returned rows, destination, operation and expiry. One Go process and
+   its trust lease stay held; planning may persist trust-clock observations.
+2. Separately call `native_agent_install_confirm` with the returned token exactly,
+   or call `native_agent_install_close` to dispose the plan. The server never
+   substitutes its stored token or confirms automatically. Each attempt is consumed;
+   another client cannot inspect, confirm or close this client's plan.
+3. Installation succeeds only after the final Go result, stdout EOF, zero exit
+   and checked session release. Nonzero refusal codes are retained with constant,
+   redacted MCP diagnostics.
+
+Only one session is retained per server/project, for at most five minutes or the
+earlier plan expiry. Stdio disconnect, cancellation, expiry and output overflow
+trigger bounded cleanup. Unresolved spawn, process or pipe cleanup blocks a new
+session. Forced termination is not a successful application Close. Once token
+bytes might have been delivered, failure or cancellation can leave changed files:
+`possible_change: true` requires inspecting the destination before another explicit
+plan; missing output never establishes rollback. Session tokens are not persisted
+or resumed after restart. The selected client and local operator remain trusted;
+this provides no sandbox for running untrusted skills.

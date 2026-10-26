@@ -153,6 +153,16 @@ jobs:
           & "${{ steps.dependency-python.outputs.python-path }}" scripts/setup-dependency-python.py --directory "${{ runner.temp }}/dependency-python"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Provision native MCP fixture Python
+        run: |
+          & "${{ steps.dependency-python.outputs.python-path }}" scripts/setup-native-mcp-python.py --directory "${{ runner.temp }}/native-mcp-python"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Native MCP process and lifecycle unit contracts
+        run: |
+          & "${{ steps.dependency-python.outputs.python-path }}" scripts/setup-native-mcp-python.py --run-tests "${{ github.workspace }}/win-native-mcp.xml"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: go vet (Windows)
         run: go vet ./...
 
@@ -197,6 +207,8 @@ jobs:
           path: |
             win-trust.json
             win-trust.json.meta.json
+            win-native-mcp.xml
+            win-native-mcp.xml.meta.json
 
   # ── Drift guard (the "forever") ───────────────────────────────────────────
   # Linux test success and Windows execution parity are both required here.
@@ -231,6 +243,14 @@ jobs:
       - name: Provision dependency fixture Python
         run: |
           "${{ steps.dependency-python.outputs.python-path }}" scripts/setup-dependency-python.py --directory "${{ runner.temp }}/dependency-python"
+
+      - name: Provision native MCP fixture Python
+        run: |
+          "${{ steps.dependency-python.outputs.python-path }}" scripts/setup-native-mcp-python.py --directory "${{ runner.temp }}/native-mcp-python"
+
+      - name: Native MCP process and lifecycle unit contracts
+        run: |
+          "${{ steps.dependency-python.outputs.python-path }}" scripts/setup-native-mcp-python.py --run-tests "${{ github.workspace }}/lin-native-mcp.xml"
 
       # (1) No -run allow-list may exist inside the windows-trust job.
       #     We isolate the windows-trust job block, drop comment lines (so the
@@ -292,6 +312,8 @@ jobs:
           path: |
             lin-trust.json
             lin-trust.json.meta.json
+            lin-native-mcp.xml
+            lin-native-mcp.xml.meta.json
 
   # ── Phase 4: Smoke test the Windows binary on Windows ─────────────────────
   windows-smoke:

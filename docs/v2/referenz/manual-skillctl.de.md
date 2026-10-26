@@ -3902,7 +3902,48 @@ Profil-, Authentisierungs- und Zustimmungsfehler ergeben 12, fehlende oder veral
 Historie 22 und Quellen-/Persistenz-/Ausgabe-I/O-Fehler 1. Andere bisherige Pull-Flags
 sind in diesem Modus nicht unterstützt.
 
-Native SKILLs, Abhängigkeiten, Git-Carrier, native Veröffentlichung und MCP-Mutationen
-bleiben gesperrt. MCP hält v4 vor Kindprozess- oder Registry-Ausführung als native
-Ablehnung fest; CLI-Tokens werden nicht zwischen Prozessen wiederverwendet.
+Native SKILLs, Abhängigkeiten, Git-Carrier und native Veröffentlichung bleiben
+gesperrt. Auch die allgemeinen MCP-Mutationswerkzeuge bleiben geschützt.
 Kundenplattform- und Release-Binary-Abnahme bleiben gesonderte Anforderungen.
+
+### Gehaltene native Agenteninstallation über MCP
+
+`SKILLCTL_NATIVE_AGENT_INSTALL=1` aktiviert ausdrücklich nur die drei nativen
+Agenten-Session-Werkzeuge. Richte vor dem Aktivieren einen vertrauenswürdigen
+MCP-Client mit den benötigten Benutzerfreigaben ein: Tokenbesitz beweist keine
+menschliche Zustimmung. Ohne Einstellung bleiben diese Werkzeuge deaktiviert;
+ein leerer oder ungültiger Wert führt zur sicheren Ablehnung ohne Legacy-REST-
+Zugangsdaten oder automatische Binärsuche.
+
+Starte den Stdio-Server mit absoluten Pfaden für `SKILLCTL_BIN`,
+`SKILLCTL_ENTERPRISE_PROFILE` (v4), `SKILLCTL_PROJECT_ROOT` und
+`SKILLCTL_ARTIFACT_HOME`. Der Betreiber muss die Trust-Historie vorher über die CLI
+einrichten oder aktualisieren. MCP führt weder Enrollment noch Adoption oder Reset
+automatisch aus. Der Server bindet Profilbytes, Projekt/Home, Binäridentität und
+die gewählte externe Zugangsdatenfamilie beim Start. Veränderte Dateien verlangen
+einen Serverneustart. Legacy-REST-Zugriff ist in diesem Modus deaktiviert;
+Request-Parameter können die Startup-Bindung nicht ersetzen.
+
+1. Rufe `native_agent_install_plan` mit dem exakten Digest
+   `sha256:<64 kleine Hexzeichen>` auf. Prüfe Zeilen, Ziel, Operation und Ablauf.
+   Ein Go-Prozess mit Trust-Sperre bleibt gehalten; beim Planen können
+   Trust-Uhrbeobachtungen gespeichert werden.
+2. Rufe getrennt `native_agent_install_confirm` mit dem exakten zurückgegebenen
+   Token oder `native_agent_install_close` zum Verwerfen auf. Der Server ersetzt
+   keinen Token durch einen gespeicherten und bestätigt niemals automatisch.
+   Jeder Versuch wird verbraucht; ein anderer Client darf diesen Plan weder
+   einsehen noch bestätigen oder schließen.
+3. Erfolg verlangt das endgültige Go-Ergebnis, stdout-EOF, Exitcode null und
+   geprüftes Session-Close. Nichtnull-Ablehnungen bleiben erhalten; MCP meldet
+   feste, redigierte Diagnosen.
+
+Pro Server/Projekt bleibt höchstens eine Session gehalten, höchstens fünf Minuten
+oder bis zum früheren Planablauf. Stdio-Verbindungsende, Abbruch, Ablauf und
+Ausgabeüberlauf lösen begrenztes Cleanup aus. Ungeklärtes Spawn-, Prozess- oder
+Pipe-Cleanup blockiert neue Sessions. Erzwungenes Beenden ist kein erfolgreiches
+Anwendungs-Close. Sobald Tokenbytes zugestellt sein könnten, können bei Fehler
+oder Abbruch Dateien verändert sein: `possible_change: true` verlangt eine
+Zielprüfung vor einem neuen ausdrücklichen Plan; fehlende Ausgabe beweist keinen
+Rollback. Session-Tokens werden weder dauerhaft gespeichert noch nach Neustart
+fortgesetzt. Gewählter Client und lokaler Betreiber bleiben vertrauenswürdig;
+eine Sandbox zur Ausführung fremder Skills wird damit nicht zugesagt.

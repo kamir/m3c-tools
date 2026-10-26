@@ -1,10 +1,13 @@
 """Native operator intent is a denial disposition, never a mutation grant."""
 import asyncio
 import json
+from pathlib import Path
+import sys
 from contextlib import ExitStack
 from unittest.mock import patch
 
 import server
+from native_agent_binding import capture_native_agent_binding
 from test_enterprise_profile import test_real_cli_enterprise_profile_and_stdio as run_http_bridge
 
 
@@ -58,7 +61,20 @@ def test_native_enterprise_profile_denied_before_exec(monkeypatch, tmp_path):
         assert invalid.configured and invalid.error and not invalid.binary
         invalid_bindings.append((invalid, invalid.error))
 
-    for binding, exact in ((native, UNAVAILABLE), (native_v4, UNAVAILABLE),
+    # Dedicated opt-in never clears the existing generic native mutation guard.
+    profile.write_text(json.dumps({"schema": "m3c.enterprise-project-profile/v4",
+        "project_root": str(tmp_path.resolve()), "artifact_home": str(tmp_path.resolve()),
+        "native": {"carrier": {"kind": "er1", "base_url": "https://example.invalid/bound",
+            "context_id": "agents", "auth": {"mode": "none"}, "tls": {"mode": "system"}}}}))
+    opt_in = capture_native_agent_binding({"SKILLCTL_NATIVE_AGENT_INSTALL": "1",
+        "SKILLCTL_ENTERPRISE_PROFILE": str(profile.resolve()), "SKILLCTL_PROJECT_ROOT": str(tmp_path.resolve()),
+        "SKILLCTL_ARTIFACT_HOME": str(tmp_path.resolve()), "SKILLCTL_BIN": str(Path(sys.executable).resolve())})
+    assert opt_in.enabled and not opt_in.error
+    monkeypatch.setattr(server, "_NATIVE_AGENT_BINDING", opt_in)
+    dedicated_generic = server._capture_enterprise_install_binding()
+    assert dedicated_generic.native_blocked and not dedicated_generic.binary
+
+    for binding, exact in ((native, UNAVAILABLE), (native_v4, UNAVAILABLE), (dedicated_generic, UNAVAILABLE),
                            (server._EnterpriseInstallBinding(configured=True, error="invalid operator fixture"),
                             "invalid operator fixture"), *invalid_bindings):
         monkeypatch.setattr(server, "_ENTERPRISE_INSTALL_BINDING", binding)
