@@ -72,6 +72,51 @@ func TestNativeProfileStrictSelection(t *testing.T) {
 		}
 		return
 	}
+	t.Run("v4-live-selection-keeps-history-and-denies-unsupported-providers", func(t *testing.T) {
+		path, doc := nativePolicyFixture(t)
+		home := filepath.Dir(path)
+		doc["schema"] = NativeLiveSchema
+		mapping := doc["native"].(map[string]any)
+		mapping["revocation_source"] = map[string]any{"kind": "https-native-evidence", "url": "https://source.invalid/full.json", "auth": "none", "tls": map[string]any{"mode": "system"}}
+		carrier := map[string]any{"kind": "er1", "base_url": "https://native.invalid/prefix", "context_id": "explicit-context", "tls": map[string]any{"mode": "system"}, "auth": map[string]any{"mode": "none"}}
+		mapping["carrier"] = carrier
+		writeNativePolicyFixture(t, path, doc)
+		first, err := LoadNative(path, home, home)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = first.BeginER1AgentInstall(context.Background(), "sha256:"+strings.Repeat("a", 64)); !errors.Is(err, registry.ErrNativeHistoryRequired) {
+			t.Fatal("missing journal failed to precede source acquisition", err)
+		}
+		carrier["auth"] = map[string]any{"mode": "external-env", "family": "api-key", "origin": "https://native.invalid:443"}
+		writeNativePolicyFixture(t, path, doc)
+		second, err := LoadNative(path, home, home)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if first.SelectionID() == second.SelectionID() || first.ProfileDigest() == second.ProfileDigest() || first.HistoryAuthorityID() != second.HistoryAuthorityID() {
+			t.Fatal("live credential consent confused stable history authority")
+		}
+		if err = artifact.RejectNativeEnterpriseMutation(second.Intent()); err == nil {
+			t.Fatal("v4 enabled a generic mutation intent")
+		}
+		carrier["auth"] = map[string]any{"mode": "native-device-token"}
+		writeNativePolicyFixture(t, path, doc)
+		if _, err = LoadNative(path, home, home); !errors.Is(err, ErrUnsupported) {
+			t.Fatal("unsupported native provider accepted", err)
+		}
+		carrier["auth"] = map[string]any{"mode": "none", "family": "bearer"}
+		writeNativePolicyFixture(t, path, doc)
+		if _, err = LoadNative(path, home, home); !errors.Is(err, ErrInvalid) {
+			t.Fatal("credential-family ambiguity accepted", err)
+		}
+		carrier["auth"] = map[string]any{"mode": "none"}
+		carrier["base_url"] = "http://127.0.0.1/prefix"
+		writeNativePolicyFixture(t, path, doc)
+		if _, err = LoadNative(path, home, home); !errors.Is(err, ErrInvalid) {
+			t.Fatal("live plaintext carrier accepted", err)
+		}
+	})
 	t.Run("explicit-source-selection-and-history-separation", func(t *testing.T) {
 		path, doc := nativePolicyFixture(t)
 		home := filepath.Dir(path)

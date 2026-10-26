@@ -22,6 +22,9 @@ func TestExitCode_Sentinels(t *testing.T) {
 		want int
 	}{
 		{"native source transport", fmt.Errorf("wrapped: %w", ErrNativeEvidenceSourceIO), 1},
+		{"native live carrier transport", fmt.Errorf("wrapped: %w", ErrNativeLiveSourceIO), 1},
+		{"native live carrier and trust", errors.Join(registry.ErrNativeEvidenceInvalid, ErrNativeLiveSourceIO), 1},
+		{"native live carrier and stale", errors.Join(registry.ErrNativeHistoryStale, ErrNativeLiveSourceIO), 1},
 		{"native source and trust", errors.Join(registry.ErrNativeEvidenceInvalid, ErrNativeEvidenceSourceIO), 1},
 		{"native source and stale", errors.Join(registry.ErrNativeHistoryStale, registry.ErrNativeEvidenceSourceIO), 1},
 		{"native source and legacy trust", errors.Join(ErrRegistryNotTrusted, registry.ErrNativeEvidenceSourceIO), 1},

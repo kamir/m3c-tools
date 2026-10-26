@@ -30,6 +30,13 @@ def test_native_enterprise_profile_denied_before_exec(monkeypatch, tmp_path):
     resolve.assert_not_called()
     assert native.configured and native.native_blocked and not native.error
     assert native.digest and not native.binary
+    profile.write_text(json.dumps({"schema": "m3c.enterprise-project-profile/v4"}))
+    monkeypatch.setenv("SKILLCTL_ENTERPRISE_PROFILE", str(profile))
+    with patch.object(server, "_resolve_skillctl_bin", side_effect=AssertionError("v4 native intent selected a binary")) as resolve:
+        native_v4 = server._capture_enterprise_install_binding()
+    resolve.assert_not_called()
+    assert native_v4.configured and native_v4.native_blocked and not native_v4.error
+    assert native_v4.digest and not native_v4.binary
 
     async def invoke_all():
         return [
@@ -51,7 +58,7 @@ def test_native_enterprise_profile_denied_before_exec(monkeypatch, tmp_path):
         assert invalid.configured and invalid.error and not invalid.binary
         invalid_bindings.append((invalid, invalid.error))
 
-    for binding, exact in ((native, UNAVAILABLE),
+    for binding, exact in ((native, UNAVAILABLE), (native_v4, UNAVAILABLE),
                            (server._EnterpriseInstallBinding(configured=True, error="invalid operator fixture"),
                             "invalid operator fixture"), *invalid_bindings):
         monkeypatch.setattr(server, "_ENTERPRISE_INSTALL_BINDING", binding)

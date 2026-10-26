@@ -67,7 +67,13 @@ type nativeTargetObservation struct {
 // Observe every object that C2 will replace, without creating directories.
 // Missing parents are permitted, but existing selected components must be
 // ordinary. A case/Unicode alias on this actual filesystem is refused.
-func nativeObserveTargets(selected *NativeInstallSelection, name string) (out []nativeTargetObservation, resultErr error) {
+func nativeObserveTargets(selected *NativeInstallSelection, name string) ([]nativeTargetObservation, error) {
+	return nativeObserveTargetsWork(selected, name, nil)
+}
+
+// A nonnil live budget charges actual selected target reads and directory batches
+// before I/O. The offline observer keeps its existing independent finite caps.
+func nativeObserveTargetsWork(selected *NativeInstallSelection, name string, budget *int64) (out []nativeTargetObservation, resultErr error) {
 	if err := selected.validate(); err != nil {
 		return nil, err
 	}
@@ -85,7 +91,7 @@ func nativeObserveTargets(selected *NativeInstallSelection, name string) (out []
 		}
 	}()
 	for _, rel := range []string{filepath.Join(".claude", "agents", name+".md"), filepath.Join(".claude", "agents", agentEvidenceDir, agentRecordName(name)), filepath.Join(".claude", "agents", ".provenance", name+".json")} {
-		observation, err := nativeObserveTarget(r, rel)
+		observation, err := nativeObserveTargetWork(r, rel, budget)
 		if err != nil {
 			return nil, err
 		}
@@ -94,7 +100,7 @@ func nativeObserveTargets(selected *NativeInstallSelection, name string) (out []
 	return out, nil
 }
 
-func nativeObserveTarget(root *os.Root, rel string) (out nativeTargetObservation, resultErr error) {
+func nativeObserveTargetWork(root *os.Root, rel string, budget *int64) (out nativeTargetObservation, resultErr error) {
 	out.Path = rel
 	parts := strings.Split(rel, string(filepath.Separator))
 	for i := 1; i < len(parts); i++ {
@@ -133,8 +139,15 @@ func nativeObserveTarget(root *os.Root, rel string) (out nativeTargetObservation
 	if err != nil || !held.Mode().IsRegular() || held.Size() > limit || !os.SameFile(before, held) || checkAgentOpened(f) != nil {
 		return out, ErrAgentEvidenceInvalid
 	}
+	readLimit := limit + 1
+	if budget != nil {
+		if held.Size() < 0 || !nativeLiveReserve(budget, 2*(held.Size()+1)) {
+			return out, ErrNativeEvidenceInvalid
+		}
+		readLimit = held.Size() + 1
+	}
 	hash := sha256.New()
-	n, err := io.Copy(hash, io.LimitReader(f, limit+1))
+	n, err := io.Copy(hash, io.LimitReader(f, readLimit))
 	if err != nil {
 		return out, err
 	}
@@ -145,7 +158,7 @@ func nativeObserveTarget(root *os.Root, rel string) (out nativeTargetObservation
 	if err != nil || !os.SameFile(held, after) || after.Size() != held.Size() || !after.ModTime().Equal(held.ModTime()) {
 		return out, ErrAgentEvidenceInvalid
 	}
-	if err = nativeRejectTargetAlias(root, rel, held); err != nil {
+	if err = nativeRejectTargetAliasWork(root, rel, held, budget); err != nil {
 		return out, err
 	}
 	if filepath.Base(filepath.Dir(rel)) == ".provenance" {
@@ -154,6 +167,9 @@ func nativeObserveTarget(root *os.Root, rel string) (out nativeTargetObservation
 		}
 		if _, err = f.Seek(0, io.SeekStart); err != nil {
 			return out, err
+		}
+		if budget != nil && !nativeLiveReserve(budget, 2*65537) {
+			return out, ErrNativeEvidenceInvalid
 		}
 		raw, err := io.ReadAll(io.LimitReader(f, 65537))
 		if err != nil {
@@ -173,31 +189,46 @@ func nativeObserveTarget(root *os.Root, rel string) (out nativeTargetObservation
 	return out, nil
 }
 
-func nativeRejectTargetAlias(root *os.Root, rel string, expected os.FileInfo) (resultErr error) {
+func nativeRejectTargetAliasWork(root *os.Root, rel string, expected os.FileInfo, budget *int64) (resultErr error) {
 	dir, err := root.Open(filepath.Dir(rel))
 	if err != nil {
 		return err
 	}
 	defer func() { resultErr = errors.Join(resultErr, dir.Close()) }()
-	entries, err := dir.ReadDir(8193)
-	if err != nil && !errors.Is(err, io.EOF) {
-		return err
+	readBatch := 8193
+	if budget != nil {
+		readBatch = 128
 	}
-	if len(entries) > 8192 {
-		return ErrAgentEvidenceInvalid
-	}
-	for _, entry := range entries {
-		if entry.Name() == filepath.Base(rel) {
-			continue
+	total := 0
+	for {
+		if budget != nil && !nativeLiveReserve(budget, int64(readBatch)*(4096+256)) {
+			return ErrNativeEvidenceInvalid
 		}
-		info, err := root.Lstat(filepath.Join(filepath.Dir(rel), entry.Name()))
-		if err != nil {
-			return err
+		entries, readErr := dir.ReadDir(readBatch)
+		if readErr != nil && !errors.Is(readErr, io.EOF) {
+			return readErr
 		}
-		if os.SameFile(info, expected) {
+		total += len(entries)
+		if total > 8192 {
 			return ErrAgentEvidenceInvalid
 		}
+		for _, entry := range entries {
+			if entry.Name() == filepath.Base(rel) {
+				continue
+			}
+			info, err := root.Lstat(filepath.Join(filepath.Dir(rel), entry.Name()))
+			if err != nil {
+				return err
+			}
+			if os.SameFile(info, expected) {
+				return ErrAgentEvidenceInvalid
+			}
+		}
+		if budget == nil || errors.Is(readErr, io.EOF) {
+			break
+		}
 	}
+
 	return nil
 }
 

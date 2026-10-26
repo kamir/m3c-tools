@@ -86,7 +86,10 @@
           "TestProjectProfilePinnedRolesAndYAML",
           "TestNativeProfileStrictSelection",
           "TestNativeEvidenceProfileSourceBinding",
-          "TestNativeEvidenceExplicitAdopt"
+          "TestNativeEvidenceExplicitAdopt",
+          "TestNativeLiveProfileBinding",
+          "TestNativeLiveAgentAcquisition",
+          "TestNativeLiveInstallConsentBoundary"
         ],
         "./pkg/skillctl/mutationstate": [
           "TestSessionRecheckFreshClockFloorAndOriginalBinding",
@@ -155,7 +158,10 @@
           "TestNativeJournalLockAndPersistence",
           "TestNativeOfflineInstallSessionBinding",
           "TestNativeOfflineInstallPublicationBoundary",
-          "TestNativeEvidenceHTTPSReaderContract"
+          "TestNativeEvidenceHTTPSReaderContract",
+          "TestNativeLiveSessionRetainedConsent",
+          "TestNativeLiveSessionFailClosed",
+          "TestNativeLiveAgentSourceContract"
         ],
         "./pkg/httpsafe": [
           "TestGETBoundaryContract"
@@ -250,7 +256,10 @@
           "TestProjectProfilePinnedRolesAndYAML",
           "TestNativeProfileStrictSelection",
           "TestNativeEvidenceProfileSourceBinding",
-          "TestNativeEvidenceExplicitAdopt"
+          "TestNativeEvidenceExplicitAdopt",
+          "TestNativeLiveProfileBinding",
+          "TestNativeLiveAgentAcquisition",
+          "TestNativeLiveInstallConsentBoundary"
         ],
         "./pkg/skillctl/mutationstate": [
           "TestSessionRecheckFreshClockFloorAndOriginalBinding",
@@ -305,7 +314,9 @@
           "TestPullInstallAgentRetainedProofActualCLI",
           "TestPullNativeEnterpriseProfilePreflightActualCLI",
           "TestPublishNativeEnterpriseProfilePreflightActualCLI",
-          "TestTrustNativeEvidenceAdoptActualCLI"
+          "TestTrustNativeEvidenceAdoptActualCLI",
+          "TestTrustNativeStateEnrollActualCLI",
+          "TestNativeLiveInstallActualCLI"
         ],
         "./pkg/skillctl/verify": [
           "TestSnapshotSameBytesScopes",
@@ -334,7 +345,10 @@
           "TestNativeJournalLockAndPersistence",
           "TestNativeOfflineInstallSessionBinding",
           "TestNativeOfflineInstallPublicationBoundary",
-          "TestNativeEvidenceHTTPSReaderContract"
+          "TestNativeEvidenceHTTPSReaderContract",
+          "TestNativeLiveSessionRetainedConsent",
+          "TestNativeLiveSessionFailClosed",
+          "TestNativeLiveAgentSourceContract"
         ],
         "./pkg/httpsafe": [
           "TestGETBoundaryContract"
