@@ -336,6 +336,9 @@ jobs:
       - name: Dependency prerequisite failure contracts
         run: python3 scripts/setup-dependency-python.test.py
 
+      - name: Native MCP prerequisite failure contracts
+        run: python3 scripts/setup-native-mcp-python.test.py
+
       - name: Standalone usage hook contracts
         run: python3 scripts/skill-usage-hook.test.py
 

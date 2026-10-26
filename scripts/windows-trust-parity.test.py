@@ -129,6 +129,7 @@ PROJECT_TESTS = {
         'TestTrustNativeEvidenceAdoptActualCLI',
         'TestTrustNativeStateEnrollActualCLI',
         'TestNativeLiveInstallActualCLI',
+        'TestNativeAgentRetainedMCPSubprocess',
         'TestPullNativeEnterpriseProfilePreflightActualCLI',
         'TestPublishNativeEnterpriseProfilePreflightActualCLI',
         'TestInstallEnterpriseProfileActualCLI',
@@ -237,8 +238,8 @@ class ParityContracts(unittest.TestCase):
     def test_same_required_cases_pass_with_denominator(self):
         result = self.run_reports()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("linux lane=trust required=125 pass=125 skip=0 missing=0 exceptions=0", result.stdout)
-        self.assertIn("windows lane=trust required=125 pass=125 skip=0 missing=0 exceptions=0", result.stdout)
+        self.assertIn("linux lane=trust required=126 pass=126 skip=0 missing=0 exceptions=0", result.stdout)
+        self.assertIn("windows lane=trust required=126 pass=126 skip=0 missing=0 exceptions=0", result.stdout)
         self.assertIn("UNBOUND", result.stdout)
 
     def test_dependency_python_skip_or_missing_cannot_hide_behind_package_pass(self):
@@ -436,6 +437,7 @@ class ParityContracts(unittest.TestCase):
             ('github.com/kamir/m3c-tools/pkg/skillctl/registry', 'TestNativeLiveAgentSourceContract'),
             ('github.com/kamir/m3c-tools/cmd/skillctl', 'TestTrustNativeStateEnrollActualCLI'),
             ('github.com/kamir/m3c-tools/cmd/skillctl', 'TestNativeLiveInstallActualCLI'),
+            ('github.com/kamir/m3c-tools/cmd/skillctl', 'TestNativeAgentRetainedMCPSubprocess'),
         ])
         for package, name in cases:
             for platform in ("linux", "windows"):
@@ -456,7 +458,7 @@ class ParityContracts(unittest.TestCase):
                 row["Action"] = "skip"
         result = self.run_reports(windows=rows)
         self.reject(result, "is skip")
-        self.assertIn("windows lane=trust required=125 pass=0 skip=125", result.stdout)
+        self.assertIn("windows lane=trust required=126 pass=0 skip=126", result.stdout)
 
     def test_missing_or_skipped_subtest_with_passing_parent_rejected(self):
         for status in ("missing", "skip"):
@@ -532,7 +534,7 @@ class ParityContracts(unittest.TestCase):
         rows[-1:-1] = [event("TestOptional", "run"), event("TestOptional", "skip")]
         result = self.run_reports(windows=rows)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("observed pass=125 skip=1", result.stdout)
+        self.assertIn("observed pass=126 skip=1", result.stdout)
         self.assertIn("1 other identities outside reviewed parity scope", result.stdout)
 
     def test_bound_same_run_reports_pass(self):
@@ -563,7 +565,7 @@ class ParityContracts(unittest.TestCase):
         result = self.run_reports(windows=rows, exceptions=[exception()])
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("EXCEPTION (not PASS)", result.stdout)
-        self.assertIn("windows lane=trust required=125 pass=124 skip=0 missing=1 exceptions=1", result.stdout)
+        self.assertIn("windows lane=trust required=126 pass=125 skip=0 missing=1 exceptions=1", result.stdout)
         self.assertIn("not acceptance", result.stdout)
         self.reject(self.run_reports(linux=rows, exceptions=[exception()]), "linux: required")
 
@@ -616,7 +618,7 @@ class ParityContracts(unittest.TestCase):
         next(row for row in rows if row.get("Test") == CHILD and row["Action"] == "pass")["Action"] = "skip"
         result = self.run_reports(windows=rows, exceptions=[exception()])
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("pass=124 skip=1 missing=0 exceptions=1", result.stdout)
+        self.assertIn("pass=125 skip=1 missing=0 exceptions=1", result.stdout)
         today = datetime.now(timezone.utc).date().isoformat()
         self.reject(self.run_reports(windows=rows, exceptions=[exception(expires=today)]), "expired exception")
 
@@ -752,7 +754,9 @@ class WorkflowContracts(unittest.TestCase):
         self.assertEqual(upload["if"], "always()")
         self.assertEqual(upload["with"]["if-no-files-found"], "error")
         self.assertEqual(upload["with"]["retention-days"], 7)
-        self.assertEqual(set(upload["with"]["path"].splitlines()), {"lin-trust.json", "lin-trust.json.meta.json"})
+        self.assertEqual(set(upload["with"]["path"].splitlines()), {
+            "lin-trust.json", "lin-trust.json.meta.json", "lin-native-mcp.xml", "lin-native-mcp.xml.meta.json",
+        })
         for key in ("github.sha", "github.run_id", "github.run_attempt"):
             self.assertIn(key, upload["with"]["name"])
 
