@@ -132,6 +132,11 @@ without a server is safe, it just proves nothing.
 | `11-use-skill.sh` | posts five usage events for `kup-hello` | mastery is earned by use, and every use is a recorded event |
 | `12-decay.sh` | recalculates mastery for every profile | an unused skill decays; a capability nobody exercises is not a capability |
 
+`12-decay.sh` calls an admin route, and `ER1_API_KEY` is never admin. It needs an admin's
+browser session in `AIMS_ADMIN_COOKIE`; without one it skips itself and prints how to get
+one. The same holds for registering the demo identities before an online
+`run-and-prove.sh`: see [README.md](README.md#admin-routes-need-an-admin-session).
+
 `10` also has an `--operator` mode that scans your REAL `~/.claude/skills/` instead of the
 demo home. Read the script before you use it: it is the one command in this ride that leaves
 the sandbox.
@@ -186,6 +191,7 @@ See [Quickstart: skillctl-demo](../../docs/v2/nutzer/quickstart-skillctl-demo.md
 | `private key ... has insecure mode 0644` | a key file arrived with the wrong permissions | `chmod 600 artifacts/keys/*.priv`. Preflight now does this for you; if you see it, say so, it means a key came from somewhere it should not have |
 | step `01` fails and `05`, `06`, `09` follow it down | there is no signature, so nothing downstream can verify | fix `01` first, the rest are consequences, not four separate bugs |
 | `online mode not available: skipping` | no `ER1_API_KEY`, or the registry did not answer 200 | see [Part 3](#part-3-the-online-half-scan-use-decay). Parts 1 and 2 do not need it |
+| `admin routes need an admin's browser session` (P0 red, or `12-decay.sh` skipping) | an admin route was called without an admin session; `ER1_API_KEY` is never admin | follow the printed sign-in steps, or see [README.md](README.md#admin-routes-need-an-admin-session). `--skip-online` does not need it |
 | `make-pdf.sh` cannot find the manual | it renders a document from the private maintenance checkout | `run-all.sh --no-pdf`, `run-and-prove.sh --chain-only`. It is a maintainer gate, not part of the ride |
 | you want to start over | | `rm -rf artifacts/` and run again. Keys are regenerated |
 

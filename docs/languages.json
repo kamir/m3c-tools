@@ -239,14 +239,14 @@
     {
       "de": "demo/kup-training/README.de.md",
       "en": "demo/kup-training/README.md",
-      "de_sha256": "d4257f28bef45e34377624de5485a7b0202035422d0d7f357a878f212f229376",
-      "en_sha256": "966750b9bc03c18823221f38b162135e770555436419319c79d156a676fb9987"
+      "de_sha256": "293a22dc394746f84877d62b1e442327c2001d2fe2083da5abf9a02a3eb8578c",
+      "en_sha256": "9264d04d84a2a76e6738a7daabb9927a7c6026a9d45bb7115140be0f27ed889e"
     },
     {
       "de": "demo/kup-training/TUTORIAL.de.md",
       "en": "demo/kup-training/TUTORIAL.md",
-      "de_sha256": "4cacfc50055c4d36ee7e754ff237e9e92e2da10e60f2ff5cce11db39f002d899",
-      "en_sha256": "fed2def388b5080860fe5fcf92b917e68c4112bc7541ba063a7ac8e85b48fee9"
+      "de_sha256": "20e5465f6385ba1321e17d008b037df94cac379125970af4aca0aecd961c371a",
+      "en_sha256": "8984c12c3342d3d1b65b8df715e9352690d1d21f656913b500faf836e39fc3a0"
     },
     {
       "de": "deploy/skillctl/README.de.md",

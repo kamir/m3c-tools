@@ -365,12 +365,14 @@ function startDir() {
 const STEPS = [
   {
     id: "P0", title: "Prerequisite: register identities (one-time)", category: "setup", isGate: false,
-    intent: "Register id:bob@m3c and id:reviewer@m3c in the local registry once. After 01 and 03 generate the keypairs, this is the missing setup step that unlocks fully-green online runs of 02 and 03. Idempotent (HTTP 409 on re-run).",
+    intent: "Register id:bob@m3c and id:reviewer@m3c in the local registry once, after 01 and 03 have generated the keypairs; the online attestation in 03 needs the reviewer registered. Registering is an admin route: it needs an admin's browser session in AIMS_ADMIN_COOKIE (the Cookie request header the browser sends after signing in at /v2/skills/admin). The shared ER1_API_KEY is never admin, whatever X-User-ID says. Once registered, later runs confirm each identity with a read (GET /api/skills/identities/<id>, key compared) and need no admin session.",
     commands: [
+      "read -rs AIMS_ADMIN_COOKIE && export AIMS_ADMIN_COOKIE",
       "./register-identity.sh id:bob@m3c    artifacts/keys/bob.pub    'Bob (KuP demo author)'",
-      "./register-identity.sh id:reviewer@m3c artifacts/keys/reviewer.pub 'Reviewer (KuP demo)'"
+      "./register-identity.sh id:reviewer@m3c artifacts/keys/reviewer.pub 'Reviewer (KuP demo)'",
+      "unset AIMS_ADMIN_COOKIE"
     ],
-    expected: "HTTP 201 first time, HTTP 409 (already_exists) on re-run. The script auto-resolves ER1_API_KEY from macOS keychain, X-User-ID from ~/.m3c-tools.env, and pubkey_b64 from the PEM file."
+    expected: "HTTP 201 the first time; afterwards 'already registered with this key', with or without an admin session. Exit 3 with sign-in steps when an identity is missing and AIMS_ADMIN_COOKIE is unset or not an admin session; exit 4 when the registry holds a different or revoked key for the id. run-and-prove.sh records P0 red for both."
   },
   {
     id: "00", title: "Preflight", category: "setup", isGate: false,
@@ -385,10 +387,10 @@ const STEPS = [
     expected: "bob.{priv,pub} keypair, BUNDLE.skb (deterministic: two packs are byte-identical), .author.sig, digest.txt written. verify-sig exits 0."
   },
   {
-    id: "02", title: "Bob publishes to aims", category: "online-stretch", isGate: false,
-    intent: "Round-trip via aims-core registry. Requires P0 (Bob registered). Identity-registration leg returns 403 by design (auth_curl uses id:bob@m3c, not the admin user); bundle admit returns 200/201/409. ER1_API_KEY is auto-resolved from the macOS keychain by lib/common.sh on first call, no manual export needed.",
+    id: "02", title: "Bob publishes to ER1 self", category: "online-stretch", isGate: false,
+    intent: "Best-effort publish through the ER1 self transport (skillctl publish --registry self, SPEC-0246), target local by default so demo items never land in prod ER1. Needs an ER1 login and a reachable target; does not read the skill registry's identities. ER1_API_KEY is auto-resolved from the macOS keychain by lib/common.sh on first call, no manual export needed.",
     commands: [ "bash 02-bob-publish.sh" ],
-    expected: "Bundle admit HTTP 200/201/409. Without P0: signature_invalid (registered pubkey doesn't match local). Without SKILL_REGISTRY_KEY env: 500 storage_failed (acceptable per spec: chain proof in 05 doesn't depend on this)."
+    expected: "'published to ER1 self (local)'. A failed publish warns and the step still exits 0; run-and-prove.sh records it yellow. The chain proof in 05 doesn't depend on this step."
   },
   {
     id: "03", title: "Reviewer attests", category: "valid-path", isGate: false,
@@ -475,7 +477,7 @@ const STEPS = [
 // commands showing the placeholder ER1_API_KEY even though the operator ran
 // the keychain command).
 // =========================================================================
-const FORM_VERSION = "2026-05-08-kup-rg-v5";
+const FORM_VERSION = "2026-10-26-kup-rg-v6";
 
 // =========================================================================
 // State + persistence

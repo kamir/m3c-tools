@@ -51,7 +51,7 @@ check had passed.
 |---|---|---|
 | `00-preflight.sh` | Builds skillctl from source into `artifacts/bin/`. Probes for online registry. Cleans workspace. | Tools present; binary builds clean |
 | `01-bob-author.sh` | Bob: `keygen` → `pack` → `sign` → local `verify-sig`. Confirms determinism (two packs are byte-identical). | Verify-sig exit 0; bundle bytes deterministic |
-| `02-bob-publish.sh` | Bob: `POST /api/skills/identities` + `POST /api/skills/bundles` (best-effort online). | Online: HTTP 200/201 or 409. Offline: skipped cleanly. |
+| `02-bob-publish.sh` | Bob: `skillctl publish --registry self`, the ER1 transport (best-effort online, target `local` by default). | Online: "published to ER1 self"; a failed publish warns and the step still exits 0. Offline: skipped cleanly. |
 | `03-reviewer-attest.sh` | Reviewer: `skillctl attest <digest> --level green`. Writes a local `attestation.json` for offline mode. | Online: registry accepts. Offline: attestation.json present, level=green. |
 | `04-alice-trust-root.sh` | Alice: `skillctl trust add` to pin Bob's pubkey. | `~/.claude/skill-trust-roots.yaml` contains the pinned key |
 | `05-alice-install-and-run.sh` | **Alice: install + verify-sig + extract + run.** Online attempts `skillctl install` first; offline path always runs as the load-bearing chain proof. | `output/hello.txt` produced ✓ |
@@ -70,7 +70,7 @@ and skips itself with a warning when the registry or `ER1_API_KEY` is missing.
 |---|---|---|
 | `10-scan-and-sync.sh` | Lifecycle phase SCAN. Projects what is installed on disk into `_user_skill_profiles` via `/api/v2/skills/profile/import`. `--operator` scans the trainer's REAL `~/.claude/skills/` instead of the demo home. | The profile surface reflects installed reality |
 | `11-use-skill.sh` | Lifecycle phase USE. Posts five usage events to `/api/v2/skills/usage`. Needs `ER1_CONTEXT_ID` (from `~/.m3c-tools.env`). | `use_count` rises, `last_used` is stamped, mastery moves aware -> practiced |
-| `12-decay.sh` | Lifecycle phase DECAY. `POST /api/v2/skills/profile/recalculate-all`. | An unpractised skill decays (admin auth required) |
+| `12-decay.sh` | Lifecycle phase DECAY. `POST /api/v2/skills/profile/recalculate-all`. | An unpractised skill decays. Admin route: needs an [admin session](#admin-routes-need-an-admin-session), skips itself without one |
 
 ### The workspace is generated, not committed
 
@@ -96,9 +96,51 @@ The demo is **isolated**. It only writes under `artifacts/` (relative to this di
 | trust roots (file-based) | ✓ | ✓ |
 | Bundle install via registry | _skipped_: replaced with verify-sig + extract | ✓ via `skillctl install` |
 | Attestation push | _skipped_: local attestation.json instead | ✓ via `skillctl attest` |
-| Identity registration | _skipped_ | ✓ via `POST /api/skills/identities` |
+| Identity registration | _skipped_ | ✓ via `POST /api/skills/identities`, in an [admin session](#admin-routes-need-an-admin-session) |
 
 The cryptographic proof is identical in both modes. The registry is the storage substrate, not the trust source. The demo emphasizes this on purpose so the lesson survives a network outage during training.
+
+### Admin routes need an admin session
+
+Two calls in this demo are admin routes on aims-core: registering an identity
+(`POST /api/skills/identities`, P0 in `run-and-prove.sh` and `register-identity.sh`) and
+`12-decay.sh` (`POST /api/v2/skills/profile/recalculate-all`). They need an authenticated
+browser session of a user who is admin by RBAC. The shared `ER1_API_KEY` is never admin,
+whatever `X-User-ID` it is sent with, so it cannot register an identity.
+
+Register the two demo identities once, before the online run. Their keys must exist first;
+the offline chain generates them, and `00-preflight.sh` keeps them across runs:
+
+```bash
+./run-and-prove.sh --skip-online --chain-only           # generates artifacts/keys/{bob,reviewer}.pub
+read -rs AIMS_ADMIN_COOKIE && export AIMS_ADMIN_COOKIE  # paste an admin session's Cookie header, then Enter
+./register-identity.sh id:bob@m3c      artifacts/keys/bob.pub      "Bob (KuP demo author)"
+./register-identity.sh id:reviewer@m3c artifacts/keys/reviewer.pub "Reviewer (KuP demo)"
+unset AIMS_ADMIN_COOKIE
+./run-and-prove.sh                                      # P0 confirms both with a read: no admin session needed
+```
+
+To get the cookie, open `$REGISTRY_URL/v2/skills/admin` in a browser and sign in as an
+admin, then copy the value of the `Cookie` request header of any request to the registry
+from the developer tools' Network tab. `read -rs` keeps it off the screen and out of shell
+history. The scripts hand it to curl on stdin, never as an argument, and send no
+`X-API-KEY` and no `Origin` header with it: `skill_registry_bp` is CSRF-exempt behind an
+origin check.
+
+An identity stays registered, so later runs need no admin session: `register-identity.sh`
+reads `GET /api/skills/identities/<id>` and compares the registered key with the local one.
+Exporting `AIMS_ADMIN_COOKIE` before `./run-and-prove.sh` works as well: P0 then registers
+whatever is missing as soon as steps 01 and 03 have generated the keys.
+
+| `register-identity.sh` exit | P0 verdict | Meaning |
+|---|---|---|
+| 0 | green | registered with the local key, just now or earlier |
+| 3 | red, sign-in steps printed | not registered (or the read could not confirm it), and no admin session: `AIMS_ADMIN_COOKIE` is unset or not an admin session |
+| 4 | red | registered with a different or revoked key. Registering again cannot change that: restore the key pair the registry knows (`00-preflight.sh --reset-all` wipes `artifacts/keys/`) |
+| other | yellow | registry unreachable or a server error, see `artifacts/logs/run-and-prove.log` |
+
+`--skip-online` runs no P0 and needs none of this. `12-decay.sh` without `AIMS_ADMIN_COOKIE`
+skips itself and prints the same sign-in steps.
 
 ## Outputs
 

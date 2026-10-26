@@ -139,6 +139,12 @@ Ausführen ohne Server ist deshalb sicher, belegt aber nichts.
 | `11-use-skill.sh` | Schreibt fünf Nutzungsereignisse für `kup-hello` | Beherrschung entsteht durch Nutzung, jede Nutzung ist ein Ereignis |
 | `12-decay.sh` | Berechnet Beherrschung aller Profile neu | Ungenutzte Skills verfallen; ungeübte Fähigkeit ist keine belastbare Fähigkeit |
 
+`12-decay.sh` ruft eine Admin-Route auf, und `ER1_API_KEY` ist nie Admin. Nötig ist die
+Browser-Sitzung eines Admins in `AIMS_ADMIN_COOKIE`; ohne sie überspringt sich der Schritt
+und erklärt, wie man sie bekommt. Dasselbe gilt für das Registrieren der Demo-Identitäten
+vor einem Online-Lauf von `run-and-prove.sh`: siehe
+[README.de.md](README.de.md#admin-routen-brauchen-eine-admin-sitzung).
+
 `10` bietet außerdem `--operator`. Dabei wird Ihr ECHTES `~/.claude/skills/`
 statt des Demo-Homes gelesen. Vorher das Skript lesen: Dies ist der einzige
 Befehl dieses Durchlaufs, der die Sandbox verlässt.
@@ -193,6 +199,7 @@ Siehe [Quickstart: skillctl-demo](../../docs/v2/nutzer/quickstart-skillctl-demo.
 | `private key ... has insecure mode 0644` | Schlüsseldatei mit falschen Berechtigungen angekommen | `chmod 600 artifacts/keys/*.priv`. Preflight erledigt das inzwischen. Tritt es auf, melden: Der Schlüssel kam aus einer ungeeigneten Quelle |
 | `01` scheitert, danach `05`, `06`, `09` | Ohne Signatur kann kein Folgeschritt prüfen | Zuerst `01` beheben; die anderen Fehler sind Folgen, keine vier unabhängigen Bugs |
 | `online mode not available: skipping` | Kein `ER1_API_KEY` oder Registry antwortet nicht mit 200 | Siehe [Teil 3](TUTORIAL.md#part-3-the-online-half-scan-use-decay). Teil 1 und 2 benötigen dies nicht |
+| `admin routes need an admin's browser session` (P0 rot oder `12-decay.sh` überspringt sich) | Admin-Route ohne Admin-Sitzung aufgerufen; `ER1_API_KEY` ist nie Admin | Den ausgegebenen Anmeldeschritten folgen oder [README.de.md](README.de.md#admin-routen-brauchen-eine-admin-sitzung) lesen. `--skip-online` braucht das nicht |
 | `make-pdf.sh` findet Handbuch nicht | Dokumentquelle stammt aus privatem Maintenance-Checkout | `run-all.sh --no-pdf`, `run-and-prove.sh --chain-only`; Maintainer-Prüfung, kein Teil der Übung |
 | Neu beginnen gewünscht | | `rm -rf artifacts/`, dann erneut starten. Schlüssel werden neu erzeugt |
 

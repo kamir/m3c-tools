@@ -54,7 +54,7 @@ obwohl alle Vertrauensprüfungen bestanden waren.
 |---|---|---|
 | `00-preflight.sh` | Baut skillctl aus Quellcode nach `artifacts/bin/`, prüft das Online-Registry und bereinigt den Arbeitsbereich. | Werkzeuge vorhanden, Binary baut fehlerfrei |
 | `01-bob-author.sh` | Bob: `keygen` → `pack` → `sign` → lokales `verify-sig`. Prüft Determinismus durch zwei bytegleiche Pakete. | Verify-sig Exit 0, deterministische Bundle-Bytes |
-| `02-bob-publish.sh` | Bob: `POST /api/skills/identities` und `POST /api/skills/bundles`, online nach Möglichkeit. | Online HTTP 200/201 oder 409, offline sauber übersprungen |
+| `02-bob-publish.sh` | Bob: `skillctl publish --registry self` über den ER1-Transport, online nach Möglichkeit, Ziel standardmäßig `local`. | Online "published to ER1 self"; ein gescheitertes Veröffentlichen warnt, der Schritt endet trotzdem mit Exit 0. Offline sauber übersprungen |
 | `03-reviewer-attest.sh` | Reviewer: `skillctl attest <digest> --level green`. Schreibt offline eine lokale `attestation.json`. | Online nimmt das Registry an, offline ist attestation.json mit level=green vorhanden |
 | `04-alice-trust-root.sh` | Alice pinnt Bobs öffentlichen Schlüssel mit `skillctl trust add`. | `~/.claude/skill-trust-roots.yaml` enthält den gepinnten Schlüssel |
 | `05-alice-install-and-run.sh` | **Alice installiert, prüft mit verify-sig, entpackt und führt aus.** Online zuerst Versuch mit `skillctl install`; der Offline-Pfad läuft immer als tragender Kettennachweis. | `output/hello.txt` erzeugt ✓ |
@@ -74,7 +74,7 @@ wenn Registry oder `ER1_API_KEY` fehlen.
 |---|---|---|
 | `10-scan-and-sync.sh` | Phase SCAN: Projiziert installierte Skills über `/api/v2/skills/profile/import` nach `_user_skill_profiles`. `--operator` liest das ECHTE `~/.claude/skills/` des Trainers statt des Demo-Homes. | Profil entspricht der tatsächlichen Installation |
 | `11-use-skill.sh` | Phase USE: Schreibt fünf Nutzungsereignisse nach `/api/v2/skills/usage`. Benötigt `ER1_CONTEXT_ID` aus `~/.m3c-tools.env`. | `use_count` steigt, `last_used` gesetzt, Beherrschung wechselt aware -> practiced |
-| `12-decay.sh` | Phase DECAY: `POST /api/v2/skills/profile/recalculate-all`. | Ungeübte Fähigkeit verfällt; Admin-Authentisierung erforderlich |
+| `12-decay.sh` | Phase DECAY: `POST /api/v2/skills/profile/recalculate-all`. | Ungeübte Fähigkeit verfällt. Admin-Route: braucht eine [Admin-Sitzung](#admin-routen-brauchen-eine-admin-sitzung), überspringt sich ohne sie |
 
 ### Arbeitsbereich erzeugen statt einchecken
 
@@ -103,11 +103,56 @@ Installation als künstliches `$HOME`. Ihr echtes `~/.claude/` bleibt unverände
 | Dateibasierte Trust Roots | ✓ | ✓ |
 | Bundle über Registry installieren | Übersprungen, ersetzt durch verify-sig und Entpacken | ✓ mit `skillctl install` |
 | Attestierung übertragen | Übersprungen, stattdessen lokale attestation.json | ✓ mit `skillctl attest` |
-| Identität registrieren | Übersprungen | ✓ mit `POST /api/skills/identities` |
+| Identität registrieren | Übersprungen | ✓ mit `POST /api/skills/identities` in einer [Admin-Sitzung](#admin-routen-brauchen-eine-admin-sitzung) |
 
 Der kryptografische Nachweis ist in beiden Modi gleich. Das Registry ist Speicher,
 keine Vertrauensquelle. Die Demo betont dies bewusst, damit die Lektion auch bei
 Netzausfall während einer Schulung erhalten bleibt.
+
+### Admin-Routen brauchen eine Admin-Sitzung
+
+Zwei Aufrufe dieser Demo sind Admin-Routen von aims-core: das Registrieren einer
+Identität (`POST /api/skills/identities`, P0 in `run-and-prove.sh` und
+`register-identity.sh`) und `12-decay.sh` (`POST /api/v2/skills/profile/recalculate-all`).
+Sie brauchen die angemeldete Browser-Sitzung eines Benutzers, der laut RBAC Admin ist.
+Der gemeinsame `ER1_API_KEY` ist nie Admin, gleich welche `X-User-ID` mitgeschickt wird;
+mit ihm lässt sich keine Identität registrieren.
+
+Die beiden Demo-Identitäten einmal vor dem Online-Lauf registrieren. Ihre Schlüssel
+müssen zuerst existieren: Die Offline-Kette erzeugt sie, und `00-preflight.sh` behält
+sie über Läufe hinweg:
+
+```bash
+./run-and-prove.sh --skip-online --chain-only           # generates artifacts/keys/{bob,reviewer}.pub
+read -rs AIMS_ADMIN_COOKIE && export AIMS_ADMIN_COOKIE  # paste an admin session's Cookie header, then Enter
+./register-identity.sh id:bob@m3c      artifacts/keys/bob.pub      "Bob (KuP demo author)"
+./register-identity.sh id:reviewer@m3c artifacts/keys/reviewer.pub "Reviewer (KuP demo)"
+unset AIMS_ADMIN_COOKIE
+./run-and-prove.sh                                      # P0 confirms both with a read: no admin session needed
+```
+
+Zum Cookie: `$REGISTRY_URL/v2/skills/admin` im Browser öffnen und als Admin anmelden,
+dann in den Entwicklerwerkzeugen im Netzwerk-Tab bei einer beliebigen Anfrage an das
+Registry den Wert des `Cookie`-Request-Headers kopieren. `read -rs` hält ihn vom
+Bildschirm und aus der Shell-History fern. Die Skripte geben ihn curl über stdin, nie
+als Argument, und schicken weder `X-API-KEY` noch einen `Origin`-Header mit:
+`skill_registry_bp` ist CSRF-befreit, hinter einer Origin-Prüfung.
+
+Eine Identität bleibt registriert, spätere Läufe brauchen deshalb keine Admin-Sitzung:
+`register-identity.sh` liest `GET /api/skills/identities/<id>` und vergleicht den
+registrierten Schlüssel mit dem lokalen. Ebenso möglich: `AIMS_ADMIN_COOKIE` vor
+`./run-and-prove.sh` exportieren. P0 registriert dann, was fehlt, sobald die Schritte
+01 und 03 die Schlüssel erzeugt haben.
+
+| Exit von `register-identity.sh` | P0-Urteil | Bedeutung |
+|---|---|---|
+| 0 | grün | mit dem lokalen Schlüssel registriert, gerade eben oder früher |
+| 3 | rot, Anmeldeschritte ausgegeben | nicht registriert (oder vom Lesezugriff nicht bestätigt) und keine Admin-Sitzung: `AIMS_ADMIN_COOKIE` fehlt oder ist keine Admin-Sitzung |
+| 4 | rot | mit einem anderen oder widerrufenen Schlüssel registriert. Erneutes Registrieren ändert das nicht: das Schlüsselpaar wiederherstellen, das das Registry kennt (`00-preflight.sh --reset-all` löscht `artifacts/keys/`) |
+| sonst | gelb | Registry nicht erreichbar oder Serverfehler, siehe `artifacts/logs/run-and-prove.log` |
+
+`--skip-online` führt kein P0 aus und braucht nichts davon. `12-decay.sh` ohne
+`AIMS_ADMIN_COOKIE` überspringt sich und gibt dieselben Anmeldeschritte aus.
 
 ## Ausgaben
 
