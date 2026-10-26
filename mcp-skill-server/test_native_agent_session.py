@@ -51,7 +51,7 @@ def frames(binding):
 
 # This tiny real Python child is a wire/process fixture, never a trust authority.
 CHILD = r'''
-import base64,os,sys,time
+import base64,sys,time
 plan,result,mode=(base64.b64decode(sys.argv[1]),base64.b64decode(sys.argv[2]),sys.argv[3])
 if mode=='stderr-cap': sys.stderr.buffer.write(b'x'*16385);sys.stderr.flush()
 if mode=='stderr-edge': sys.stderr.buffer.write(b'x'*16384);sys.stderr.flush()
@@ -60,8 +60,7 @@ if mode=='partial': plan=plan.rstrip(b'\n')
 if mode=='invalid-utf8': plan=b'\xff\n'
 if mode=='before-plan': time.sleep(60)
 sys.stdout.buffer.write(plan);sys.stdout.flush()
-if mode in ('partial','plan-and-exit'): sys.exit(0)
-if mode=='stdout-EOF': os.close(sys.stdout.fileno())
+if mode in ('partial','plan-and-exit','stdout-EOF'): sys.exit(0)
 line=sys.stdin.buffer.readline()
 if not line: sys.exit(0)
 if mode=='after-token': time.sleep(60)
@@ -170,24 +169,42 @@ def test_native_agent_session_protocol(tmp_path):
             finally:
                 await checked_shutdown(host, children, uncertain=token == WRONG)
 
-        # A valid buffered plan cannot resurrect a process already observed dead/EOF.
-        for mode in ("plan-and-exit", "stdout-EOF"):
-            host, children, _ = child_host(binding, mode)
+        # Actual EOF is produced by clean process exit, not a CRT fd-close
+        # assumption. The observation model separately isolates the EOF guard.
+        for mode in ("plan-and-exit", "stdout-EOF", "EOF-observation-model", "dead-observation-model"):
+            child_mode = "plan-and-exit" if mode in {"EOF-observation-model", "dead-observation-model"} else mode
+            host, children, _ = child_host(binding, child_mode)
             original_frame = host._frame
+            observed = {"end": False, "eof": False, "returncode": None}
 
             async def observed_end(session, *args, **kwargs):
                 raw = await original_frame(session, *args, **kwargs)
-                if mode == "plan-and-exit":
-                    await asyncio.wait_for(session.process.wait(), 2)
-                await asyncio.wait_for(session.readers[0], 2)
+                if mode in {"plan-and-exit", "EOF-observation-model", "dead-observation-model"}:
+                    assert await asyncio.wait_for(session.process.wait(), 5) == 0
+                await asyncio.wait_for(session.readers[0], 5)
                 assert session.stdout_eof
+                observed.update(end=True, eof=session.stdout_eof, returncode=session.process.returncode)
+                if mode == "EOF-observation-model":
+                    # Private observation model only: the actual child exited0,
+                    # but its returncode is presented as not yet observed.
+                    child = session.process
+                    session.process = SimpleNamespace(
+                        stdin=child.stdin, stdout=child.stdout, stderr=child.stderr,
+                        returncode=None, wait=child.wait, terminate=child.terminate, kill=child.kill)
+                elif mode == "dead-observation-model":
+                    # Private model: actual EOF was recorded above; present only
+                    # the independently observed clean process exit to the host.
+                    session.stdout_eof = False
                 return raw
 
             host._frame = observed_end
             try:
-                denied = await asyncio.wait_for(host.plan(DIGEST, object()), 5)
-                assert denied["ok"] is False and denied["exit_code"] == 12
-                assert denied["possible_change"] is False
+                denied = await asyncio.wait_for(host.plan(DIGEST, object()), 10)
+                assert observed["end"] and observed["eof"], (mode, observed, denied)
+                if mode != "stdout-EOF":
+                    assert observed["returncode"] == 0, (mode, observed)
+                assert denied["ok"] is False and denied["exit_code"] == 12, (mode, observed, denied)
+                assert denied["error_class"] == "protocol" and denied["possible_change"] is False, (mode, denied)
             finally:
                 await checked_shutdown(host, children)
     asyncio.run(run())

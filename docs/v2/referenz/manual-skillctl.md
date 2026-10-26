@@ -3599,6 +3599,9 @@ release-binary acceptance remain separate requirements.
 
 ### Held native agent installation through MCP
 
+On Windows, native startup requires the file creation timestamps available in
+Python 3.12 or newer. The automated native MCP producers use Python 3.14.9.
+
 `SKILLCTL_NATIVE_AGENT_INSTALL=1` explicitly enables only the three native agent
 session tools. Configure a trusted MCP client with the required user approval
 controls before enabling it: token possession does not prove human approval.
@@ -3609,8 +3612,8 @@ Start the stdio server with absolute `SKILLCTL_BIN`, `SKILLCTL_ENTERPRISE_PROFIL
 (v4), `SKILLCTL_PROJECT_ROOT` and `SKILLCTL_ARTIFACT_HOME` paths. The operator must
 first enroll or refresh trust history with the CLI. MCP never enrolls, adopts or
 resets it automatically. The server freezes profile bytes, project/home, executable
-identity and the selected external credential family at startup. Changed files
-require a server restart. Legacy REST access is disabled in this selected mode;
+identity and the selected external credential family at startup. Changing the bound
+profile or executable requires a server restart. Legacy REST access is disabled in this selected mode;
 request parameters cannot replace the startup binding.
 
 1. Call `native_agent_install_plan` with the exact `sha256:<64 lowercase hex>` digest.
