@@ -6,7 +6,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"golang.org/x/sys/windows"
@@ -82,29 +81,74 @@ func nativeJournalCheckPlatformPermissions(t *testing.T) {
 			}
 		}
 	})
-	t.Run("platform-dacl-format", func(t *testing.T) {
-		const user = "S-1-5-21-1-2-3-1001"
-		aces := "(A;;GA;;;" + user + ")(A;;FA;;;SY)"
-		for _, flags := range []string{"P", "PAI", "PAR", "PARAI", "PAIAR", "AIP", "ARP", "AIARP"} {
-			t.Run("valid-"+flags, func(t *testing.T) {
-				if err := validateNativeJournalDACL("O:"+user+"D:"+flags+aces, user); err != nil {
-					t.Fatal("private protected flags rejected", err)
-				}
-			})
+	t.Run("platform-binary-descriptor", func(t *testing.T) {
+		user, err := windows.GetCurrentProcessToken().GetTokenUser()
+		if err != nil {
+			t.Fatal(err)
 		}
-		for _, tc := range []struct{ name, text string }{
-			{"unprotected", "D:AI" + aces}, {"unknown-flags", "D:PX" + aces}, {"duplicate-flags", "D:PPAI" + aces}, {"null-acl", "D:PNO_ACCESS_CONTROL"}, {"empty-acl", "D:P"}, {"missing-dacl", "O:" + user}, {"extra-dacl", "D:P" + aces + "D:P" + aces},
-			{"inherited-ace", "D:P(A;ID;GA;;;" + user + ")(A;;GA;;;SY)"}, {"inheritable-ace", "D:P(A;OI;GA;;;" + user + ")(A;;GA;;;SY)"}, {"deny-ace", "D:P(D;;GA;;;" + user + ")(A;;GA;;;SY)"}, {"object-ace", "D:P(OA;;GA;;;" + user + ")(A;;GA;;;SY)"}, {"partial-rights", "D:P(A;;GR;;;" + user + ")(A;;GA;;;SY)"},
-			{"extra-principal", "D:P" + aces + "(A;;GR;;;WD)"}, {"wrong-principal", "D:P(A;;GA;;;WD)(A;;GA;;;SY)"}, {"duplicate-user", "D:P(A;;GA;;;" + user + ")(A;;GA;;;" + user + ")"}, {"duplicate-system", "D:P(A;;GA;;;SY)(A;;GA;;;S-1-5-18)"}, {"guid", "D:P(A;;GA;00000000-0000-0000-0000-000000000000;;" + user + ")(A;;GA;;;SY)"},
-			{"trailing", "D:P" + aces + "garbage"}, {"over-budget", strings.Repeat("x", 4097)},
+		current := user.User.Sid.String()
+		foreign := "S-1-5-21-1-2-3-500"
+		if current == foreign {
+			foreign = "S-1-5-21-4-5-6-500"
+		}
+		for _, tc := range []struct {
+			name, owner, flags, trustee, rights, aceFlags string
+			allow                                         bool
+		}{
+			{"current-owner-and-trustee", current, "P", current, "FA", "", true},
+			{"current-generic-all", current, "P", current, "GA", "", true},
+			{"protected-PAI", current, "PAI", current, "FA", "", true},
+			{"protected-PAR", current, "PAR", current, "FA", "", true},
+			{"protected-PARAI", current, "PARAI", current, "FA", "", true},
+			{"protected-PAIAR", current, "PAIAR", current, "FA", "", true},
+			{"protected-AIP", current, "AIP", current, "FA", "", true},
+			{"protected-ARP", current, "ARP", current, "FA", "", true},
+			{"protected-AIARP", current, "AIARP", current, "FA", "", true},
+			{"partial-binary-rights", current, "P", current, "GR", "", false},
+			{"inherited-binary-ace", current, "P", current, "FA", "ID", false},
+			{"inheritable-binary-ace", current, "P", current, "FA", "OI", false},
+			{"duplicate-system-binary-ace", current, "P", "SY", "FA", "", false},
+			{"foreign-binary-owner", foreign, "P", current, "FA", "", false},
+			{"foreign-domain-administrator-trustee", current, "P", foreign, "FA", "", false},
+			{"unprotected-binary-descriptor", current, "", current, "FA", "", false},
+			{"world-trustee", current, "P", "WD", "FA", "", false},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
-				if err := validateNativeJournalDACL(tc.text, user); !errors.Is(err, ErrNativeHistoryInvalid) {
-					t.Fatal("nonprivate descriptor accepted", err)
+				sd, err := windows.SecurityDescriptorFromString("O:" + tc.owner + "D:" + tc.flags + "(A;" + tc.aceFlags + ";" + tc.rights + ";;;" + tc.trustee + ")(A;;FA;;;SY)")
+				if err != nil {
+					t.Fatal(err)
+				}
+				err = validateNativeJournalDescriptor(sd, user.User.Sid)
+				if tc.allow {
+					if err != nil {
+						t.Fatalf("current binary identity refused: descriptor=%s error=%v", sd.String(), err)
+					}
+				} else if !errors.Is(err, ErrNativeHistoryInvalid) {
+					t.Fatalf("foreign or unprotected binary descriptor accepted: descriptor=%s error=%v", sd.String(), err)
 				}
 			})
 		}
+		t.Run("deny-ace-type", func(t *testing.T) {
+			sd, err := windows.SecurityDescriptorFromString("O:" + current + "D:P(D;;FA;;;" + current + ")(A;;FA;;;SY)")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := validateNativeJournalDescriptor(sd, user.User.Sid); !errors.Is(err, ErrNativeHistoryInvalid) {
+				t.Fatal("deny ACE accepted", err)
+			}
+		})
+		if err := validateNativeJournalDescriptor(nil, user.User.Sid); !errors.Is(err, ErrNativeHistoryInvalid) {
+			t.Fatal("nil descriptor accepted", err)
+		}
+		sd, err := windows.SecurityDescriptorFromString("O:" + current + "D:P(A;;FA;;;" + current + ")(A;;FA;;;SY)")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := validateNativeJournalDescriptor(sd, nil); !errors.Is(err, ErrNativeHistoryInvalid) {
+			t.Fatal("nil current SID accepted", err)
+		}
 	})
+
 }
 
 func nativeJournalSpecialKinds() []string { return []string{"directory", "hardlink"} }

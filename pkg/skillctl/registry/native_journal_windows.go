@@ -5,8 +5,9 @@ package registry
 import (
 	"errors"
 	"os"
-	"strings"
+	"runtime"
 	"syscall"
+	"unsafe"
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/secfile"
 	"golang.org/x/sys/windows"
@@ -22,15 +23,24 @@ func nativeJournalPermissions(path string, info os.FileInfo, _ bool) error {
 	if err != nil {
 		return err
 	}
-	owner, _, err := sd.Owner()
-	if err != nil {
-		return err
-	}
 	user, err := windows.GetCurrentProcessToken().GetTokenUser()
 	if err != nil {
 		return err
 	}
-	if !owner.Equals(user.User.Sid) {
+	return validateNativeJournalDescriptor(sd, user.User.Sid)
+}
+
+// validateNativeJournalDescriptor requires binary owner and ACE identities.
+// No display string or owner alias is used to determine ACE authority.
+func validateNativeJournalDescriptor(sd *windows.SECURITY_DESCRIPTOR, current *windows.SID) error {
+	if sd == nil || current == nil || !sd.IsValid() || !current.IsValid() {
+		return nativeJournalFail(ErrNativeHistoryInvalid, errors.New("native journal descriptor missing"))
+	}
+	owner, _, err := sd.Owner()
+	if err != nil {
+		return err
+	}
+	if owner == nil || !owner.Equals(current) {
 		return nativeJournalFail(ErrNativeHistoryInvalid, errors.New("native journal owner mismatch"))
 	}
 	control, _, err := sd.Control()
@@ -47,87 +57,92 @@ func nativeJournalPermissions(path string, info os.FileInfo, _ bool) error {
 	if acl == nil || acl.AceCount != 2 {
 		return nativeJournalFail(ErrNativeHistoryInvalid, errors.New("native journal DACL absent or ACE count"))
 	}
-	// OS-produced SDDL exposes the ACEs without unsafe SID pointer arithmetic.
-	// Only two unqualified full-control allow ACEs, for this user and SYSTEM,
-	// match the SecureFileDACL contract; inherited or other rights fail closed.
-	return validateNativeJournalDACL(sd.String(), user.User.Sid.String())
-}
-
-// validateNativeJournalDACL reads only the bounded, OS-produced DACL string.
-// P protects the DACL; AI and AR describe its inheritance control state, not
-// permission granted by an ACE. ACE inheritance flags remain forbidden.
-func validateNativeJournalDACL(text, currentSID string) error {
-	deny := func(branch string) error {
-		return nativeJournalFail(ErrNativeHistoryInvalid, errors.New(branch))
-	}
-	if len(text) == 0 || len(text) > 4096 || len(currentSID) < 5 || len(currentSID) > 256 || !strings.HasPrefix(currentSID, "S-1-") || strings.ContainsAny(currentSID, ";(): \t\r\n") {
-		return deny("native journal DACL input bounds")
-	}
-	if strings.Count(text, "D:") != 1 {
-		return deny("native journal DACL component")
-	}
-	i := strings.Index(text, "D:")
-	dacl := text[i+2:]
-	start := strings.IndexByte(dacl, '(')
-	if start < 1 {
-		return deny("native journal DACL flags missing")
-	}
-	flags := dacl[:start]
-	protected, inherited, requested := false, false, false
-	for flags != "" {
-		switch {
-		case strings.HasPrefix(flags, "P") && !protected:
-			protected = true
-			flags = flags[1:]
-		case strings.HasPrefix(flags, "AI") && !inherited:
-			inherited = true
-			flags = flags[2:]
-		case strings.HasPrefix(flags, "AR") && !requested:
-			requested = true
-			flags = flags[2:]
-		default:
-			return deny("native journal DACL flags invalid")
-		}
-	}
-	if !protected {
-		return deny("native journal DACL not protected")
-	}
-	remaining := dacl[start:]
-	seenUser, seenSystem := false, false
-	for n := 0; n < 2; n++ {
-		if !strings.HasPrefix(remaining, "(") {
-			return deny("native journal DACL ACE count")
-		}
-		end := strings.IndexByte(remaining, ')')
-		if end < 1 {
-			return deny("native journal DACL ACE framing")
-		}
-		ace := remaining[1:end]
-		remaining = remaining[end+1:]
-		parts := strings.Split(ace, ";")
-		if len(parts) != 6 || parts[0] != "A" || parts[1] != "" || (parts[2] != "FA" && parts[2] != "GA") || parts[3] != "" || parts[4] != "" {
-			return deny("native journal DACL ACE rights or flags")
-		}
-		switch parts[5] {
-		case currentSID:
-			if seenUser {
-				return deny("native journal DACL duplicate user")
-			}
-			seenUser = true
-		case "SY", "S-1-5-18":
-			if seenSystem {
-				return deny("native journal DACL duplicate SYSTEM")
-			}
-			seenSystem = true
-		default:
-			return deny("native journal DACL trustee")
-		}
-	}
-	if remaining != "" || !seenUser || !seenSystem {
-		return deny("native journal DACL incomplete or extra ACE")
+	err = validateNativeJournalACEs(acl, current)
+	runtime.KeepAlive(sd)
+	if err != nil {
+		return err
 	}
 	return nil
 }
+
+func validateNativeJournalACEs(acl *windows.ACL, current *windows.SID) error {
+	if acl == nil || acl.AceCount != 2 || current == nil || !current.IsValid() {
+		return nativeJournalFail(ErrNativeHistoryInvalid, errors.New("native journal binary ACL input"))
+	}
+	system, err := windows.CreateWellKnownSid(windows.WinLocalSystemSid)
+	if err != nil {
+		return err
+	}
+	if current.Equals(system) {
+		return nativeJournalFail(ErrNativeHistoryInvalid, errors.New("native journal binary principals are not distinct"))
+	}
+	seenUser, seenSystem := false, false
+	for i := uint32(0); i < 2; i++ {
+		var ace *windows.ACCESS_ALLOWED_ACE
+		if err = windows.GetAce(acl, i, &ace); err != nil {
+			return err
+		}
+		sid, err := nativeJournalAllowedSID(ace)
+		if err != nil {
+			return err
+		}
+		switch {
+		case sid.Equals(current) && !seenUser:
+			seenUser = true
+		case sid.Equals(system) && !seenSystem:
+			seenSystem = true
+		default:
+			return nativeJournalFail(ErrNativeHistoryInvalid, errors.New("native journal binary trustee mismatch or duplicate"))
+		}
+	}
+	if !seenUser || !seenSystem {
+		return nativeJournalFail(ErrNativeHistoryInvalid, errors.New("native journal binary trustees incomplete"))
+	}
+	return nil
+}
+
+// nativeJournalAllowedSID accepts only an ACE returned by GetAce from the
+// validated OS descriptor. SidStart begins the variable-length SID. Check its
+// complete byte extent before passing that pointer to Windows SID routines.
+func nativeJournalAllowedSID(ace *windows.ACCESS_ALLOWED_ACE) (*windows.SID, error) {
+	deny := func() (*windows.SID, error) {
+		return nil, nativeJournalFail(ErrNativeHistoryInvalid, errors.New("native journal binary ACE bounds or rights"))
+	}
+	if ace == nil || ace.Header.AceType != windows.ACCESS_ALLOWED_ACE_TYPE || ace.Header.AceFlags != 0 {
+		return deny()
+	}
+	const sidHeaderBytes = 8
+	const maxSubAuthorities = 15
+	const sidOffset = int(unsafe.Offsetof(windows.ACCESS_ALLOWED_ACE{}.SidStart))
+	const maxSIDBytes = sidHeaderBytes + 4*maxSubAuthorities
+	size := int(ace.Header.AceSize)
+	if size < sidOffset+sidHeaderBytes || size > sidOffset+maxSIDBytes {
+		return deny()
+	}
+	// FILE_ALL_ACCESS is STANDARD_RIGHTS_REQUIRED|SYNCHRONIZE|0x1ff.
+	const fileAllAccess = windows.STANDARD_RIGHTS_REQUIRED | windows.SYNCHRONIZE | 0x1ff
+	if ace.Mask != windows.GENERIC_ALL && ace.Mask != fileAllAccess {
+		return deny()
+	}
+	// Supported Windows Go targets are little-endian. SidStart already exposes
+	// the first DWORD, so revision/count need no pointer conversion or slice.
+	revision := ace.SidStart & 0xff
+	count := (ace.SidStart >> 8) & 0xff
+	if revision != 1 || count > maxSubAuthorities {
+		return deny()
+	}
+	required := sidHeaderBytes + 4*int(count)
+	if size != sidOffset+required {
+		return deny()
+	}
+	// #nosec G103 -- OS-validated GetAce; exact ACE/SID bounds checked above, binary SID validation below.
+	sid := (*windows.SID)(unsafe.Pointer(&ace.SidStart))
+	if !sid.IsValid() || sid.Len() != required {
+		return deny()
+	}
+	return sid, nil
+}
+
 func nativeJournalCheckOpened(f *os.File) error { return checkAgentOpened(f) }
 func nativeJournalSyncDir(string) error {
 	// File.Sync and MoveFileEx WRITE_THROUGH are checked. Windows directory
