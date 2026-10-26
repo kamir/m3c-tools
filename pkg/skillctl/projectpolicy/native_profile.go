@@ -23,6 +23,9 @@ import (
 // NativeSchema selects the native Enterprise mapping. HTTP v1 is separate.
 const NativeSchema = "m3c.enterprise-project-profile/v2"
 
+// NativeEvidenceSchema adds an explicit public revocation evidence source.
+const NativeEvidenceSchema = "m3c.enterprise-project-profile/v3"
+
 // NativeCarrierSelection is copied operator provenance, not signed carrier origin.
 type NativeCarrierSelection struct {
 	Kind              string
@@ -40,6 +43,7 @@ type NativePolicy struct {
 	roots                            *registry.NativeRootsSnapshot
 	authority                        *registry.NativeRevocationAuthority
 	runtime                          dependencies.Profile
+	source                           *registry.NativeEvidenceSource
 }
 type nativeDocument struct {
 	Schema       string        `json:"schema"`
@@ -100,7 +104,15 @@ func loadNative(path, expected, actualProject, actualHome string) (*NativePolicy
 	if e != nil {
 		return nil, e
 	}
-	mapping, e := nativeObjectAllowUnsupported(top["native"], "logical_registry", "authority_scope", "tenant_scope", "artifact_trust", "revocation_trust", "revocation_policy", "carrier")
+	var schema string
+	if json.Unmarshal(top["schema"], &schema) != nil || (schema != NativeSchema && schema != NativeEvidenceSchema) {
+		return nil, ErrInvalid
+	}
+	keys := []string{"logical_registry", "authority_scope", "tenant_scope", "artifact_trust", "revocation_trust", "revocation_policy", "carrier"}
+	if schema == NativeEvidenceSchema {
+		keys = append(keys, "revocation_source")
+	}
+	mapping, e := nativeObjectAllowUnsupported(top["native"], keys...)
 	if e != nil {
 		return nil, e
 	}
@@ -113,7 +125,7 @@ func loadNative(path, expected, actualProject, actualHome string) (*NativePolicy
 		return nil, e
 	}
 	var doc nativeDocument
-	if json.Unmarshal(raw, &doc) != nil || doc.Schema != NativeSchema {
+	if json.Unmarshal(raw, &doc) != nil || doc.Schema != schema {
 		return nil, ErrInvalid
 	}
 	for _, v := range []string{doc.ProjectRoot, doc.ArtifactHome, doc.Runtime.Path, doc.Native.ArtifactTrust.Path, doc.Native.RevocationTrust.Path} {
@@ -193,6 +205,14 @@ func loadNative(path, expected, actualProject, actualHome string) (*NativePolicy
 		return nil, ErrInvalid
 	}
 	dir := filepath.Dir(absolute)
+	var source *registry.NativeEvidenceSource
+	var sourceBinding nativeSourceBinding
+	if schema == NativeEvidenceSchema {
+		source, sourceBinding, e = parseNativeEvidenceSource(dir, mapping["revocation_source"])
+		if e != nil {
+			return nil, e
+		}
+	}
 	artifactRaw, e := readNativeRef(dir, n.ArtifactTrust, maxTrustBytes)
 	if e != nil {
 		return nil, e
@@ -240,8 +260,18 @@ func loadNative(path, expected, actualProject, actualHome string) (*NativePolicy
 	if e != nil {
 		return nil, ErrInvalid
 	}
+	if schema == NativeEvidenceSchema {
+		selectionBytes, e = json.Marshal(struct {
+			Domain, Project, Home, Authority string
+			Carrier                          NativeCarrierSelection
+			Source                           nativeSourceBinding
+		}{"m3c.native-selection/v2", project, home, authority.HistoryAuthorityID(), carrier, sourceBinding})
+		if e != nil {
+			return nil, ErrInvalid
+		}
+	}
 	selectionSHA := sha256.Sum256(selectionBytes)
-	return &NativePolicy{project: project, home: home, digest: hex.EncodeToString(sum[:]), selection: hex.EncodeToString(selectionSHA[:]), carrier: carrier, roots: roots, authority: authority, runtime: runtimeProfile}, nil
+	return &NativePolicy{project: project, home: home, digest: hex.EncodeToString(sum[:]), selection: hex.EncodeToString(selectionSHA[:]), carrier: carrier, roots: roots, authority: authority, runtime: runtimeProfile, source: source}, nil
 }
 func nativeObject(raw []byte, keys ...string) (map[string]json.RawMessage, error) {
 	var object map[string]json.RawMessage

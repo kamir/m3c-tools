@@ -3725,7 +3725,7 @@ zugesicherte Keychain-/Secret-Manager-/Umgebungskette für alle Befehle.
 gewählten nativen Profil passen. Die CLI verlangt diese ausdrückliche Auswahl;
 der MCP-Server hält seine Betreiberkonfiguration beim Start fest.
 
-Native Enterprise-CLI-Operationen bleiben mit Exitcode 12 gesperrt,
+Native Enterprise-CLI-Operationen zur Installation und Veröffentlichung bleiben mit Exitcode 12 gesperrt,
 einschließlich Pull-Dry-Runs und Publish für Admit, Attest, Revoke und Batches.
 Ein gültiges Profil oder ein kryptografisch gültiger nativer Widerrufsnachweis
 berechtigt nicht zur Installation oder Veröffentlichung. Für diese CLI-Pfade
@@ -3771,3 +3771,52 @@ Abschlussfehlern können Dateien bereits verändert sein; prüfe vor einem erneu
 Versuch das Ziel. Dieser SDK-Pfad aktiviert weder CLI/MCP-Operationen noch
 Skill-Installation, automatische Abhängigkeiten, Isolation nicht
 vertrauenswürdiger Ausführung oder Kunden-Plattformabnahme.
+
+
+### Ausdrückliche Aktualisierung nativer Widerrufsnachweise
+
+Im vom Profil gewählten Projektverzeichnis ausführen:
+
+```sh
+skillctl trust native-state adopt --enterprise-profile /absolute/project-profile.json --home /absolute/artifact-home --json
+```
+
+Der Befehl verlangt eine vorhandene authentische native Historie und ein Profil
+mit `schema: "m3c.enterprise-project-profile/v3"`. Er legt keine Historie an und
+setzt sie nicht zurück. Das Profil behält die Autoritäts-, Tenant-, Runtime- und
+Carrier-Zuordnungen aus v2 und ergänzt ausdrücklich `native.revocation_source`,
+zum Beispiel:
+
+```json
+{"kind":"https-native-evidence","url":"https://trust.example.com/native/evidence.json","auth":"none","tls":{"mode":"system"}}
+```
+
+Für eine ausdrücklich bereitgestellte Unternehmens-CA gilt
+`"tls":{"mode":"pinned-pem","ca":{"path":"evidence-ca.pem","sha256":"<kleingeschriebene-datei-sha256>"}}`.
+Die CA-Datei wird relativ zum Profilverzeichnis aufgelöst, über ihren Hash gebunden
+und beim Laden festgehalten. Im gepinnten Modus gelten ausschließlich diese
+CA-Zertifikate; erlaubt sind höchstens 32 unterschiedliche CA-Zertifikate auf
+64 KiB. Kein Modus verändert den System-Vertrauensspeicher. Optional pinnt
+`--enterprise-profile-sha256` das Profil selbst. v2-Profile bleiben für bestehende
+Offline-SDK-Operationen unterstützt; ohne Quelle können sie diesen Befehl nicht
+verwenden.
+
+Der HTTPS-Endpunkt muss den vollständigen signierten nativen Nachweis als
+`application/json` innerhalb 1 MiB liefern. Der Leser verwendet HTTP/1.1 mit zehn
+Sekunden Gesamtfrist, ohne Redirects, Umgebungsproxy, Zugangsdaten oder automatische
+Dekompression. Profilprüfung und Authentisierung der vorhandenen Historie erfolgen
+vor dem Request. Eine authentische, aber veraltete Historie darf aktualisiert
+werden; fehlende oder beschädigte Historie wird abgewiesen. Die Übernahme liest
+unter Sperre den aktuellen Zustand erneut und prüft gewählte Autorität, Tenant,
+vollständige Menge, Aktualität sowie Epoch- und Uhr-Untergrenzen. Änderungen an
+Quelle oder TLS-Auswahl verändern die Profil-/Auswahlbindung. Dieselbe logische
+Registry mit gleichem Widerrufsschlüssel und Tenant behält ihre Historienidentität.
+
+Exit 12 bedeutet ungültige Profilauswahl oder fehlgeschlagene Nachweisauthentisierung;
+Exit 22 bedeutet nicht verfügbare Historie oder verletzte Trust-Untergrenzen.
+Transport-, geprüfte Close- und Speicherfehler liefern 1. Auch ein Ausgabefehler
+nach erfolgreicher Übernahme liefert 1: Die Historie kann bereits geändert sein.
+Vor einem erneuten Versuch die authentische Historie prüfen. Erfolg meldet den
+Historienstatus und erteilt keine Installations- oder Veröffentlichungsfreigabe.
+Live-Installation und Veröffentlichung über CLI/MCP bleiben gesondert gesperrt;
+Kunden-Plattformabnahme und Recovery-Freigabe bleiben Voraussetzungen des Releases.

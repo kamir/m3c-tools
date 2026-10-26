@@ -3434,7 +3434,7 @@ The current working directory and artifact home must match the selected native
 profile. These flags are explicit CLI selections; the MCP server separately
 captures its operator configuration at startup.
 
-Native Enterprise CLI operations remain blocked with exit code 12, including
+Native Enterprise installation and publication CLI operations remain blocked with exit code 12, including
 pull dry-runs and publish admit, attest, revoke and batch modes. A valid profile
 or a cryptographically valid native revocation diagnostic does not grant
 permission to install or publish. Live carrier integration is still required
@@ -3473,3 +3473,48 @@ invalid consent prevent publication. Publication or checked-close failures may
 mean files changed; inspect the destination before retrying. This SDK path does
 not enable CLI/MCP operations, skill installation, automatic dependencies,
 untrusted execution isolation or customer platform acceptance.
+
+
+### Explicit native evidence refresh
+
+Run from the project directory selected by your profile:
+
+```sh
+skillctl trust native-state adopt --enterprise-profile /absolute/project-profile.json --home /absolute/artifact-home --json
+```
+
+This command requires an existing authenticated native journal and a profile with
+`schema: "m3c.enterprise-project-profile/v3"`. It does not enroll or reset history.
+The profile retains all v2 authority, tenant, runtime and carrier mappings and adds
+an explicit `native.revocation_source`, for example:
+
+```json
+{"kind":"https-native-evidence","url":"https://trust.example.com/native/evidence.json","auth":"none","tls":{"mode":"system"}}
+```
+
+For an explicitly supplied enterprise CA, use
+`"tls":{"mode":"pinned-pem","ca":{"path":"evidence-ca.pem","sha256":"<lowercase-file-sha256>"}}`.
+The CA file is relative to the profile directory, bound by its hash and retained
+at profile load. Only those CA certificates are trusted in pinned mode; the file
+must contain at most 32 distinct CA certificates within 64 KiB. Neither mode
+changes the system trust store. An optional `--enterprise-profile-sha256` pins the
+profile itself. Profiles v2 remain supported for existing offline SDK operations;
+they have no source and cannot use this command.
+
+The endpoint must be HTTPS and serve the complete signed native evidence envelope
+as `application/json`, within 1 MiB. The reader uses HTTP/1.1, a ten-second total
+deadline, no redirects, ambient proxy, credentials or automatic decompression.
+Profile validation and authentication of the existing journal happen before the
+request. An authentic but stale journal can be refreshed; a missing or corrupt
+journal is refused. Adoption reloads the current history under its lock and
+checks the selected authority, tenant, full set, freshness and epoch/clock floors.
+Changing the source or TLS selection changes the profile/selection binding, while
+the same logical registry, revocation key and tenant retain their history identity.
+
+Exit 12 means invalid profile selection or evidence authentication; exit 22 means
+history is unavailable or violates its trust floor; transport, checked-close and
+persistence failures return 1. An output failure after adoption also returns 1:
+history may already have changed. Inspect authenticated history before retrying.
+Success reports history status, without authorizing installation or publication.
+Live CLI/MCP installation and publication remain guarded separately; customer
+platform acceptance and recovery approval are still required for release.
