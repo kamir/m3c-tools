@@ -31,26 +31,31 @@ func NewNativeLiveAgentSession(ctx context.Context, journal *NativeJournal, sour
 	if err != nil {
 		return nil, errors.Join(err, session.Close())
 	}
-	if candidate == nil || candidate.Bundle == nil || len(candidate.Archive) == 0 || len(candidate.Archive) > 16<<20 || candidate.Bundle.StagedSkbPath != "" || candidate.Bundle.ProvenancePath != "" {
-		return nil, errors.Join(nativeSessionDiagnostic(ErrNativeEvidenceInvalid), session.Close())
-	}
-	// Source returns owned untrusted bytes. Freeze all metadata under the session
-	// mutex before retaining it, with the existing pre-marshal text/context caps.
 	session.mu.Lock()
-	work := candidate.workBytes
-	if !nativeLiveReserve(&work, int64(len(candidate.Archive))+4*maxAgentContext+(128<<10)) {
-		session.mu.Unlock()
-		return nil, errors.Join(nativeSessionDiagnostic(ErrNativeEvidenceInvalid), session.Close())
-	}
-	session.liveSourceBinding = source.bindingID()
-	bundle, _, err := session.snapshotInput([]*StagedBundle{candidate.Bundle})
-	if err == nil {
-		candidate = &NativeLiveAgentCandidate{Archive: append([]byte(nil), candidate.Archive...), Bundle: bundle}
-	}
+	live, err := retainNativeAgentCandidateLocked(session, candidate, source.bindingID())
 	session.mu.Unlock()
 	if err != nil {
 		return nil, errors.Join(nativeSessionDiagnostic(err), session.Close())
 	}
+	return live, nil
+}
+
+// retainNativeAgentCandidateLocked freezes untrusted source bytes. The caller
+// holds session.mu and supplies the binding of the actual acquired snapshot.
+func retainNativeAgentCandidateLocked(session *NativeInstallSession, candidate *NativeLiveAgentCandidate, binding string) (*NativeLiveAgentSession, error) {
+	if candidate == nil || candidate.Bundle == nil || len(candidate.Archive) == 0 || len(candidate.Archive) > 16<<20 || candidate.Bundle.StagedSkbPath != "" || candidate.Bundle.ProvenancePath != "" || !nativeSHA(binding) {
+		return nil, ErrNativeEvidenceInvalid
+	}
+	work := candidate.workBytes
+	if !nativeLiveReserve(&work, int64(len(candidate.Archive))+4*maxAgentContext+(128<<10)) {
+		return nil, ErrNativeEvidenceInvalid
+	}
+	bundle, _, err := session.snapshotInput([]*StagedBundle{candidate.Bundle})
+	if err != nil {
+		return nil, err
+	}
+	candidate = &NativeLiveAgentCandidate{Archive: append([]byte(nil), candidate.Archive...), Bundle: bundle}
+	session.liveSourceBinding = binding
 	live := &NativeLiveAgentSession{session: session, candidate: candidate, workBytes: work}
 	session.liveWork = &live.workBytes
 	return live, nil

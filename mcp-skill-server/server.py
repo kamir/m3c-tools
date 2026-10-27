@@ -162,7 +162,7 @@ def _native_agent_unavailable() -> dict:
 async def native_agent_install_plan(digest: str, ctx: Context) -> dict:
     """Plan one exact-digest agent install and hold its Go trust session.
 
-    Requires operator opt-in and a fixed v4 project profile. Return the actual
+    Requires operator opt-in and a fixed v4 ER1 or v5 Git profile. Return the actual
     plan to the client; installing requires a separate explicit confirm call.
     Token possession does not attest that a human approved the plan.
     """

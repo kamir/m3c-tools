@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/kamir/m3c-tools/pkg/skillctl/projectpolicy"
-	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"io"
 	"time"
+
+	"github.com/kamir/m3c-tools/pkg/skillctl/projectpolicy"
+	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 )
 
 func runNativeSkillPull(ctx context.Context, input io.Reader, stdout, stderr io.Writer, policy *projectpolicy.NativePolicy, digest string) (code int) {
@@ -16,7 +17,13 @@ func runNativeSkillPull(ctx context.Context, input io.Reader, stdout, stderr io.
 	}
 	ctx, cancel := context.WithTimeout(ctx, registry.TokenTTL)
 	defer cancel()
-	session, err := policy.BeginER1SkillInstall(ctx, digest)
+	var session *registry.NativeLiveSkillSession
+	var err error
+	if policy.CarrierSelection().Kind == "git" {
+		session, err = policy.BeginGitSkillInstall(ctx, digest)
+	} else {
+		session, err = policy.BeginER1SkillInstall(ctx, digest)
+	}
 	if err != nil {
 		return nativePullFailure(stderr, err)
 	}

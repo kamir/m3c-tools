@@ -10,6 +10,7 @@ require (
 	github.com/gordonklaus/portaudio v0.0.0-20260203164431-765aa7dfa631
 	github.com/mattn/go-sqlite3 v1.14.52
 	github.com/opencontainers/image-spec v1.1.1
+	github.com/pjbgf/sha1cd v0.7.0
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/sys v0.48.0
 	gopkg.in/yaml.v3 v3.0.1

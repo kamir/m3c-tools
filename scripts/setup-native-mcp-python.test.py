@@ -144,7 +144,7 @@ class NativeUnitProducer(unittest.TestCase):
             for name in HELPER.UNIT_FILES:
                 self.assertIn(name, argv)
             self.assertIn("test_native_skill_session.py", argv)
-            self.assertIn("not test_native_agent_retained_session_stdio and not test_native_skill_retained_session_stdio", argv)
+            self.assertIn("not test_native_agent_retained_session_stdio and not test_native_skill_retained_session_stdio and not test_native_git_retained_session_stdio", argv)
             self.report.write_text(self.xml())
             return subprocess.CompletedProcess(argv, 0)
 
@@ -153,10 +153,10 @@ class NativeUnitProducer(unittest.TestCase):
         metadata = json.loads(Path(str(self.report) + ".meta.json").read_text())
         self.assertEqual(metadata["commit"], "a" * 40)
         self.assertEqual(metadata["attempt"], "2")
-        self.assertEqual(metadata["counts"], dict(total=5, skipped=0, failed=0))
+        self.assertEqual(metadata["counts"], dict(total=7, skipped=0, failed=0))
         self.assertEqual(metadata["required_cases"], HELPER.UNIT_CASES)
-        self.assertEqual(metadata["integration_requirements"], ["TestNativeAgentRetainedMCPSubprocess", "TestNativeSkillRetainedMCPSubprocess"])
-        self.assertEqual(metadata["excluded_cases"], ["test_native_agent_retained_session_stdio", "test_native_skill_retained_session_stdio"])
+        self.assertEqual(metadata["integration_requirements"], ["TestNativeAgentRetainedMCPSubprocess", "TestNativeSkillRetainedMCPSubprocess", "TestNativeGitRetainedMCPSubprocess"])
+        self.assertEqual(metadata["excluded_cases"], ["test_native_agent_retained_session_stdio", "test_native_skill_retained_session_stdio", "test_native_git_retained_session_stdio"])
 
     def test_missing_skipped_duplicate_and_failed_cases_never_bind(self):
         for mode in ("missing", "skip", "duplicate", "failed", "absent", "process-failed"):

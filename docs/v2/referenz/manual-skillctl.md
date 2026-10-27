@@ -3693,3 +3693,85 @@ Leading zeros, `v`, prerelease/build suffixes, whitespace and overflow are
 unsupported. For example, `1.2.3` is supported; `1.2.3-rc.1` is refused. Unknown
 versions are never silently normalized for downgrade checks. The combined
 implicit and explicit archive path-prefix inventory is limited to 100,000.
+
+
+### Native GitHub and GitLab read sessions
+
+Select `m3c.enterprise-project-profile/v5` for native Git reads. Retain the
+explicit artifact/revocation authorities, tenant, runtime and independent
+`revocation_source` selection from the native profile. Replace its `carrier`
+with an explicit Git selection, for example this template:
+
+```json
+{
+  "kind": "git",
+  "provider": "github",
+  "api_base": "https://api.github.com",
+  "repository": "your-org/skill-catalog",
+  "object_format": "sha1",
+  "commit_oid": "COMMIT_40_LOWERCASE_HEX",
+  "root_tree_oid": "ROOT_TREE_40_LOWERCASE_HEX",
+  "tls": {"mode": "system"},
+  "auth": {
+    "mode": "external-env",
+    "family": "github-read-token",
+    "origin": "https://api.github.com:443"
+  }
+}
+```
+
+Replace both OID placeholders with approved full lowercase Git IDs from your
+repository review/release process. Pin the root tree before acquisition; the
+application never adopts a response's tree automatically. Branches, tags, short
+IDs, SHA256 Git repositories, SSH and local Git paths are unsupported here.
+For GitLab, select `provider: "gitlab"`, your complete HTTPS API base such as
+`https://gitlab.example.com/api/v4`, the full group/subgroup/project path and
+`family: "gitlab-read-token"`. A GitHub repository has exactly owner/repository.
+API base, repository and credentials are explicit; no service URL is inferred.
+
+The transport checks every reconstructed Git tree and raw blob against the
+operator-pinned root using collision-detecting SHA1. This mitigates known SHA1
+collision attacks; it does not give Git SHA1 the strength of SHA256. The
+association between commit and root tree remains authenticated API provenance:
+raw commit bytes, commit signatures, ancestry and branch reachability are not
+verified. Artifact identity remains SHA256, with the selected native signatures,
+complete reviewer quorum, tenant policy and fresh independent revocation history.
+Git ownership or API verification labels do not supply that authority.
+
+`auth: {"mode": "none"}` reads public repositories without a token. With
+`external-env`, provide only the selected `M3C_GITHUB_RO_TOKEN` or
+`M3C_GITLAB_RO_TOKEN` for the selected canonical API origin. Provision the token
+with repository read permissions; the family name cannot prove its actual
+server-side permissions. Go validates and uses the selected token after acquiring
+fresh enrolled history. MCP captures that one environment family at startup and
+passes its immutable bytes to the same held Go child. Other token families,
+credential helpers, native stores, Git configuration, proxies and redirects are
+not used. `system` TLS uses system CAs; `pinned-pem` uses the checked `ca` file
+reference exclusively, as with the ER1 profile.
+
+Use the existing `pull --native-session --enterprise-profile ABS --kind agent`
+or `--kind skill`, exact `--digest sha256:HEX`, `--install` and `--trust-mode`.
+Review and confirm the same process's plan token. MCP uses the existing separate
+Agent/SKILL opt-ins and plan/confirm/close tools, one immutable startup selection
+and one shared held-session slot. Older native Git locators do not enable this
+v5 live path. No legacy fallback, implicit enrollment or Git write is performed.
+
+The reader acquires the complete root `events/` subtree, including misleading
+filenames and other digest directories. Malformed records, incomplete pages,
+unknown/mixed event shapes, wrong object hashes and exceeded limits refuse the
+source. A selected source Revoke event returns 12; it never advances native
+history or imports a new signing role. Authoritative revoked status 17 comes
+from the independent native journal. Installed-audit envelope bytes are retained
+in the session's source-proof/consent binding but are cryptographically
+unverified, nonauthorizing metadata; they never satisfy admission or quorum.
+The published managed proof retains the full admission/governance context;
+there is no promise that every source audit record is stored in the target.
+
+The same separate Agent/SKILL publishers, archive/dependency checks, target-bound
+consent, retained proofs, SKILL backups and checked uncertainty rules apply.
+Native Git reads have a 30-second operation deadline and finite cumulative
+request/object/tree/path/JSON/work budgets: at most 500 event blobs, 16 MiB of
+combined event bytes, a 16 MiB archive and 512 MiB of accounted work across the
+held operation. Individual ceilings are not a promise that every combination
+fits. Large or unsupported repositories fail closed. No dependency provisioning,
+Git publication or sandbox for untrusted execution is supplied by this path.

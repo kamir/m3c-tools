@@ -84,29 +84,44 @@ func NewNativeLiveSkillSession(ctx context.Context, journal *NativeJournal, sour
 	if c == nil || c.bindingID != source.bindingID() || c.Bundle == nil || len(c.Archive) == 0 || len(c.Archive) > 16<<20 {
 		return nil, ErrNativeEvidenceInvalid
 	}
+	s.mu.Lock()
+	err = s.retainCandidateLocked(c, source.bindingID())
+	s.mu.Unlock()
+	if err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+// retainCandidateLocked copies the acquired SKILL snapshot under s.mu. Its
+// binding belongs to this snapshot, including source proof for Git carriers.
+func (s *NativeLiveSkillSession) retainCandidateLocked(c *NativeLiveSkillCandidate, binding string) error {
+	if c == nil || c.Bundle == nil || len(c.Archive) == 0 || len(c.Archive) > 16<<20 || !nativeSHA(binding) {
+		return ErrNativeEvidenceInvalid
+	}
 	s.workBytes = c.workBytes
 	if !nativeLiveReserve(&s.workBytes, int64(len(c.Archive))+4*maxAgentContext+(128<<10)) {
-		return nil, ErrNativeEvidenceInvalid
+		return ErrNativeEvidenceInvalid
 	}
 	b := c.Bundle
-	if !validAgentName(b.Name) || !nativeSkillVersionValid(b.Version) || b.Kind != "skill" || b.Digest != digest || b.StagedSkbPath != "" || b.ProvenancePath != "" {
-		return nil, ErrNativeEvidenceInvalid
+	if !validAgentName(b.Name) || !nativeSkillVersionValid(b.Version) || b.Kind != "skill" || b.Digest != s.rootDigest || b.StagedSkbPath != "" || b.ProvenancePath != "" {
+		return ErrNativeEvidenceInvalid
 	}
 	for _, v := range []string{b.Name, b.Version, b.Digest, b.Kind, b.Governance, b.PackedOnHost, b.AdmittedAt, b.SourceDocID, b.AuthorIdentity} {
 		if !agentText(v, 8192) && v != "" {
-			return nil, ErrNativeEvidenceInvalid
+			return ErrNativeEvidenceInvalid
 		}
 	}
 	contextCopy, contextRaw, err := snapshotAgentContext(b.Attestation)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	copyBundle := *b
 	copyBundle.Attestation = contextCopy
 	s.candidate = &NativeLiveSkillCandidate{Bundle: &copyBundle, Archive: append([]byte(nil), c.Archive...)}
-	s.sourceBinding = source.bindingID()
+	s.sourceBinding = binding
 	s.contextBytes = len(contextRaw)
-	return s, nil
+	return nil
 }
 
 func (s *NativeLiveSkillSession) usable(ctx context.Context) error {

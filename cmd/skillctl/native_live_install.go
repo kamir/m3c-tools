@@ -78,7 +78,13 @@ func runNativeAgentPull(ctx context.Context, input io.Reader, stdout, stderr io.
 	}
 	ctx, cancel := context.WithTimeout(ctx, registry.TokenTTL)
 	defer cancel()
-	session, err := policy.BeginER1AgentInstall(ctx, digest)
+	var session *registry.NativeLiveAgentSession
+	var err error
+	if policy.CarrierSelection().Kind == "git" {
+		session, err = policy.BeginGitAgentInstall(ctx, digest)
+	} else {
+		session, err = policy.BeginER1AgentInstall(ctx, digest)
+	}
 	if err != nil {
 		return nativePullFailure(stderr, err)
 	}

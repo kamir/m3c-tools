@@ -128,7 +128,7 @@ class ArtifactContracts(unittest.TestCase):
         # The real lane runs pytest with cwd=mcp-skill-server, not repo root.
         # Keep this producer identity independent of catalog-generated fixtures.
         raw, metadata_path = self.paths["python-mcp"]
-        report = ('<testsuite tests="5" errors="0" failures="0" skipped="0">'
+        report = ('<testsuite tests="6" errors="0" failures="0" skipped="0">'
                   '<testcase classname="test_other" name="passing_control"/>'
                   '<testcase classname="test_enterprise_profile" '
                   'name="test_real_cli_enterprise_profile_and_stdio"/>'
@@ -137,7 +137,9 @@ class ArtifactContracts(unittest.TestCase):
                   '<testcase classname="test_native_agent_session" '
                   'name="test_native_agent_retained_session_stdio"/>'
                   '<testcase classname="test_native_skill_session" '
-                  'name="test_native_skill_retained_session_stdio"/></testsuite>')
+                  'name="test_native_skill_retained_session_stdio"/>'
+                  '<testcase classname="test_native_git_session" '
+                  'name="test_native_git_retained_session_stdio"/></testsuite>')
         raw.write_text(report)
         metadata = json.loads(metadata_path.read_text())
         metadata["result_sha256"] = hashlib.sha256(raw.read_bytes()).hexdigest()
@@ -284,6 +286,7 @@ class ArtifactContracts(unittest.TestCase):
         for required in (
             {"classname": "test_native_agent_session", "name": "test_native_agent_retained_session_stdio"},
             {"classname": "test_native_skill_session", "name": "test_native_skill_retained_session_stdio"},
+            {"classname": "test_native_git_session", "name": "test_native_git_retained_session_stdio"},
         ):
             self.assertIn(required, self.config["lanes"]["python-mcp"]["required_cases"])
             raw, metadata = self.paths["python-mcp"]
@@ -502,6 +505,19 @@ class ArtifactContracts(unittest.TestCase):
             ('security', 'TestNativeLiveSessionFailClosed'),
             ('security', 'TestNativeLiveAgentSourceContract'),
             ('security', 'TestTrustNativeStateEnrollActualCLI'),
+            ('unit', 'TestNativeGitSourceTransport'),
+            ('unit', 'TestNativeGitSourceSnapshot'),
+            ('unit', 'TestNativeGitSourceCompletenessAndBounds'),
+            ('unit', 'TestNativeGitSessionConsentAndPublication'),
+            ('unit', 'TestNativeGitProfileBinding'),
+            ('unit', 'TestNativeGitPolicySessionIntegration'),
+            ('security', 'TestNativeGitSourceTransport'),
+            ('security', 'TestNativeGitSourceSnapshot'),
+            ('security', 'TestNativeGitSourceCompletenessAndBounds'),
+            ('security', 'TestNativeGitSessionConsentAndPublication'),
+            ('security', 'TestNativeGitProfileBinding'),
+            ('security', 'TestNativeGitPolicySessionIntegration'),
+            ('security', 'TestNativeGitInstallActualCLI'),
             ('security', 'TestNativeLiveInstallActualCLI'),
             ('unit', 'TestNativeJournalEnrollmentAndHistory'),
             ('unit', 'TestNativeJournalEpochClockAndFullSet'),

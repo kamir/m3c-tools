@@ -91,7 +91,9 @@
           "TestNativeLiveAgentAcquisition",
           "TestNativeLiveInstallConsentBoundary",
           "TestNativeLiveSkillAcquisition",
-          "TestNativeLiveSkillConsentBoundary"
+          "TestNativeLiveSkillConsentBoundary",
+          "TestNativeGitProfileBinding",
+          "TestNativeGitPolicySessionIntegration"
         ],
         "./pkg/skillctl/mutationstate": [
           "TestSessionRecheckFreshClockFloorAndOriginalBinding",
@@ -167,7 +169,11 @@
           "TestNativeSkillRetainedEvidence",
           "TestNativeSkillConsentAndTargets",
           "TestNativeSkillPublicationFailures",
-          "TestNativeSkillSessionPublicationBoundary"
+          "TestNativeSkillSessionPublicationBoundary",
+          "TestNativeGitSourceTransport",
+          "TestNativeGitSourceSnapshot",
+          "TestNativeGitSourceCompletenessAndBounds",
+          "TestNativeGitSessionConsentAndPublication"
         ],
         "./pkg/httpsafe": [
           "TestGETBoundaryContract"
@@ -267,7 +273,9 @@
           "TestNativeLiveAgentAcquisition",
           "TestNativeLiveInstallConsentBoundary",
           "TestNativeLiveSkillAcquisition",
-          "TestNativeLiveSkillConsentBoundary"
+          "TestNativeLiveSkillConsentBoundary",
+          "TestNativeGitProfileBinding",
+          "TestNativeGitPolicySessionIntegration"
         ],
         "./pkg/skillctl/mutationstate": [
           "TestSessionRecheckFreshClockFloorAndOriginalBinding",
@@ -325,7 +333,8 @@
           "TestTrustNativeEvidenceAdoptActualCLI",
           "TestTrustNativeStateEnrollActualCLI",
           "TestNativeLiveInstallActualCLI",
-          "TestNativeSkillInstallActualCLI"
+          "TestNativeSkillInstallActualCLI",
+          "TestNativeGitInstallActualCLI"
         ],
         "./pkg/skillctl/verify": [
           "TestSnapshotSameBytesScopes",
@@ -361,7 +370,11 @@
           "TestNativeSkillRetainedEvidence",
           "TestNativeSkillConsentAndTargets",
           "TestNativeSkillPublicationFailures",
-          "TestNativeSkillSessionPublicationBoundary"
+          "TestNativeSkillSessionPublicationBoundary",
+          "TestNativeGitSourceTransport",
+          "TestNativeGitSourceSnapshot",
+          "TestNativeGitSourceCompletenessAndBounds",
+          "TestNativeGitSessionConsentAndPublication"
         ],
         "./pkg/httpsafe": [
           "TestGETBoundaryContract"
@@ -462,6 +475,10 @@
         {
           "classname": "test_native_skill_session",
           "name": "test_native_skill_retained_session_stdio"
+        },
+        {
+          "classname": "test_native_git_session",
+          "name": "test_native_git_retained_session_stdio"
         }
       ]
     },
