@@ -173,8 +173,8 @@
     {
       "de": "docs/v2/referenz/manual-m3c-tools.de.md",
       "en": "docs/v2/referenz/manual-m3c-tools.md",
-      "de_sha256": "81444cc10519e70f0aa9edfcf2e6b673c7408e89effe46556b989164091c6d56",
-      "en_sha256": "063fd3c0012701cd36d83f0d1f4bc25aef974f993a3f34c9b6cded912d4cdbeb"
+      "de_sha256": "7cde11c33312b16e89db86ec1ccfede848e054de83500c47cec7fdb05e8f8fb1",
+      "en_sha256": "2612f9ec26fe78a7bba8ae6e057d732b7e79e729c135d59e997da9455f565793"
     },
     {
       "de": "docs/v2/referenz/manual-skillctl.de.md",
@@ -257,8 +257,8 @@
     {
       "de": "deploy/testing/README.de.md",
       "en": "deploy/testing/README.md",
-      "de_sha256": "6ddd49b1764e85a33966c0fd0d6f77e397d0047a86b1480b09081a018e0adc47",
-      "en_sha256": "03271253a81641d3ed2408ad0a6aad1629cf903152b23bf100e4f0f454feabef"
+      "de_sha256": "b040ded2a9e6cc90a91c4062a860b25ecc29acc485593b50b15d5076111b2fd1",
+      "en_sha256": "02008bb2fe6e196256e1f07b6c598d0c039ae389bcd33db7ffb45ab9cee9de20"
     },
     {
       "de": "evaluation/README.de.md",

@@ -138,6 +138,9 @@ func runAudit(args []string, stdout, stderr io.Writer) int {
 		return exitGeneric
 	}
 
+	if home, herr := userHome(); herr == nil {
+		annotateGitInstalls(inv, home)
+	}
 	report := audit.Compute(inv, min)
 
 	// Dispatch on cleanup mode.

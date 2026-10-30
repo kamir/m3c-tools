@@ -166,7 +166,7 @@ set_result "Prereqs" "PASS"
 echo ""
 echo "[2/6] Getting current m3c-tools ($REF)..."
 
-if [ -d "$REPO_DIR/.git" ]; then
+if [ -e "$REPO_DIR/.git" ]; then
   cd "$REPO_DIR" || die "cannot enter $REPO_DIR"
   [ -z "$(git status --porcelain)" ] \
     || die "the checkout at $REPO_DIR has local changes. Commit, stash, or pass --repo-dir."

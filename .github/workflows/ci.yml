@@ -389,6 +389,14 @@ jobs:
       # The same claim, one level up: docs/program-index.md and
       # docs/component-index.md say what cmd/ and pkg/ contain. It runs HERE and
       # not only in scripts/check-docs.sh, because no workflow calls that script.
+      - name: German and English docs were reviewed together
+        run: python3 scripts/check-doc-languages.py
+
+      - name: The tutorial chain behaves as documented
+        run: |
+          make build-skillctl
+          ./scripts/tutorial-smoke.sh
+
       - name: Indexes match the tree (cmd/, pkg/, and the counts)
         run: ./scripts/check-index.sh
 

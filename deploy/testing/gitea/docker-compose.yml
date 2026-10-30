@@ -4,7 +4,7 @@
 # LOCAL TEST ONLY.
 #
 #   docker compose -f deploy/testing/gitea/docker-compose.yml up -d
-#   open http://localhost:3000   (first visit: create the admin user)
+#   create the admin and a token: see ../README.md
 #
 # See ../gitlab/README.md for wiring a repo + token to the backend.
 name: skillctl-gitea-test
@@ -19,9 +19,12 @@ services:
       - USER_GID=1000
       - GITEA__server__ROOT_URL=http://localhost:3000/
       - GITEA__server__SSH_PORT=2222
-      - GITEA__server__START_SSH_SERVER=true
+      # The image already runs OpenSSH on port 22; the built-in server would crash-loop.
+      - GITEA__server__START_SSH_SERVER=false
       - GITEA__service__DISABLE_REGISTRATION=false
       - GITEA__lfs__ENABLED=true
+      # Skips the first-run form; create the admin with `gitea admin user create`.
+      - GITEA__security__INSTALL_LOCK=true
     ports:
       - "3000:3000"   # http
       - "2222:22"     # ssh

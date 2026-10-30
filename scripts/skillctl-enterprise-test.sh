@@ -149,7 +149,7 @@ echo ""
 command -v git >/dev/null 2>&1 || die "git is not installed or not on PATH."
 command -v go  >/dev/null 2>&1 || die "Go is not installed or not on PATH. See https://go.dev/dl/"
 
-if [ -d "$REPO_DIR/.git" ]; then
+if [ -e "$REPO_DIR/.git" ]; then
   cd "$REPO_DIR" || die "cannot enter $REPO_DIR"
   [ -z "$(git status --porcelain)" ] \
     || die "the checkout at $REPO_DIR has local changes. Commit, stash, or pass --repo-dir."
