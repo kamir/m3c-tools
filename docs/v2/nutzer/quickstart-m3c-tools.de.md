@@ -61,7 +61,7 @@ Der Assistent führt durch:
 
 1. **ER1-Server-URL**: Standard ist `https://onboarding.guide/upload_2`.
 2. **Browser-Login**: Öffnet Chrome und übernimmt Ihre Nutzer-ID, den Kontext, automatisch.
-3. **API-Key**: Für Uploads erforderlich, im Header `X-API-KEY` gesendet. Zugang erhalten Sie auf Anfrage an mirko.kaempf@gmail.com.
+3. **API-Key**: Für Uploads erforderlich, im Header `X-API-KEY` gesendet. Zugang erhalten Sie auf Anfrage an kamir@apache.org.
 4. **Standard-Tags**: Für die Synchronisation von Aufnahmegeräten.
 
 Alles wird nach `~/.m3c-tools.env` geschrieben.

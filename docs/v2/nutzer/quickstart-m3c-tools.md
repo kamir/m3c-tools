@@ -60,7 +60,7 @@ The wizard walks you through:
 
 1. **ER1 server URL**: defaults to `https://onboarding.guide/upload_2`.
 2. **Browser login**: opens Chrome and captures your User ID (context) automatically.
-3. **API key**: required for uploads (sent as the `X-API-KEY` header). To request access, write to mirko.kaempf@gmail.com.
+3. **API key**: required for uploads (sent as the `X-API-KEY` header). To request access, write to kamir@apache.org.
 4. **Default tags**: used for capture-device sync.
 
 It writes everything to `~/.m3c-tools.env`.

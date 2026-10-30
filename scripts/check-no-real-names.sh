@@ -69,8 +69,6 @@ CAMEL="[a-z0-9_]($NAMES)([^a-z]|$)|($NAMES)[A-Z]"
 #                          a transcript fixture. The string is INPUT to the
 #                          function under test, and it is a real sentence a real
 #                          person said, which is what makes it a good fixture.
-#   To request access / Zugang erhalten  the ER1 access contact in the m3c-tools
-#                          quickstart, published by owner decision of 2026-10-30
 #   mirkos-braindump       the NAME of the repository the distiller reads, and
 #                          a name is how a pointer finds its target. Renaming it
 #                          would not anonymise anything, it would break the
@@ -84,7 +82,7 @@ CAMEL="[a-z0-9_]($NAMES)([^a-z]|$)|($NAMES)[A-Z]"
 # A historical scanner fingerprint is an immutable pointer, not a persona.
 # Only the reviewed commit/path/rule/line in its machine-readable file is exempt;
 # another commit, filename, suffix or line remains subject to this gate.
-EXEMPT_LINES='(PRODUCT_PUBLISHER|plaudDeferForTranscript|mirkos-braindump|To request access, write to|Zugang erhalten Sie auf Anfrage an)|^\.gitleaksignore:[0-9]+:ab11e26f1879acdd167b107896c10e01c2f02658:demo/kup-training/artifacts/keys/mirko\.priv:private-key:1$'
+EXEMPT_LINES='(PRODUCT_PUBLISHER|plaudDeferForTranscript|mirkos-braindump)|^\.gitleaksignore:[0-9]+:ab11e26f1879acdd167b107896c10e01c2f02658:demo/kup-training/artifacts/keys/mirko\.priv:private-key:1$'
 
 # Two more classes that a name list alone would never catch, both found by
 # reading the tree rather than by trusting the first grep.
