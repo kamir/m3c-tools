@@ -179,8 +179,8 @@
     {
       "de": "docs/v2/referenz/manual-skillctl.de.md",
       "en": "docs/v2/referenz/manual-skillctl.md",
-      "de_sha256": "58fa22864df515dde438c6756d46a46eb12bf352bcd4d1b459f280b9679962a7",
-      "en_sha256": "038f1db4be2e72aa624d253908e09e5c3642b58e8aee8255acc33819b7bdb565"
+      "de_sha256": "1c245bd750045104b0ef6a0e78e3404c7f2fcfc3abee20b16e434792ef9e4f5e",
+      "en_sha256": "58f85f245b752d783fd95e05e9dea842451673b53a7c5cb450f1006785beb825"
     },
     {
       "de": "docs/v2/sicherheit/audit-spur.de.md",

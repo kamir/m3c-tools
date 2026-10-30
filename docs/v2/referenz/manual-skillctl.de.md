@@ -828,6 +828,8 @@ sperren die Installation; nach absichtlichen Betreiberänderungen neu starten.
 `enterprise_profile` in einer Toolanfrage darf nur den Betreiberpfad wiederholen
 und keine andere Trust-Policy auswählen.
 
+`skillctl trust fingerprint <key.pub>` gibt den Wert `sha256:<hex>` für `peer add --pin` und `trust add-author --pin` aus. `--b64` gibt den rohen 32-Byte-Schlüssel in Base64 aus, den Wert für `peer add --pubkey` und `pubkey_b64`. `openssl` ist dafür nicht nötig; das LibreSSL von macOS kann diese Schlüssel nicht lesen.
+
 ---
 
 ### `verify`: Vertrauenskette erneut prüfen

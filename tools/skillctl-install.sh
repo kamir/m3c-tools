@@ -134,6 +134,12 @@ fi
 # === Provenance track 2 (fallback / current default): pinned ed25519 (SEC-M2). ===
 # Reached when cosign is absent or the release carries no cosign bundle.
 if [ "$verified" != "1" ]; then
+  # LibreSSL, the openssl of stock macOS, has no ed25519, so this track cannot run there.
+  if openssl version 2>/dev/null | grep -q LibreSSL; then
+    echo "This openssl (LibreSSL) cannot verify the ed25519 signature, and cosign is not installed." >&2
+    echo "Install cosign and re-run: brew install cosign" >&2
+    exit 1
+  fi
   # Attaching SHA256SUMS.sig to a release is a manual operator step with the
   # private key, and it has been missed before. Unguarded, this fetch would die
   # under `set -e` with a bare curl 404 and no hint what went wrong; guard it
