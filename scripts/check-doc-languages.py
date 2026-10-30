@@ -50,6 +50,9 @@ def published_paths(root):
     paths.update(p for p in root.iterdir() if p.is_file() and p.suffix.lower() == ".md" and p.name.upper() not in {"CLAUDE.MD", "AGENTS.MD", "CHANGELOG.MD"})
     for directory in ("demo", "deploy", "design", "evaluation", "rag-mcp-server", "tools", "tests/evidence"):
         for path in (root / directory).rglob("*"):
+            relative = path.relative_to(root).parts
+            if any(part.startswith(".") for part in relative):
+                continue
             if path.is_file() and path.suffix.lower() == ".md" and "fixtures" not in path.parts and "testdata" not in path.parts:
                 if path.name.upper().startswith(("README", "TUTORIAL", "DESIGN-SYSTEM")):
                     paths.add(path)
