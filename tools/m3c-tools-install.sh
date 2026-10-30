@@ -91,6 +91,12 @@ fi
 
 if [ "$verified" != 1 ]; then
   command -v openssl >/dev/null 2>&1 || { echo "cosign or openssl required for signature verification" >&2; exit 1; }
+  # LibreSSL, the openssl of stock macOS, has no ed25519, so this track cannot run there.
+  if openssl version 2>/dev/null | grep -q LibreSSL; then
+    echo "This openssl (LibreSSL) cannot verify the ed25519 signature, and cosign is not installed." >&2
+    echo "Install cosign and re-run: brew install cosign" >&2
+    exit 1
+  fi
   if ! fetch checksums.txt.sig || ! fetch skillctl-release.pub; then
     echo "Could not fetch checksums.txt.sig from: $RELEASE_BASE" >&2
     echo "Cosign did not verify here, and this release carries no fallback signature." >&2

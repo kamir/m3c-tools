@@ -768,6 +768,8 @@ Partial/invalid configuration or subsequent profile-byte changes deny installati
 restart after an intentional operator change. A tool request's `enterprise_profile`
 can only repeat the operator-bound path, never select another trust policy.
 
+`skillctl trust fingerprint <key.pub>` prints the `sha256:<hex>` value for `peer add --pin` and `trust add-author --pin`. `--b64` prints the raw 32-byte key in base64, the value for `peer add --pubkey` and `pubkey_b64`. It needs no `openssl`; the LibreSSL on stock macOS cannot read these keys.
+
 ---
 
 ### `verify`: re-run the trust chain
