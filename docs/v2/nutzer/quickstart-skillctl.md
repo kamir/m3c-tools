@@ -30,7 +30,7 @@ no admin rights required.
 
 **Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/kamir/m3c-tools/6f517440e7edf64c74f0f625a46291769d086f98/tools/skillctl-install.ps1 | iex
+irm https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/skillctl-install.ps1 | iex
 ```
 
 Installs to `%LOCALAPPDATA%\Programs\skillctl` after verifying cosign provenance + SHA-256.
@@ -41,16 +41,16 @@ two `skillctl.exe` on your `PATH`.
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/6f517440e7edf64c74f0f625a46291769d086f98/tools/skillctl-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/skillctl-install.sh | bash
 ```
 
 Override the target dir or the release with `INSTALL_DIR=…` / `RELEASE_BASE=…`.
 
-**Bootstrap integrity.** The one-liner URLs are pinned to the **immutable commit `6f51744`**
+**Bootstrap integrity.** The one-liner URLs are pinned to the **immutable commit `953dd07`**
 (not the mutable `master` branch, where one rewrite could swap the bootstrap script *and* every
 pin inside it). Verify the fetched bytes out-of-band before trusting them, expected SHA-256:
-`tools/skillctl-install.ps1` → `a00826f30599439718f5ea126f81b8a78b4c28aa96980e1b136db65396a34177`;
-`tools/skillctl-install.sh` → `dea4b86b78d20eeff28524240034efcb0c96c35016238434a8e7c97c7278dabc`.
+`tools/skillctl-install.ps1` → `a85f73ba04d279033d1bfad348f71931297df06511c75c9313bde1eb2883ed2b`;
+`tools/skillctl-install.sh` → `a013791fbe2ae90a109e98c26cca88874348e3aa7d4164832dc8d52bddf5a2b8`.
 The [README Install section](../../../README.md#install) has a copy-paste verify-then-run recipe. On
 each new signed release, bump the pinned commit **and** these hashes together.
 

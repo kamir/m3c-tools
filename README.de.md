@@ -83,7 +83,7 @@ m3c-tools doctor                        # verify connectivity & config
 ```bash
 # macOS / Linux / Windows, signed installer: fetches the right binary from the
 # signed skillctl/v* release and verifies cosign/OIDC provenance + SHA-256 first.
-curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/6f517440e7edf64c74f0f625a46291769d086f98/tools/skillctl-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/skillctl-install.sh | bash
 
 skillctl keygen --out ~/.config/m3c/skill-keys/mykey            # ed25519 → mykey.priv + mykey.pub
 skillctl pack --skill ./my-skill -o my-skill.skb --name my-skill --version 1.0.0
@@ -245,7 +245,7 @@ und SHA-256** und installieren **für den aktuellen Benutzer ohne Administratorr
 **Windows (PowerShell):**
 
 ```powershell
-irm https://raw.githubusercontent.com/kamir/m3c-tools/6f517440e7edf64c74f0f625a46291769d086f98/tools/skillctl-install.ps1 | iex
+irm https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/skillctl-install.ps1 | iex
 ```
 
 Installiert `skillctl` nach `%LOCALAPPDATA%\Programs\skillctl`, nachdem cosign-Herkunft und SHA-256
@@ -257,7 +257,7 @@ Dies ist der leichte, benutzerbezogene Weg ohne Adminrechte. Der rechnerweite In
 **macOS / Linux:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/6f517440e7edf64c74f0f625a46291769d086f98/tools/skillctl-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/skillctl-install.sh | bash
 ```
 
 Zielverzeichnis oder Release lassen sich mit `INSTALL_DIR=…` und `RELEASE_BASE=…` ändern;
@@ -265,31 +265,31 @@ Vorgabe ist `~/.local/bin`. Geprüft wird das signierte `skillctl/v*`-Release mi
 über GitHub OIDC und SHA-256. Ohne cosign gibt es einen **ed25519-Fallback**;
 siehe [skillctl-Schnellstart](docs/v2/nutzer/quickstart-skillctl.md#1-install).
 
-**Bootstrap-Integrität.** Die URLs sind auf den **unveränderlichen Commit `6f51744`** gepinnt.
+**Bootstrap-Integrität.** Die URLs sind auf den **unveränderlichen Commit `953dd07`** gepinnt.
 Auf dem veränderlichen `master` könnte eine einzige Änderung Skript und alle enthaltenen Pins
 austauschen (TOFU-Falle). Prüfe die geladenen Bytes über einen unabhängigen Kanal.
 Erwartete SHA-256-Werte:
 
 | Skript | SHA-256 |
 |--------|---------|
-| `tools/skillctl-install.ps1` | `a00826f30599439718f5ea126f81b8a78b4c28aa96980e1b136db65396a34177` |
-| `tools/skillctl-install.sh` | `dea4b86b78d20eeff28524240034efcb0c96c35016238434a8e7c97c7278dabc` |
+| `tools/skillctl-install.ps1` | `a85f73ba04d279033d1bfad348f71931297df06511c75c9313bde1eb2883ed2b` |
+| `tools/skillctl-install.sh` | `a013791fbe2ae90a109e98c26cca88874348e3aa7d4164832dc8d52bddf5a2b8` |
 
 Zuerst prüfen, dann ausführen statt direkt nach `iex` oder `bash` weiterzuleiten:
 
 ```powershell
 # Windows
-$u = 'https://raw.githubusercontent.com/kamir/m3c-tools/6f517440e7edf64c74f0f625a46291769d086f98/tools/skillctl-install.ps1'
+$u = 'https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/skillctl-install.ps1'
 $f = "$env:TEMP\skillctl-install.ps1"; irm $u -OutFile $f
-if ((Get-FileHash $f -Algorithm SHA256).Hash -ne 'A00826F30599439718F5EA126F81B8A78B4C28AA96980E1B136DB65396A34177') { throw 'SHA-256 mismatch' }
+if ((Get-FileHash $f -Algorithm SHA256).Hash -ne 'A85F73BA04D279033D1BFAD348F71931297DF06511C75C9313BDE1EB2883ED2B') { throw 'SHA-256 mismatch' }
 & $f
 ```
 
 ```bash
 # macOS / Linux
-u='https://raw.githubusercontent.com/kamir/m3c-tools/6f517440e7edf64c74f0f625a46291769d086f98/tools/skillctl-install.sh'
+u='https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/skillctl-install.sh'
 f=$(mktemp); curl -fsSL "$u" -o "$f"
-echo 'dea4b86b78d20eeff28524240034efcb0c96c35016238434a8e7c97c7278dabc  '"$f" | shasum -a 256 -c - && bash "$f"
+echo 'a013791fbe2ae90a109e98c26cca88874348e3aa7d4164832dc8d52bddf5a2b8  '"$f" | shasum -a 256 -c - && bash "$f"
 ```
 
 > Bei jedem neuen signierten Release den gepinnten Commit und beide Prüfsummen gemeinsam aktualisieren.
