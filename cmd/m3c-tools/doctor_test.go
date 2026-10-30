@@ -27,9 +27,48 @@ func TestDoctorProfile_NoProfile(t *testing.T) {
 	if len(s.Checks) == 0 {
 		t.Fatal("expected at least one check")
 	}
-	// With no profile configured, the active-profile check should fail.
-	if s.Checks[0].Status != diag.Fail {
-		t.Errorf("active profile status = %v, want Fail", s.Checks[0].Status)
+	// An unconfigured install is a valid state: transcript and whisper work.
+	if s.Checks[0].Status != diag.Warn {
+		t.Errorf("active profile status = %v, want Warn", s.Checks[0].Status)
+	}
+	if !strings.Contains(s.Checks[0].Detail, "m3c-tools setup") {
+		t.Errorf("detail %q does not name the next step", s.Checks[0].Detail)
+	}
+}
+
+func TestEr1UnconfiguredOnlyWithNothingSet(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
+	t.Setenv("ER1_API_URL", "")
+	t.Setenv("ER1_API_KEY", "")
+	t.Setenv("ER1_DEVICE_TOKEN", "")
+	if !er1Unconfigured() {
+		t.Fatal("a fresh home must count as unconfigured")
+	}
+	t.Setenv("ER1_API_URL", "https://example.invalid/upload_2")
+	if er1Unconfigured() {
+		t.Fatal("an explicit ER1_API_URL is a configuration")
+	}
+	t.Setenv("ER1_API_URL", "")
+	if err := os.WriteFile(filepath.Join(tmp, ".m3c-tools.env"), []byte("ER1_API_KEY=x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if er1Unconfigured() {
+		t.Fatal("an env file is a configuration")
+	}
+}
+
+func TestDoctorProfile_ManualEnvFileIsAConfiguration(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("USERPROFILE", tmp)
+	if err := os.WriteFile(filepath.Join(tmp, ".m3c-tools.env"), []byte("ER1_API_KEY=x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s := doctorProfile()
+	if s.Checks[0].Status != diag.OK {
+		t.Errorf("active profile status = %v, want OK: %s", s.Checks[0].Status, s.Checks[0].Detail)
 	}
 }
 
