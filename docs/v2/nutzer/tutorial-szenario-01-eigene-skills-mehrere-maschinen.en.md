@@ -118,8 +118,7 @@ echo "$DIGEST"
 > and the argument to `attest` is **the one from `sign`**.
 > The value from `pack` is the manifest digest.
 
-The `$DIGEST` variable above captures exactly that value. `sign` is idempotent:
-a second run over the same bytes writes the same signature, so repeating the block is safe.
+The `$DIGEST` variable above captures exactly that value. Sign once: a second `sign` of the same bytes refuses to overwrite the signature. To repeat this block, delete the `.author.sig` file first.
 
 ### A4. Verify immediately
 

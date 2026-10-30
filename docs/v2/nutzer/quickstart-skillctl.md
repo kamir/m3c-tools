@@ -280,11 +280,14 @@ Useful optional manifest fields:
 ## 4. Sign it
 
 ```bash
-skillctl sign --key ~/.config/m3c/skill-keys/mykey.priv my-skill.skb
+DIGEST="sha256:$(skillctl sign --key ~/.config/m3c/skill-keys/mykey.priv my-skill.skb | awk '/^digest:/ {print $2}')"
+echo "$DIGEST"
 ```
 
 This computes the bundle's SHA-256 digest, signs it with ed25519, and writes a **detached**
 signature next to the bundle: `my-skill.skb.<digest>.author.sig`.
+
+Sign once. A second `sign` of the same bundle refuses to overwrite its signature, so keep `$DIGEST` for section 6.
 
 ---
 
@@ -312,7 +315,6 @@ A registry on your disk needs no server. It uses the same code path as a Git reg
 ```bash
 K=~/.config/m3c/skill-keys
 REG="local://$HOME/skill-registry.git"
-DIGEST="sha256:$(skillctl sign --key "$K/mykey.priv" my-skill.skb | awk '/^digest:/ {print $2}')"
 
 skillctl registry init --registry "$REG"
 skillctl publish my-skill@1.0.0 --bundle my-skill.skb --version 1.0.0 \
