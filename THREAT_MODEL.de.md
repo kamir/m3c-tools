@@ -147,10 +147,16 @@ nicht als Erlaubnis interpretiert werden.
 Fehlerfall: Der Prüfer lehnt widerrufene Digests ab, das Claude-Code-Gate verweigert
 widerrufene Bundles, Pull stoppt an Gate 5. Installation mit widerrufenem Autor
 endet mit `17` (`RevokeIdentityRevoked`) und nennt den Widerruf in stderr zur Audit-Zuordnung.
+Ein Git-Registry liefert keinen Widerrufs-HEAD. Seine signierten Widerrufsereignisse erreichen das
+Gate deshalb über einen lokalen Satz, der nur wächst: `pull` und `verify --all` prüfen sie gegen den
+gepinnten Schlüssel und nehmen sie auf. Ein Widerruf wirkt auf einer Maschine ab ihrer nächsten
+Aktualisierung, und späteres Löschen des Ereignisses macht ihn nicht rückgängig.
 
 **Abdeckende Tests.**
 - `TestVerifyBundle_RevokedDigest`: `cmd/skillctl/verify_bundle_test.go`
 - `TestVerifyHook_RevokedBundle_Denied`: `cmd/skillctl/revoked_cache_test.go`
+- `TestGitRevocation_PullFeedsGateAndVerify`: `cmd/skillctl/git_revocation_gate_test.go`
+- `TestGitRevocation_DeletedEventDoesNotUnrevoke`: `cmd/skillctl/git_revocation_gate_test.go`
 - `TestPullBundles_Revoked_RejectsAtGate5`: `pkg/skillctl/registry/er1_pull_test.go`
 - `TestInstall_RevokedAuthor_Exit17`: `cmd/skillctl/install_e2e_test.go`
 

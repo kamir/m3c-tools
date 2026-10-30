@@ -99,21 +99,11 @@ $ASSET = 'skillctl-windows-amd64.exe'
 # ============================================================================
 # Resolve params from args -> env -> default
 # ============================================================================
-# Die Vorgabe ist KEINE feste Marke mehr, sondern die neueste veroeffentlichte.
-#
-# Warum: hier stand eine Marke, die bei jedem Release jemand von Hand heben
-# musste. Am 2026-09-16 stand sie auf v0.4.0, waehrend v0.5.0 seit sechs Tagen
-# veroeffentlicht war. Die Folge war messbar: v0.3.1 hatte 61 Windows-Bezuege,
-# v0.4.0 noch 27, v0.5.0 null. Wer die dokumentierte Zeile benutzte, bekam die
-# vorletzte Fassung, und nichts berichtete davon.
-#
-# Was das NICHT schwaecht: die Vertrauenskette haengt am gepinnten
-# Schluessel-Fingerabdruck und an der Pruefung von SHA256SUMS. Beide bleiben.
-# Offen bleibt allein, WELCHE Fassung kommt (Entscheidung 2026-09-16).
-#
-# Der Atom-Feed statt der API: kein Schluessel, keine Ratenbegrenzung. Die
-# Abkuerzung /releases/latest taugt NICHT, sie liefert das neueste Release des
-# ganzen Repos, und das ist oft ein Produkt-Release und kein skillctl.
+# The default is the newest published release, not a fixed tag. A fixed tag needed a
+# manual bump on every release, and the documented line once installed the previous
+# version without saying so. The trust chain still rests on the pinned key fingerprint
+# and on the check of SHA256SUMS. The tag comes from the release feed; the
+# /releases/latest shortcut names the newest release of the whole repository.
 function Get-NeuesteSkillctlMarke {
     try {
         $feed = Invoke-WebRequest -UseBasicParsing -TimeoutSec 20 `
@@ -556,6 +546,25 @@ Fix: install cosign so provenance can be verified:
     $savedEAP = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
     try { & $target version } finally { $ErrorActionPreference = $savedEAP }
+
+    # The sweep reads the signed revoke events of the registries installed skills came
+    # from. It never quarantines: the gate already denies a revoked skill.
+    Write-Host ""
+    if ($env:SKILLCTL_NO_SERVICE -eq '1') {
+        Write-Host "Revocation service: skipped (SKILLCTL_NO_SERVICE=1). Revocations then arrive only with pull or verify --all."
+    } else {
+        $savedEAP = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        & schtasks.exe /Create /F /TN 'skillctl-sweep' /SC HOURLY /TR "`"$target`" verify --all --json" 2>&1 | Out-Null
+        $svcRc = $LASTEXITCODE
+        $ErrorActionPreference = $savedEAP
+        if ($svcRc -eq 0) {
+            Write-Host "Revocation service: installed as task 'skillctl-sweep', hourly. It reads the registries your installed skills came from."
+            Write-Host "  Skip it with SKILLCTL_NO_SERVICE=1. Remove it with: schtasks /Delete /TN skillctl-sweep /F"
+        } else {
+            Write-Warning "The revocation service could not be installed. Revocations arrive only with pull or verify --all."
+        }
+    }
 
     Write-Host ""
     Write-Host "Installed / next steps:" -ForegroundColor Green

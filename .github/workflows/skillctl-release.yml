@@ -35,11 +35,9 @@ name: skillctl Release (SLSA L3 provenance)
 # local verified-CI fallback signer. CI also supplies signed SLSA
 # provenance (*.intoto.jsonl), a cosign bundle, and a CycloneDX SBOM.
 #
-# Creates a DRAFT release. The operator reviews it and promotes it: and, DURING
-# THE ED25519->COSIGN TRANSITION, also attaches the ed25519 SHA256SUMS.sig (cut
-# locally with tools/skillctl-release.sh from the downloaded, Cosign/SLSA-verified
-# CI manifest bytes) so users WITHOUT cosign still verify via the pinned
-# ed25519 fallback in install.sh. Once cosign is the only track, that step drops.
+# Creates a DRAFT release, which the operator reviews and promotes. The job
+# sign-fallback adds the ed25519 SHA256SUMS.sig, so users WITHOUT cosign still verify
+# via the pinned fallback in install.sh.
 
 on:
   push:
@@ -390,12 +388,50 @@ jobs:
           done
           echo "OK: all 5 binaries verify against the isolated L3 generator identity."
 
+  # 2b) FALLBACK SIGNATURE: the ed25519 signature for hosts without cosign, over the
+  #     same checksums.txt. The key is a secret of the release-signing environment,
+  #     which only accepts release tags. Runs no build step.
+  sign-fallback:
+    name: ed25519 fallback signature over SHA256SUMS
+    needs: [build, provenance, cosign, verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: release-signing
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Download SHA256SUMS
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: skillctl-dist
+          path: sign
+      - name: Sign and verify against the pinned public key
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          key="$(mktemp)"
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$RELEASE_SIGNING_KEY" > "$key"
+          openssl pkeyutl -sign -inkey "$key" -rawin -in "sign/SHA256SUMS" -out "sign/SHA256SUMS.sig"
+          openssl pkeyutl -verify -pubin -inkey INFRA/skillctl-release.pub -rawin \
+            -in "sign/SHA256SUMS" -sigfile "sign/SHA256SUMS.sig"
+      - name: Upload signature
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: skillctl-dist-sig
+          if-no-files-found: error
+          retention-days: 7
+          path: sign/SHA256SUMS.sig
+
   # 5) RELEASE: DRAFT only, and ONLY after BOTH gates (verify + cosign) pass.
   #    Holds NO signing identity (contents: write only, to create the draft). A
   #    broken provenance or cosign flow yields no draft at all.
   release:
     name: Draft release (post-gate)
-    needs: [build, provenance, cosign, verify]
+    needs: [build, provenance, cosign, verify, sign-fallback]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -419,6 +455,12 @@ jobs:
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: skillctl-cosign-bundle
+          path: dist
+
+      - name: Download fallback signature
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: skillctl-dist-sig
           path: dist
 
       # H5: BLOCKING: the SBOM is a required release asset ("no SBOM → no
@@ -455,8 +497,7 @@ jobs:
           else echo "WARN: no $NOTES: falling back to the placeholder body"; \
           printf '# skillctl %s\n\nKeyless (cosign/OIDC) + SLSA Build L3 provenance release.\n' "${GITHUB_REF_NAME#skillctl/}" > dist/RELEASE_NOTES.md; fi
 
-      # DRAFT: the operator reviews, (transition) attaches the ed25519
-      # SHA256SUMS.sig, and promotes. A broken cosign/provenance flow yields a
+      # DRAFT: the operator reviews and promotes. A broken cosign/provenance flow yields a
       # draft that never gets cut, never a published release.
       - name: Create draft release
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3
@@ -473,6 +514,7 @@ jobs:
             dist/skillctl-windows-amd64.exe
             dist/SHA256SUMS
             dist/SHA256SUMS.cosign.bundle
+            dist/SHA256SUMS.sig
             dist/${{ needs.provenance.outputs.provenance-name }}
             dist/install.sh
             dist/install.ps1

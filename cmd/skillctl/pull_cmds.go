@@ -150,6 +150,16 @@ func runPull(args []string, stdout, stderr io.Writer) int {
 		res, err = registry.PullBundlesFromBackend(context.Background(), be, tr, registry.PullOpts{
 			OnlySkill: *skillName, OnlyDigest: *digestArg, Since: *since,
 		})
+		if err == nil {
+			home, herr := userHome()
+			if herr == nil {
+				herr = recordVerifiedRevocations(home, res.Revoked, time.Now())
+			}
+			if herr != nil {
+				fmt.Fprintf(stderr, "pull: record revocations: %v\n", herr)
+				return 1
+			}
+		}
 	} else {
 		cfg, cerr := resolveER1Config(*er1Target)
 		if cerr != nil {

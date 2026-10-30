@@ -379,6 +379,7 @@ func (o PullOpts) now() time.Time {
 type PullResult struct {
 	Staged   []*StagedBundle
 	Skipped  []*PullSkip // bundles rejected by one of the 5 gates
+	Revoked  []string    // digests with a verified signed revoke event (git backends)
 	Warnings []string    // non-fatal advisories (e.g. a best-effort revoke-discovery cap-hit)
 }
 
