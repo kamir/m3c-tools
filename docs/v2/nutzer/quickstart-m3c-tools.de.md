@@ -198,6 +198,7 @@ m3c-tools pocket ...            # see: m3c-tools pocket --help
 | Projects-Menü bleibt bei *Loading projects…* stehen | Bei der App kam kein ER1-Credential an. Schlüssel im aktiven Profil korrigieren oder `login` ausführen, danach die Menüleisten-App neu starten. |
 | `subtitles are disabled for this video` | Erwartetes Verhalten. Vorschaubild und Link bleiben erhalten. Eine Sprachnotiz ergänzen. |
 | Whisper meldet "command not found" | Mit `python3 -m pip install openai-whisper` installieren; benötigt `ffmpeg`. |
+| `import-audio --run` endet mit `1` und meldet `failed=1` | Eine Transkription oder ein Upload ist fehlgeschlagen. Eine Datei mit fehlgeschlagener Transkription wird nicht hochgeladen und beim nächsten Lauf neu aufgegriffen. Ein fehlgeschlagener Upload liegt in der Warteschlange; führen Sie `m3c-tools retry` aus. |
 | Upload schlägt fehl und wird wiederholt | Fehlgeschlagene Uploads werden lokal eingereiht. `m3c-tools retry` ausführen oder `m3c-tools status` prüfen. |
 
 ---

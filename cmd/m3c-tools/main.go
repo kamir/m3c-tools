@@ -1121,6 +1121,9 @@ func cmdImportAudio(args []string) {
 		}
 		fmt.Printf("Import pipeline complete: imported=%d uploaded=%d failed=%d\n",
 			summary.Imported, summary.Uploaded, summary.Failed)
+		if summary.Failed > 0 {
+			os.Exit(1)
+		}
 		return
 	}
 
@@ -1271,11 +1274,28 @@ func runAudioImportPipeline(sourceDir, dbPath, onlySourcePath string, app *menub
 		log.Printf("[import] whisper START source=%s model=%s language=%s size=%.1fMB", imp.Source, model, lang, float64(srcSize)/(1024*1024))
 		text, txErr := whisper.TranscribeTextWithTimeout(imp.Dest, model, lang, timeout)
 		if txErr != nil {
-			text = fmt.Sprintf("[Transcription failed: %v]", txErr)
+			// Nothing is uploaded, and the record goes, so the next run picks the file up again.
+			summary.Failed++
+			_ = filesDB.RemoveByHash(imp.Hash, "audio")
 			log.Printf("[import] whisper FAIL source=%s error=%v", imp.Source, txErr)
-		} else {
-			log.Printf("[import] whisper DONE source=%s chars=%d", imp.Source, len(text))
+			if onProgress != nil {
+				onProgress(menubar.BulkProgressEvent{
+					Event:       "ITEM_DONE",
+					Item:        filepath.Base(imp.Source),
+					Index:       processedItems,
+					Total:       totalItems,
+					Outcome:     "failed",
+					Error:       txErr.Error(),
+					Done:        processedItems,
+					Success:     summary.Uploaded,
+					Failed:      summary.Failed,
+					CurrentFile: filepath.Base(imp.Source),
+					Phase:       menubar.BulkPhaseFailed,
+				})
+			}
+			continue
 		}
+		log.Printf("[import] whisper DONE source=%s chars=%d", imp.Source, len(text))
 
 		// Record transcript details in DB.
 		_ = filesDB.RecordTranscript(imp.Hash, "audio", strings.TrimSpace(text), lang)

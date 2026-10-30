@@ -192,6 +192,7 @@ m3c-tools pocket ...            # see: m3c-tools pocket --help
 | "Projects" menu stuck on *Loading projects…* | No ER1 credential reached the app. Fix the active profile's key or run `login`, then restart the menu-bar app. |
 | `subtitles are disabled for this video` | Expected. The capture still keeps the thumbnail + link. Add a voice note. |
 | Whisper "command not found" | Install it: `python3 -m pip install openai-whisper` (needs `ffmpeg`). |
+| `import-audio --run` exits `1` and reports `failed=1` | A transcription or an upload failed. A file with a failed transcription is not uploaded and is picked up again on the next run. A failed upload is queued; run `m3c-tools retry`. |
 | Upload fails, then retries | Failed uploads queue locally; run `m3c-tools retry` or check `m3c-tools status`. |
 
 ---
