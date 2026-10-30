@@ -507,9 +507,12 @@ skillctl publish --revoke mein-skill \
 
 Against Git, use `--registry "$REG"` instead of `--registry self --er1-target …`.
 Revocation becomes another signed event under `events/<digesthex>/`, taking effect
-on the next pull as `gate 5: revoked`.
+on the next pull as `gate 5: revoked`, process exit `6`.
 
-Other machines enforce revocation on their next `verify --all`, exit `17`.
+Other machines learn about a Git registry revocation at their next `pull` or `verify --all`. Both
+verify the event against the pinned key and add the digest to a local set that only grows. From then
+on `verify-hook` denies the skill and `verify <name>` exits `17`. `verify --all` reports verdict `17`
+for the skill and exits `1`. Until that refresh the skill still loads, so run `verify --all` on a schedule.
 Revocation is signed and offline-verifiable; stale or rolled-back lists are
 rejected rather than silently trusted, exit `22`.
 

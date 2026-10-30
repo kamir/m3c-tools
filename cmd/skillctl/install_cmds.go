@@ -578,6 +578,10 @@ func verifySidecarTier(name, homeOverride, governanceMin string, verbose bool, s
 	if !ok {
 		return 0, false // no sidecar (or unreadable): not our tier
 	}
+	if installedDigestRevoked(home, canon) {
+		fmt.Fprintf(stderr, "%s: bundle revoked; a signed BundleRevokedEvent was read from its registry\n", name)
+		return exitBundleRevoked, true
+	}
 
 	opts := install.Opts{
 		Name:          name,
@@ -589,13 +593,7 @@ func verifySidecarTier(name, homeOverride, governanceMin string, verbose bool, s
 	}
 	// A pinned peer wins, exactly as in `pull`. Not fatal when absent: the file
 	// path below is the other legitimate carrier.
-	if peers, perr := registry.LoadPeers(peersConfigPath); perr == nil && side.Registry != "" {
-		if pe, ok := peers.FindPeerByLocator(side.Registry); ok {
-			if str, aerr := pe.AsTrustRoots(); aerr == nil {
-				opts.SelfTrustRoots = str
-			}
-		}
-	}
+	opts.SelfTrustRoots = peerRootsForInstalled(home, canon)
 
 	err := install.VerifyInstalledSidecar(opts)
 	if errors.Is(err, registry.ErrNoSidecar) {

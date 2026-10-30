@@ -130,7 +130,7 @@ func PullBundlesFromBackend(ctx context.Context, be artifact.Backend, tr *SelfTr
 		return nil, serr
 	}
 
-	res := &PullResult{}
+	res := &PullResult{Revoked: acc.RevokedDigests()}
 	for _, event := range admits {
 		name, _ := event["name"].(string)
 		ver, _ := event["version"].(string)

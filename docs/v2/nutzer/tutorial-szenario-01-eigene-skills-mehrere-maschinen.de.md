@@ -519,9 +519,13 @@ skillctl publish --revoke mein-skill \
 
 Gegen ein Git-Registry heisst dasselbe Kommando `--registry "$REG"` statt
 `--registry self --er1-target …`; der Widerruf wird als weiteres signiertes Ereignis unter
-`events/<digesthex>/` abgelegt und beim nächsten Pull als `gate 5: revoked` wirksam.
+`events/<digesthex>/` abgelegt und beim nächsten Pull als `gate 5: revoked` wirksam (Prozess-Exit `6`).
 
-Auf den anderen Maschinen greift der Widerruf beim nächsten `verify --all` (Exit `17`).
+Andere Maschinen erfahren von einem Widerruf im Git-Registry beim nächsten `pull` oder `verify --all`.
+Beide prüfen das Ereignis gegen den gepinnten Schlüssel und nehmen den Digest in einen lokalen Satz auf,
+der nur wächst. Ab dann verweigert `verify-hook` den Skill, und `verify <name>` endet mit `17`.
+`verify --all` meldet für den Skill das Urteil `17` und endet mit `1`. Bis zu dieser Aktualisierung lädt
+der Skill weiter; lassen Sie `verify --all` deshalb nach Zeitplan laufen.
 Der Widerruf ist signiert und offline prüfbar, und eine veraltete oder zurückgedrehte
 Widerrufsliste wird zurückgewiesen statt stillschweigend geglaubt (Exit `22`).
 
