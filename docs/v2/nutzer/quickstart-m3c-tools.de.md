@@ -31,7 +31,12 @@ curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f57
 irm https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/m3c-tools-install.ps1 | iex
 ```
 
-Die URLs sind auf einen unveränderlichen Commit gepinnt. Erwartete SHA-256-Werte: `tools/m3c-tools-install.sh` ist `709f6bd339c1feedcb1e2156348823341b1192ba3c139765e2fff8f5fddf67e7`; `tools/m3c-tools-install.ps1` ist `b54a562f17fe6c1c8cf34375e002a0286859359e421f397a6bf95065f7dd3339`. Die [README](../../../README.de.md#vor-dem-ausführen-prüfen) enthält eine Anleitung zum Prüfen vor dem Ausführen.
+Die URLs sind auf einen unveränderlichen Commit gepinnt. Erwartete SHA-256-Werte:
+
+- `tools/m3c-tools-install.sh`: `709f6bd339c1feedcb1e2156348823341b1192ba3c139765e2fff8f5fddf67e7`
+- `tools/m3c-tools-install.ps1`: `b54a562f17fe6c1c8cf34375e002a0286859359e421f397a6bf95065f7dd3339`
+
+Die [README](../../../README.de.md#vor-dem-ausführen-prüfen) enthält eine Anleitung zum Prüfen vor dem Ausführen.
 
 Prüfen Sie die Installation und holen Sie ein erstes Transkript. Dafür brauchen Sie kein Konto:
 
