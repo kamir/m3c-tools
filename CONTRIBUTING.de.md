@@ -10,6 +10,9 @@ Einrichtung, CI-Prüfungen und Konventionen, die beide Werkzeuge veröffentlichb
 - **Go 1.26.10+**.
 - Nur für die macOS-Menüleisten-GUI: `portaudio` und `ffmpeg` (cgo).
   Die CLIs einschließlich `skillctl` benötigen beides nicht.
+- Für `make ci`: `golangci-lint` und `python3` mit PyYAML (`python3 -m pip install pyyaml`). Der
+  Schritt `check-required-checks` endet ohne PyYAML mit `3`.
+- Für `make qa-all` zusätzlich `pytest` und `ruff`.
 
 ```bash
 git clone https://github.com/kamir/m3c-tools.git && cd m3c-tools

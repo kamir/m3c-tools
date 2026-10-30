@@ -896,6 +896,8 @@ Erfolgsmeldungen ab. Die menschenlesbare Standardausgabe bleibt erhalten. Der Si
 hat derzeit keinen maschinenlesbaren Vertrauensvertrag; `verify --json` lehnt diesen
 Fallback explizit ab. Der gesonderte Sweep `verify --all` hat den nachfolgend beschriebenen versionierten Inventarvertrag.
 
+**Git-Registries im Sweep.** `verify --all` liest zuerst die signierten Widerrufsereignisse aller Git-Registries, aus denen ein installierter Skill stammt, und nimmt geprüfte Digests in den lokalen Satz auf, der nur wächst. Ein widerrufener Skill bekommt das Urteil `17`; der Prozess endet mit `1`. Ein nicht lesbares Registry füllt `revocation_unavailable`, und der Sweep meldet keinen Erfolg.
+
 **`verify --all`: Flottenprüfung** (SPEC-0247 P0.2). `--all` wird *vor* dem
 Flag-Parsing erkannt und aktiviert einen anderen Flag-Satz: Alle installierten
 Skills prüfen, ein Urteil je Skill ausgeben und Fehlerfälle optional quarantänisieren
@@ -2358,6 +2360,8 @@ Kette nach SPEC-0188 §7 und gibt eine allow/deny-Entscheidung als JSON auf stdo
 aus. **Fail-closed**: Kann er das Ereignis nicht lesen oder prüfen, verweigert er.
 In Claude Code als Hook konfigurieren, **nicht manuell ausführen**. Interaktiver
 Aufruf erzeugt wegen unlesbarem stdin eine Verweigerung mit Exit `2`.
+
+**Git-Registries.** Der Hook liest kein Registry. Er verweigert einen Skill, dessen Digest im lokalen, nur wachsenden Satz steht, den `pull` und `verify --all` aus signierten Widerrufsereignissen füllen, mit `refusal_code` `17`. Ein Widerruf wirkt ab der nächsten Aktualisierung der Maschine.
 
 **Auch die Widerrufsaktualität wird verweigernd durchgesetzt (FR-0045 D4).**
 Zusätzlich zur Vertrauenskette erzwingt der Hook die Aktualitätsregeln nach

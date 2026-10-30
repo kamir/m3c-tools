@@ -122,11 +122,13 @@ func runVerifyAll(args []string, stdout, stderr io.Writer) (code int) {
 		sc.root = nil
 	}
 	pol := loadGatePolicy()
+	gitRefreshed, gitFailures := refreshGitRegistryRevocations(home, skillsDir, sweepClockFn())
 	revoked, fetchedOnline, revErr := sweepRevokedFn(home)
 	source := sweepRevocationSource(home, fetchedOnline, revErr)
 	if revErr != nil {
-		rep.RevocationUnavailable = revErr.Error()
+		gitFailures = append(gitFailures, revErr.Error())
 	}
+	rep.RevocationUnavailable = strings.Join(gitFailures, "; ")
 	gossip := loadGossipedRevoked(home)
 	for _, e := range entries {
 		name := e.Name()
@@ -138,7 +140,11 @@ func runVerifyAll(args []string, stdout, stderr io.Writer) (code int) {
 		if statErr == nil && !info.IsDir() {
 			continue
 		}
-		entry := newSweepEntry(name, source)
+		entrySource := source
+		if side, ok := loadInstalledSidecar(home, name); ok && gitRefreshed[side.Registry] {
+			entrySource = "online"
+		}
+		entry := newSweepEntry(name, entrySource)
 		if statErr != nil {
 			entry.Reason = "cannot inspect skill: " + statErr.Error()
 			rep.Entries = append(rep.Entries, entry)
@@ -305,6 +311,7 @@ func sweepVerifyOffline(name string, sc sweepCtx, pol gatePolicy) (sweepVerifica
 	if sc.registryURL != "" {
 		return sweepVerification{}, exitGeneric, errors.New("selected registry has no eligible offline metadata"), false
 	}
+	opts.SelfTrustRoots = peerRootsForInstalled(sc.home, name)
 	err := install.VerifyInstalledSidecar(opts)
 	if errors.Is(err, registry.ErrNoSidecar) {
 		return sweepVerification{}, exitGeneric, err, false

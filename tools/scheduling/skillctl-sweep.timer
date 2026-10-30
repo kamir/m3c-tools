@@ -1,11 +1,12 @@
-# SPEC-0247/SPEC-0251 §5: daily trigger for skillctl-sweep.service (systemd user timer).
+# SPEC-0247/SPEC-0251 §5: hourly trigger for skillctl-sweep.service (systemd user timer).
 # Install: cp to ~/.config/systemd/user/ ; systemctl --user enable --now skillctl-sweep.timer
 [Unit]
-Description=Daily skillctl revocation sweep
+Description=Hourly skillctl revocation sweep
 Documentation=https://github.com/kamir/m3c-tools
 
 [Timer]
-OnCalendar=daily
+OnBootSec=5min
+OnUnitActiveSec=1h
 # Run on next boot if the machine was off at the scheduled time.
 Persistent=true
 

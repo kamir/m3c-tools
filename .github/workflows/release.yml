@@ -120,10 +120,17 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           COMMIT="${GITHUB_SHA:0:8}"
           DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          # The same static PortAudio as amd64, so the binary starts without Homebrew.
           CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 \
+            CGO_CFLAGS="-I$(pwd)/lib/portaudio" \
+            CGO_LDFLAGS="-L$(pwd)/lib/portaudio -framework CoreAudio -framework AudioToolbox -framework AudioUnit -framework CoreFoundation -framework CoreServices" \
             go build \
               -ldflags="-s -w -X main.version=${VERSION} -X main.commit=${COMMIT} -X main.date=${DATE}" \
               -o m3c-tools-darwin-arm64 ./cmd/m3c-tools
+          if otool -L m3c-tools-darwin-arm64 | grep -q portaudio; then
+            echo "m3c-tools-darwin-arm64 links PortAudio dynamically" >&2
+            exit 1
+          fi
 
       # --- m3c-tools darwin/amd64 (cross-compile with universal PortAudio) ---
       - name: Build m3c-tools darwin/amd64
@@ -175,8 +182,9 @@ jobs:
       # --- Package ---
       - name: Package macOS binaries
         run: |
-          tar czf m3c-tools-darwin-arm64.tar.gz m3c-tools-darwin-arm64
-          tar czf m3c-tools-darwin-amd64.tar.gz m3c-tools-darwin-amd64
+          # One binary name in every archive: m3c-tools, as in the Linux archives.
+          tar czf m3c-tools-darwin-arm64.tar.gz -s '/^m3c-tools-darwin-arm64$/m3c-tools/' m3c-tools-darwin-arm64
+          tar czf m3c-tools-darwin-amd64.tar.gz -s '/^m3c-tools-darwin-amd64$/m3c-tools/' m3c-tools-darwin-amd64
           tar czf skillctl-darwin-arm64.tar.gz skillctl-darwin-arm64
           tar czf skillctl-darwin-amd64.tar.gz skillctl-darwin-amd64
           tar czf secretctl-darwin-arm64.tar.gz secretctl-darwin-arm64
@@ -348,6 +356,44 @@ jobs:
           retention-days: 7
           path: artifacts/checksums.txt
 
+  # 2b) FALLBACK SIGNATURE: the ed25519 signature for hosts without cosign, over the
+  #     same checksums.txt. The key is a secret of the release-signing environment,
+  #     which only accepts release tags. Runs no build step.
+  sign-fallback:
+    name: ed25519 fallback signature over checksums.txt
+    needs: [checksums]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: release-signing
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Download checksums.txt
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: product-checksums
+          path: sign
+      - name: Sign and verify against the pinned public key
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          set -euo pipefail
+          umask 077
+          key="$(mktemp)"
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$RELEASE_SIGNING_KEY" > "$key"
+          openssl pkeyutl -sign -inkey "$key" -rawin -in "sign/checksums.txt" -out "sign/checksums.txt.sig"
+          openssl pkeyutl -verify -pubin -inkey INFRA/skillctl-release.pub -rawin \
+            -in "sign/checksums.txt" -sigfile "sign/checksums.txt.sig"
+      - name: Upload signature
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: product-checksums-sig
+          if-no-files-found: error
+          retention-days: 7
+          path: sign/checksums.txt.sig
+
   # 2) COSIGN: keyless sign-blob of checksums.txt with the workflow's GitHub OIDC
   #    identity, verified in-job. Signing identity isolated to this job; runs NO
   #    build step. Mirrors the CLI channel's cosign job.
@@ -461,7 +507,7 @@ jobs:
     name: Create Draft Release (post-gate)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: [checksums, cosign, provenance, verify, sbom]
+    needs: [checksums, cosign, sign-fallback, provenance, verify, sbom]
     permissions:
       contents: write # create the GitHub Release + upload its assets
     steps:
@@ -470,6 +516,15 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+
+      - name: Download fallback signature
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: product-checksums-sig
+          path: artifacts
+
+      - name: Stage the pinned release key
+        run: cp INFRA/skillctl-release.pub artifacts/skillctl-release.pub
 
       - name: Download checksums.txt
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -533,5 +588,7 @@ jobs:
             artifacts/M3C-Tools-Setup.exe
             artifacts/checksums.txt
             artifacts/checksums.txt.cosign.bundle
+            artifacts/checksums.txt.sig
+            artifacts/skillctl-release.pub
             artifacts/${{ needs.provenance.outputs.provenance-name }}
             artifacts/m3c-tools.sbom.cdx.json

@@ -559,6 +559,12 @@ func runVerifyHook(stdin io.Reader, stdout, stderr io.Writer) (code int) {
 		}
 	}
 
+	if home != "" && installedDigestRevoked(home, skill) {
+		audReason = "revoked (BundleRevokedEvent)"
+		return emitDeny(stdout, stderr,
+			fmt.Sprintf("skillctl: BLOCKED '%s': bundle revoked (exit %d); a signed BundleRevokedEvent was read from its registry.", skill, exitBundleRevoked))
+	}
+
 	// SPEC-0279 R3 / FR-0045 D4: FRESHNESS FAIL-CLOSED. If the revocation snapshot
 	// is too stale to trust (per the trust-root max_staleness), refuse a high-risk
 	// skill invocation rather than run against a revocation list we can no longer
@@ -727,10 +733,11 @@ func verifyManagedOffline(name string, pol gatePolicy, home string) (int, string
 	// Tier 2: sidecar path (self/ER1 pull, SPEC-0225): content-binding +
 	// governance floor from .m3c-provenance.json.
 	sErr := install.VerifyInstalledSidecar(install.Opts{
-		Name:          name,
-		TrustRoot:     root,
-		HomeDir:       home,
-		GovernanceMin: pol.ManagedMinGovernance,
+		Name:           name,
+		TrustRoot:      root,
+		HomeDir:        home,
+		GovernanceMin:  pol.ManagedMinGovernance,
+		SelfTrustRoots: peerRootsForInstalled(home, name),
 	})
 	if errors.Is(sErr, registry.ErrNoSidecar) {
 		return 0, "", false // neither offline-meta nor sidecar → fall back to online

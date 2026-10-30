@@ -408,6 +408,14 @@ calls `golangci-lint run` directly (Makefile), so on a machine without it,
 [Prerequisites](../nutzer/prerequisites.md)) installs it at the version CI pins;
 installing by hand works too, the enforced config is `.golangci.yml`.
 
+**`make ci` also needs PyYAML.** The `check-required-checks` step exits `3` with
+`this gate needs python3 with PyYAML` when `import yaml` fails. Run
+`python3 -m pip install pyyaml`. `make qa-all` additionally needs `pytest` and `ruff`.
+
+**Dependency fixture tests skip without their fixture.** Tests that need a Python with
+`packaging` run only when `M3C_DEPENDENCY_TEST_PYTHON` holds its absolute path, and skip
+otherwise. CI always sets it.
+
 The documentation gates live in `./scripts/check-docs.sh` and block a release:
 
 | Gate | Binary | Binds |
