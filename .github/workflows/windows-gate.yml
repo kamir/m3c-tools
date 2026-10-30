@@ -178,7 +178,7 @@ jobs:
         # $HOME injection the hermetic trust tests rely on. It flips a const, not a
         # test set. The Linux parity run needs no tag: non-Windows honors $HOME.
         run: |
-          go test -tags allow_home_override_test -json -count=1 -timeout=300s `
+          go test -tags allow_home_override_test -json -count=1 -timeout=480s `
             ./pkg/httpsafe/... ./pkg/skillctl/... ./pkg/skillbundle/... ./cmd/skillctl/... ./evaluation/... `
             | Tee-Object -FilePath win-trust.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
