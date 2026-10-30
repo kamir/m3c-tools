@@ -31,8 +31,8 @@ remote push over HTTP, and the GitLab-specific adapter).
 
 ```bash
 docker compose -f deploy/testing/gitea/docker-compose.yml up -d
-# open http://localhost:3000 → create the admin user (first-run form)
-# then: Settings → Applications → generate a token (scopes: repo)
+docker exec -u git skillctl-gitea gitea admin user create --username qa --password '<password>' --email qa@example.invalid --admin --must-change-password=false
+docker exec -u git skillctl-gitea gitea admin user generate-access-token --username qa --scopes all --raw
 # create an empty repo, e.g. skills
 ```
 

@@ -13,7 +13,11 @@ import (
 
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifact"
 	"github.com/kamir/m3c-tools/pkg/skillctl/artifactauth"
+	"github.com/kamir/m3c-tools/pkg/skillctl/install"
+	"github.com/kamir/m3c-tools/pkg/skillctl/model"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
+	"github.com/kamir/m3c-tools/pkg/skillctl/scanner"
+	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
 )
 
 // gitRevocationReadTimeout bounds one registry read, because the sweep also runs at
@@ -138,4 +142,43 @@ func readGitRegistryRevokes(locator string, into map[string]struct{}) error {
 	}
 	unionVerifiedRevokes(page.Events, tr.PubKey(), into)
 	return nil
+}
+
+// annotateGitInstalls gives audit the verdict the verifier reaches for skills from a
+// git registry. Their governance lives in the signed attestation stash, not in the
+// frontmatter, and their integrity in the retained bundle, so the plain scan reported
+// a clean and a tampered install alike as below the governance minimum.
+func annotateGitInstalls(inv *model.Inventory, home string) {
+	for i := range inv.Skills {
+		sk := &inv.Skills[i]
+		side, ok := loadInstalledSidecar(home, sk.Name)
+		if !ok || !isGitRegistryLocator(side.Registry) {
+			continue
+		}
+		if sk.Bundle == nil {
+			sk.Bundle = &model.BundleAttestation{BundleDigest: side.BundleDigest}
+		}
+		if installedDigestRevoked(home, sk.Name) {
+			sk.Bundle.TrustChain = scanner.TrustBroken
+			sk.Bundle.VerifierExitCode = exitBundleRevoked
+			sk.Bundle.VerifierError = "revoked: a signed BundleRevokedEvent was read from its registry"
+			continue
+		}
+		err := install.VerifyInstalledSidecar(install.Opts{
+			Name:           sk.Name,
+			HomeDir:        home,
+			SelfTrustRoots: peerRootsForInstalled(home, sk.Name),
+		})
+		if err != nil {
+			sk.Bundle.TrustChain = scanner.TrustBroken
+			sk.Bundle.VerifierExitCode = verify.ExitCode(err)
+			sk.Bundle.VerifierError = err.Error()
+			continue
+		}
+		sk.Bundle.TrustChain = scanner.TrustSignaturePresent
+		if sk.Frontmatter == nil {
+			sk.Frontmatter = &model.Frontmatter{}
+		}
+		sk.Frontmatter.GovernanceLevel = side.GovernanceLevel
+	}
 }

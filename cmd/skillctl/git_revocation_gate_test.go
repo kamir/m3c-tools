@@ -280,3 +280,44 @@ func TestGitRevocation_UnreachableRegistryDoesNotDenyCleanSkill(t *testing.T) {
 		t.Fatalf("an unreachable registry must not read as revoked: %v", entry)
 	}
 }
+
+func (f *gitRevocationFixture) audit(t *testing.T) (int, map[string]any) {
+	t.Helper()
+	var out, errb bytes.Buffer
+	code := runAudit([]string{"--source", "all", "--minimum-governance", "green", "--format", "json"}, &out, &errb)
+	var rep map[string]any
+	if err := json.Unmarshal(out.Bytes(), &rep); err != nil {
+		t.Fatalf("audit output is not JSON: %v\n%s\n%s", err, out.String(), errb.String())
+	}
+	return code, rep
+}
+
+func TestGitInstallAuditTellsCleanFromTamperedAndRevoked(t *testing.T) {
+	for _, route := range gitRevocationRoutes {
+		t.Run(route, func(t *testing.T) {
+			f := newGitRevocationFixture(t, route)
+			if code, rep := f.audit(t); code != 0 {
+				t.Fatalf("clean install: audit exit %d, want 0: %v", code, rep)
+			}
+			skillMD := filepath.Join(f.home, ".claude", "skills", gitRevocationSkill, "SKILL.md")
+			clean, err := os.ReadFile(skillMD)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(skillMD, append(clean, []byte("smuggled\n")...), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if code, rep := f.audit(t); code != 3 {
+				t.Fatalf("tampered install: audit exit %d, want 3: %v", code, rep)
+			}
+			if err := os.WriteFile(skillMD, clean, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			f.revoke(t, f.priv)
+			f.pull(t, "--dry-run-install")
+			if code, rep := f.audit(t); code != 3 {
+				t.Fatalf("revoked install: audit exit %d, want 3: %v", code, rep)
+			}
+		})
+	}
+}
