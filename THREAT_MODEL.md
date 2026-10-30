@@ -147,11 +147,16 @@ must **not** be read as permission.
 **Mitigation.** Revocation is checked at every trust decision and fails closed: a revoked digest is
 refused by the verifier; the Claude Code gate denies a revoked bundle; the pull rejects a revoked
 bundle at the revocation gate ("gate 5"); an install against a revoked author identity exits `17`
-(`RevokeIdentityRevoked`) and names the revocation in stderr for audit correlation.
+(`RevokeIdentityRevoked`) and names the revocation in stderr for audit correlation. A git registry
+serves no revocation HEAD, so its signed revoke events reach the gate through a local grow-only set:
+`pull` and `verify --all` verify them against the pinned key and add them. A revocation takes effect
+on a machine at its next refresh, and a later deletion of the event does not undo it.
 
 **Covering tests.**
 - `TestVerifyBundle_RevokedDigest`: `cmd/skillctl/verify_bundle_test.go`
 - `TestVerifyHook_RevokedBundle_Denied`: `cmd/skillctl/revoked_cache_test.go`
+- `TestGitRevocation_PullFeedsGateAndVerify`: `cmd/skillctl/git_revocation_gate_test.go`
+- `TestGitRevocation_DeletedEventDoesNotUnrevoke`: `cmd/skillctl/git_revocation_gate_test.go`
 - `TestPullBundles_Revoked_RejectsAtGate5`: `pkg/skillctl/registry/er1_pull_test.go`
 - `TestInstall_RevokedAuthor_Exit17`: `cmd/skillctl/install_e2e_test.go`
 
