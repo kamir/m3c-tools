@@ -78,7 +78,17 @@ secrets:
 func inventar(t *testing.T, home, reg string, args ...string) *CLIResult {
 	t.Helper()
 	voll := append([]string{"inventory", "--registry", reg}, args...)
-	return RunTool(t, "secretctl", []string{"HOME=" + home}, voll...)
+	// A real gcloud detaches helpers that still write below HOME when t.TempDir
+	// cleans up, which failed these tests about one run in six (#436).
+	attrappe := filepath.Join(home, "attrappe")
+	if err := os.MkdirAll(attrappe, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(attrappe, "gcloud"), []byte("#!/bin/sh\nexit 1\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	pfad := attrappe + string(os.PathListSeparator) + os.Getenv("PATH")
+	return RunTool(t, "secretctl", []string{"HOME=" + home, "PATH=" + pfad}, voll...)
 }
 
 const gueltigeRollen = `    roles:
@@ -115,6 +125,9 @@ func TestE2E_InventarZeigtEinenFingerabdruck(t *testing.T) {
 	home, reg := registryMit(t, gueltigeRollen, "")
 	r := inventar(t, home, reg, "e2e-geheimnis")
 	AssertNotContains(t, r, derWert)
+	if _, err := os.Stat(filepath.Join(home, ".config", "gcloud")); err == nil {
+		t.Errorf("das Inventar hat ein echtes gcloud gestartet")
+	}
 	if !strings.Contains(r.Stdout, "FINGERABDRUCK") {
 		t.Fatalf("keine Fingerabdruckspalte:\n%s", r.Stdout)
 	}
