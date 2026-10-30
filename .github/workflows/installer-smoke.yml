@@ -25,15 +25,15 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      # v2.12.0 links PortAudio dynamically. Drop portaudio here once the newest release
-      # is built statically, so this job proves a machine without Homebrew packages.
-      - name: Install cosign and PortAudio
-        run: brew install cosign portaudio
+      - name: Install cosign
+        run: brew install cosign
       - name: m3c-tools
         run: |
           set -euo pipefail
           INSTALL_DIR="$RUNNER_TEMP/bin" bash tools/m3c-tools-install.sh
           "$RUNNER_TEMP/bin/m3c-tools" version
+          # This job proves the binary starts without Homebrew PortAudio.
+          if otool -L "$RUNNER_TEMP/bin/m3c-tools" | grep -q portaudio; then exit 1; fi
       - name: skillctl and its service
         run: |
           set -euo pipefail
