@@ -121,9 +121,7 @@ echo "$DIGEST"
 > `--digest` bei `publish` und `revoke`, das Argument von `attest`), ist **der von `sign`**.
 > Der von `pack` ist der Manifest-Digest.
 
-Die Variable `$DIGEST` oben hält genau diesen Wert fest, und `sign` ist idempotent: ein
-zweiter Lauf über dieselben Bytes schreibt dieselbe Signatur, Sie können den Block also
-gefahrlos wiederholen.
+Die Variable `$DIGEST` oben hält genau diesen Wert fest, und Signieren Sie nur einmal: Ein zweites `sign` derselben Bytes verweigert das Überschreiben der Signatur. Um den Block zu wiederholen, löschen Sie zuerst die Datei `.author.sig`.
 
 ### A4. Sofort selbst gegenprüfen
 

@@ -137,8 +137,8 @@
     {
       "de": "docs/v2/nutzer/quickstart-skillctl.de.md",
       "en": "docs/v2/nutzer/quickstart-skillctl.md",
-      "de_sha256": "e4ae547049afa0722f950129e0e919e14431619d66a76460eba67ddeada94143",
-      "en_sha256": "8259095423dc6a476d12f432781b716b33686735bc8607d832f3d970b05192d2"
+      "de_sha256": "7c9e226c9f435d4ff357a3e175fedc66b6489c4d7138a10ed6598c3e072ec791",
+      "en_sha256": "d6d2079d675d02db29d4fe16b7cb6325d7f1b217eeee7a05a5d36259b3c5cf51"
     },
     {
       "de": "docs/v2/nutzer/tutorial-katas-und-test-ride.de.md",
@@ -149,8 +149,8 @@
     {
       "de": "docs/v2/nutzer/tutorial-szenario-01-eigene-skills-mehrere-maschinen.de.md",
       "en": "docs/v2/nutzer/tutorial-szenario-01-eigene-skills-mehrere-maschinen.en.md",
-      "de_sha256": "eee8421223ab075a64aa358be7df9ca84a480833fbd19f83e1c1879410412f6f",
-      "en_sha256": "a9481d3cf4c9d5d67e75bb118107e065b92aaba96ad421910d8ee6ad6a2d5c9d"
+      "de_sha256": "c878c4c91941b3ebe3aefed7d5d944f9d82ce3467b50618ca84d1bd5fd8b4136",
+      "en_sha256": "ef6f493261a57952a393f5a7072c25ebaefb2d003e0ce5c7dc38de83c56613e6"
     },
     {
       "de": "docs/v2/nutzer/tutorial-szenario-02-erster-signierter-skill.de.md",
