@@ -12,16 +12,12 @@
     <string>/usr/local/bin/skillctl</string>
     <string>verify</string>
     <string>--all</string>
-    <string>--quarantine</string>
     <string>--json</string>
   </array>
   <key>RunAtLoad</key>
   <true/>
-  <key>StartCalendarInterval</key>
-  <dict>
-    <key>Hour</key><integer>9</integer>
-    <key>Minute</key><integer>0</integer>
-  </dict>
+  <key>StartInterval</key>
+  <integer>3600</integer>
   <key>StandardOutPath</key>
   <string>/tmp/skillctl-sweep.out.log</string>
   <key>StandardErrorPath</key>

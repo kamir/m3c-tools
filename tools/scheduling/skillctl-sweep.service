@@ -7,6 +7,6 @@ Documentation=https://github.com/kamir/m3c-tools
 
 [Service]
 Type=oneshot
-ExecStart=%h/.local/bin/skillctl verify --all --quarantine --json
+ExecStart=%h/.local/bin/skillctl verify --all --json
 # Best-effort: a failed sweep must not spam the journal as a hard failure.
 SuccessExitStatus=0 2

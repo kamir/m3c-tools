@@ -5,33 +5,27 @@
 #
 # Portable across macOS (shasum) and Linux (sha256sum). Requires: curl, openssl.
 #
+# Registers a user-level hourly service that keeps the local revocation list current
+# (launchd or a systemd user timer). No admin rights. Set SKILLCTL_NO_SERVICE=1 to skip.
+#
 # Usage:
 #   curl -fsSL .../install.sh | RELEASE_BASE=.../releases/download/skillctl/v0.2.1 bash
 #   curl -fsSL .../install.sh | INSTALL_DIR=$HOME/.local/bin bash
+#   curl -fsSL .../install.sh | SKILLCTL_NO_SERVICE=1 bash
 set -euo pipefail
 
 # SEC: an env-supplied release base relaxes the trust anchor. Honor it (legitimate
 # for testing) but warn loudly so a poisoned environment can't silently repoint us.
 [ -n "${RELEASE_BASE:-}" ] && echo "WARNING: RELEASE_BASE overrides the default release origin (${RELEASE_BASE})" >&2
 
-# Die Vorgabe ist KEINE feste Marke mehr, sondern die neueste veroeffentlichte.
+# The default is the newest published release, not a fixed tag. A fixed tag needed a
+# manual bump on every release, and the documented line once installed the previous
+# version without saying so. The trust chain still rests on EXPECTED_FP below and on
+# the check of SHA256SUMS.
 #
-# Warum: hier stand eine Marke, die bei jedem Release jemand von Hand heben
-# musste. Am 2026-09-16 stand sie auf v0.4.0, waehrend v0.5.0 seit sechs Tagen
-# veroeffentlicht war. Die Folge war messbar: v0.3.1 hatte 61 Windows-Bezuege,
-# v0.4.0 noch 27, v0.5.0 null. Wer die dokumentierte Zeile benutzte, bekam die
-# vorletzte Fassung, ohne dass irgendetwas davon berichtete.
-#
-# Was das NICHT schwaecht: die Vertrauenskette haengt an EXPECTED_FP weiter
-# unten, dem gepinnten Schluessel-Fingerabdruck, und an der Pruefung von
-# SHA256SUMS. Beide bleiben unveraendert. Offen bleibt allein, WELCHE Fassung
-# kommt, und das ist der bewusst getauschte Preis (Entscheidung 2026-09-16).
-#
-# Aufgeloest wird ueber den Atom-Feed der Releases: er braucht keinen Schluessel,
-# unterliegt keiner Ratenbegrenzung und kommt ohne jq aus, das dieses Skript
-# sonst voraussetzen muesste. Die GitHub-Abkuerzung /releases/latest taugt hier
-# NICHT: sie liefert das neueste Release des ganzen Repos, und das ist oft ein
-# Produkt-Release wie v2.12.0 und kein skillctl.
+# The tag comes from the release feed, which needs no key and no jq. The
+# /releases/latest shortcut is not usable: it names the newest release of the whole
+# repository, and that is often a product release such as v2.12.0.
 neueste_skillctl_marke() {
   curl -fsSL --max-time 20 "https://github.com/kamir/m3c-tools/releases.atom" 2>/dev/null \
     | grep -oE 'releases/tag/skillctl%2Fv[0-9][^"<]*' \
@@ -42,16 +36,15 @@ neueste_skillctl_marke() {
 if [ -z "${RELEASE_BASE:-}" ]; then
   marke="$(neueste_skillctl_marke || true)"
   if [ -z "$marke" ]; then
-    # Fail closed, und zwar mit Absicht: still auf eine alte Marke
-    # zurueckzufallen waere genau der Fehler, den diese Aenderung abstellt.
-    echo "skillctl-install: konnte die neueste Fassung nicht ermitteln." >&2
-    echo "  Kein Netz, oder github.com ist von hier nicht erreichbar." >&2
-    echo "  Gib die gewuenschte Fassung ausdruecklich an, zum Beispiel:" >&2
+    # Fail closed: silently falling back to an old tag is the defect this replaced.
+    echo "skillctl-install: could not determine the newest release." >&2
+    echo "  No network, or github.com is not reachable from here." >&2
+    echo "  Name a release explicitly, for example:" >&2
     echo "    RELEASE_BASE=https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.5.1 bash" >&2
     exit 1
   fi
   RELEASE_BASE="https://github.com/kamir/m3c-tools/releases/download/${marke}"
-  echo "skillctl-install: neueste Fassung ist ${marke}" >&2
+  echo "skillctl-install: newest release is ${marke}" >&2
 fi
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 
@@ -213,4 +206,70 @@ mv "$tmp/$asset" "$INSTALL_DIR/skillctl${ext}"
 echo "Installed: $INSTALL_DIR/skillctl${ext}"
 echo
 "$INSTALL_DIR/skillctl${ext}" version 2>/dev/null || true
+
+# The sweep reads the signed revoke events of the registries installed skills came
+# from. It never quarantines: the gate already denies a revoked skill.
+install_launchd_service() {
+  local plist="$HOME/Library/LaunchAgents/guide.m3c.skillctl-sweep.plist"
+  mkdir -p "$(dirname "$plist")" "$HOME/.claude/skillctl"
+  cat > "$plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>guide.m3c.skillctl-sweep</string>
+  <key>ProgramArguments</key><array>
+    <string>$INSTALL_DIR/skillctl</string><string>verify</string><string>--all</string><string>--json</string>
+  </array>
+  <key>StartInterval</key><integer>3600</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>$HOME/.claude/skillctl/sweep.log</string>
+  <key>StandardErrorPath</key><string>$HOME/.claude/skillctl/sweep.log</string>
+</dict></plist>
+PLIST
+  launchctl bootout "gui/$(id -u)/guide.m3c.skillctl-sweep" 2>/dev/null || true
+  launchctl bootstrap "gui/$(id -u)" "$plist"
+}
+
+install_systemd_service() {
+  local dir="$HOME/.config/systemd/user"
+  mkdir -p "$dir" "$HOME/.claude/skillctl"
+  cat > "$dir/skillctl-sweep.service" <<UNIT
+[Unit]
+Description=skillctl revocation sweep
+[Service]
+Type=oneshot
+ExecStart=$INSTALL_DIR/skillctl verify --all --json
+StandardOutput=append:$HOME/.claude/skillctl/sweep.log
+StandardError=append:$HOME/.claude/skillctl/sweep.log
+UNIT
+  cat > "$dir/skillctl-sweep.timer" <<UNIT
+[Unit]
+Description=Hourly skillctl revocation sweep
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=1h
+Persistent=true
+[Install]
+WantedBy=timers.target
+UNIT
+  systemctl --user daemon-reload && systemctl --user enable --now skillctl-sweep.timer
+}
+
+echo
+if [ "${SKILLCTL_NO_SERVICE:-0}" = "1" ]; then
+  echo "Revocation service: skipped (SKILLCTL_NO_SERVICE=1). Revocations then arrive only with pull or verify --all."
+else
+  case "$os" in
+    darwin) svc=install_launchd_service ;;
+    linux) svc=install_systemd_service ;;
+    *) svc="" ;;
+  esac
+  if [ -n "$svc" ] && "$svc" >/dev/null 2>&1; then
+    echo "Revocation service: installed. It runs 'skillctl verify --all --json' every hour; log in ~/.claude/skillctl/sweep.log."
+    echo "  It reads the registries your installed skills came from. Skip it with SKILLCTL_NO_SERVICE=1."
+  else
+    echo "WARNING: the revocation service could not be installed on this machine." >&2
+    echo "  Revocations arrive only with pull or verify --all. See tools/scheduling/README.md." >&2
+  fi
+fi
 echo "Next: add $INSTALL_DIR to PATH, then: skillctl --help"

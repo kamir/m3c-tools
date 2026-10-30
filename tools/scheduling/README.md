@@ -14,10 +14,12 @@ long-lived or headless machines that rarely start a fresh Claude Code session.
 > enforced after the next **online** sweep/verify. The local timer closes that
 > window on a schedule; it does not make revocation instantaneous.
 
+The skillctl installers register this sweep as an hourly user-level service. These sample units are for machines where you skip that with `SKILLCTL_NO_SERVICE=1` and set it up yourself.
+
 All recipes run the same command and log JSON to `~/.claude/skillctl/`:
 
 ```
-skillctl verify --all --quarantine --json
+skillctl verify --all --json
 ```
 
 The sample files below are **inert until you install them**: review, edit the
@@ -40,7 +42,7 @@ must preserve and report nonzero outcomes rather than interpret them as successf
 # 2. Install + load:
 cp tools/scheduling/guide.m3c.skillctl-sweep.plist ~/Library/LaunchAgents/
 launchctl load -w ~/Library/LaunchAgents/guide.m3c.skillctl-sweep.plist
-# Runs daily + once at load. Disable: launchctl unload -w ~/Library/LaunchAgents/guide.m3c.skillctl-sweep.plist
+# Runs hourly + once at load. Disable: launchctl unload -w ~/Library/LaunchAgents/guide.m3c.skillctl-sweep.plist
 ```
 
 ## Linux: systemd timer (per-user)
@@ -51,22 +53,22 @@ mkdir -p ~/.config/systemd/user
 cp tools/scheduling/skillctl-sweep.service tools/scheduling/skillctl-sweep.timer ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user enable --now skillctl-sweep.timer
-# OnCalendar=daily, Persistent=true (runs on next boot if a run was missed).
+# OnUnitActiveSec=1h, Persistent=true (runs on next boot if a run was missed).
 # Status: systemctl --user list-timers skillctl-sweep.timer
 ```
 
 ### cron fallback (any POSIX)
 
 ```cron
-# ~/crontab: daily at 09:00; adjust the skillctl path.
-0 9 * * *  $HOME/.local/bin/skillctl verify --all --quarantine --json >> $HOME/.claude/skillctl/sweep.log 2>&1
+# ~/crontab: hourly; adjust the skillctl path.
+0 * * * *  $HOME/.local/bin/skillctl verify --all --json >> $HOME/.claude/skillctl/sweep.log 2>&1
 ```
 
 ## Windows: Task Scheduler
 
 ```powershell
-# Edit the path to skillctl.exe, then register a daily task:
-schtasks /create /tn "skillctl-sweep" /sc DAILY /st 09:00 ^
-  /tr "C:\Users\%USERNAME%\.local\bin\skillctl.exe verify --all --quarantine --json"
+# Edit the path to skillctl.exe, then register an hourly task:
+schtasks /create /tn "skillctl-sweep" /sc HOURLY ^
+  /tr "C:\Users\%USERNAME%\.local\bin\skillctl.exe verify --all --json"
 # Remove: schtasks /delete /tn "skillctl-sweep" /f
 ```
