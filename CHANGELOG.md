@@ -26,6 +26,28 @@ version is ldflags-stamped (`skillctl version`). Release tags: `skillctl/vX.Y.Z`
 - The installers register an hourly user-level service that runs `skillctl verify --all --json`. `SKILLCTL_NO_SERVICE=1` skips it.
 - The release workflow signs the ed25519 fallback `SHA256SUMS.sig`.
 
+## [skillctl/v0.6.3], 2026-10-30, audit tells clean from broken on Git installs
+
+### Fixed
+- **`skillctl audit` tells a clean Git install from a broken one.** Before, a clean and
+  a tampered install both reported below minimum with exit 2. A clean install now exits
+  0. A tampered or revoked install exits 2 and names the broken trust chain.
+
+## [skillctl/v0.6.2], 2026-10-30, one installer per tool and revocation handling
+
+### Added
+- `tools/skillctl-install.sh` and `.ps1` register a user-level hourly service that runs
+  `verify --all`. `SKILLCTL_NO_SERVICE=1` skips it.
+- `trust fingerprint --b64` prints the raw public key for `peer add`, so no OpenSSL
+  ed25519 support is needed. LibreSSL on stock macOS has none.
+- `SHA256SUMS.sig` is signed in the release workflow, so the installer works without
+  cosign.
+
+### Fixed
+- Revocation handling at the gate for Git registries.
+- The dependency fixture test skips when no fixture is selected, and the enterprise gate
+  provisions the fixture.
+
 ## [skillctl/v0.6.1], 2026-09-25, a report you can hand to a person, and a path that was inside /usr all along
 7 commits after `skillctl/v0.6.0`, plus this entry.
 
