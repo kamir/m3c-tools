@@ -1,0 +1,62 @@
+name: Installer smoke
+
+# Runs the installers as a new user would, on hosted runners, and starts the result.
+# On macOS and Windows it also proves that the revocation service registers.
+
+on:
+  pull_request:
+    paths:
+      - "tools/m3c-tools-install.*"
+      - "tools/skillctl-install.*"
+      - ".github/workflows/installer-smoke.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: installer-smoke-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  unix:
+    name: Installers (macos-latest)
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Install cosign
+        run: brew install cosign
+      - name: m3c-tools
+        run: |
+          set -euo pipefail
+          INSTALL_DIR="$RUNNER_TEMP/bin" bash tools/m3c-tools-install.sh
+          "$RUNNER_TEMP/bin/m3c-tools" version
+      - name: skillctl and its service
+        run: |
+          set -euo pipefail
+          INSTALL_DIR="$RUNNER_TEMP/bin" bash tools/skillctl-install.sh | tee install.log
+          "$RUNNER_TEMP/bin/skillctl" version
+          grep -q 'Revocation service: installed' install.log
+          launchctl print "gui/$(id -u)/guide.m3c.skillctl-sweep" >/dev/null
+
+  windows:
+    name: Installers (windows-latest)
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: m3c-tools
+        shell: pwsh
+        run: |
+          ./tools/m3c-tools-install.ps1 -InstallDir "$env:RUNNER_TEMP\bin"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & "$env:RUNNER_TEMP\bin\m3c-tools.exe" version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: skillctl and its service
+        shell: pwsh
+        run: |
+          ./tools/skillctl-install.ps1 -InstallDir "$env:RUNNER_TEMP\bin"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          schtasks /Query /TN skillctl-sweep
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
