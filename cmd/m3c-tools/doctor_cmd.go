@@ -23,7 +23,31 @@ import (
 	"github.com/kamir/m3c-tools/pkg/plaud"
 )
 
+// er1Unconfigured reports an install that was never connected to ER1: no profile,
+// no env file, no key and no URL. That is a valid state, not a failed check.
+func er1Unconfigured() bool {
+	if config.NewProfileManager().ActiveProfileName() != "" {
+		return false
+	}
+	if _, err := os.Stat(config.LegacyPreferencesPath()); err == nil {
+		return false
+	}
+	if _, err := os.Stat(config.PreferencesPath()); err == nil {
+		return false
+	}
+	if auth.HasStoredToken() {
+		return false
+	}
+	return os.Getenv("ER1_API_URL") == "" && os.Getenv("ER1_API_KEY") == "" && os.Getenv("ER1_DEVICE_TOKEN") == ""
+}
+
 func cmdDoctor() {
+	if er1Unconfigured() {
+		fmt.Println("m3c-tools doctor: ER1 is not configured.")
+		fmt.Println("  Works without it: transcript, whisper.")
+		fmt.Println("  For uploads, run: m3c-tools setup")
+		return
+	}
 	report := diag.Report{}
 
 	report.Sections = append(report.Sections, doctorProfile())
@@ -47,8 +71,15 @@ func doctorProfile() diag.Section {
 	pm := config.NewProfileManager()
 	name := pm.ActiveProfileName()
 	if name == "" {
+		if _, err := os.Stat(config.LegacyPreferencesPath()); err == nil {
+			s.Checks = append(s.Checks, diag.Check{
+				Name: "Active profile", Status: diag.OK, Detail: "none; using ~/.m3c-tools.env",
+			})
+			return s
+		}
 		s.Checks = append(s.Checks, diag.Check{
-			Name: "Active profile", Status: diag.Fail, Detail: "no active profile: run 'm3c-tools config switch <name>'",
+			Name: "Active profile", Status: diag.Warn,
+			Detail: "ER1 not configured. transcript and whisper work without it; run 'm3c-tools setup' for uploads",
 		})
 		return s
 	}

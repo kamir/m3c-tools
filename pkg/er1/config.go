@@ -146,7 +146,9 @@ func LoadConfig() *Config {
 	// fallback below runs regardless of the device token.
 	deviceToken := hasDeviceTokenAuth()
 	if config.IsBlockingPlaceholder(cfg.APIKey, cfg.APIURL) {
-		if !deviceToken {
+		// An empty key is not a placeholder somebody forgot to replace, only an
+		// unconfigured install; the warning below covers it.
+		if !deviceToken && cfg.APIKey != "" {
 			placeholderFatalOnce.Do(func() {
 				// SEC (go/clear-text-logging): the value is a KNOWN placeholder
 				// here, never a live secret, but that redaction then depends on
