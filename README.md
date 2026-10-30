@@ -208,7 +208,7 @@ that cannot say what it breaks is not a plan.
 
 **Command surface:** `inventory`, `verify`. The writing half (`new`, `stage`,
 `distribute`, `retire`) is deliberately not built yet; those verbs exit 2 and say so.
-`secretctl` ships with each m3c-tools release from v2.13.0 on; `make build-secretctl`
+`secretctl` ships with each m3c-tools release from v2.13.1 on; `make build-secretctl`
 builds it from source.
 See the [secretctl reference](docs/v2/entwickler/secretctl.md).
 
