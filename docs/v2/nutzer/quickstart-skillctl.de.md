@@ -32,7 +32,7 @@ Die **Einzeilen-Installer** laden das passende Binary, **prüfen cosign-Provenan
 
 **Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/kamir/m3c-tools/6f517440e7edf64c74f0f625a46291769d086f98/tools/skillctl-install.ps1 | iex
+irm https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/skillctl-install.ps1 | iex
 ```
 
 Installiert nach `%LOCALAPPDATA%\Programs\skillctl`, nach Prüfung von cosign-Provenance
@@ -43,17 +43,17 @@ Varianten** verwenden, damit nicht zwei `skillctl.exe` in Ihrem `PATH` liegen.
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/6f517440e7edf64c74f0f625a46291769d086f98/tools/skillctl-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/skillctl-install.sh | bash
 ```
 
 Zielverzeichnis oder Release mit `INSTALL_DIR=…` beziehungsweise `RELEASE_BASE=…` überschreiben.
 
 **Integrität des Bootstraps.** Die Einzeiler-URLs sind auf den **unveränderlichen Commit
-`6f51744`** gepinnt, statt auf den veränderlichen Branch `master`, auf dem eine Umschreibung
+`953dd07`** gepinnt, statt auf den veränderlichen Branch `master`, auf dem eine Umschreibung
 Bootstrap-Skript und alle darin enthaltenen Pins gleichzeitig austauschen könnte.
 Die heruntergeladenen Bytes vor dem Vertrauen unabhängig prüfen. Erwartete SHA-256:
-`tools/skillctl-install.ps1` → `a00826f30599439718f5ea126f81b8a78b4c28aa96980e1b136db65396a34177`;
-`tools/skillctl-install.sh` → `dea4b86b78d20eeff28524240034efcb0c96c35016238434a8e7c97c7278dabc`.
+`tools/skillctl-install.ps1` → `a85f73ba04d279033d1bfad348f71931297df06511c75c9313bde1eb2883ed2b`;
+`tools/skillctl-install.sh` → `a013791fbe2ae90a109e98c26cca88874348e3aa7d4164832dc8d52bddf5a2b8`.
 Der [Installationsabschnitt der README](../../../README.md#install) enthält eine kopierbare
 Anleitung zum Prüfen vor Ausführung. Bei jedem neuen signierten Release gepinnten
 Commit **und** diese Hashwerte gemeinsam aktualisieren.
