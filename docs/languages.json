@@ -71,8 +71,8 @@
     {
       "de": "docs/v2/entwickler/getting-started.de.md",
       "en": "docs/v2/entwickler/getting-started.md",
-      "de_sha256": "fd3930f652c8af5f082088ca73599c377d8a908f1822140f9690e721b7445bc6",
-      "en_sha256": "9dec8252796a31f0e3aef6bbf47a5128ac3151057198be9bda49c32ab4def37b"
+      "de_sha256": "2311be7d918469f6692abf3d1d1f6207ed3e6f3148102d082fb115689b9435ac",
+      "en_sha256": "6a8ca1faee74c910a697a6061f62e1e2ce24be8769db6e944e0f85aba744bbe6"
     },
     {
       "de": "docs/v2/entwickler/secretctl.de.md",
@@ -221,8 +221,8 @@
     {
       "de": "CONTRIBUTING.de.md",
       "en": "CONTRIBUTING.md",
-      "de_sha256": "963f91fade3eb735ca90098edd8cd52d7dce0ebccbe78fb875697240e50db56e",
-      "en_sha256": "2c23f15d00597783dd69c07b4df3804979c751d8ca05bb4b05013dfb5de18314"
+      "de_sha256": "22095966b5c583ec441fbfcea1d455f27250e96b68c233207f994f478d841d15",
+      "en_sha256": "3df61bcfecc3eb9db111361f7d83da439b5b32d09a4bc3d124e10991074c7a65"
     },
     {
       "de": "CONTENT-TOPOLOGY.de.md",

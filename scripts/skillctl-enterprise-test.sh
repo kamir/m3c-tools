@@ -237,6 +237,20 @@ run_gate "prose"    ./scripts/check-no-emdash.sh
 run_gate "pins"     ./scripts/check-install-pins.sh
 run_gate "boundary" ./tools/boundary-gate.sh
 
+# --- dependency fixture ------------------------------------------------------
+# The dependency tests need a Python with packaging, and the coverage ratchet counts
+# them. CI provisions one; do the same here unless the caller already selected one.
+if [ -z "${M3C_DEPENDENCY_TEST_PYTHON:-}" ]; then
+  fixture_dir="$(mktemp -d)/python"
+  if python3 -m venv "$fixture_dir" >/dev/null 2>&1 \
+     && "$fixture_dir/bin/python" -m pip install --quiet packaging >/dev/null 2>&1; then
+    export M3C_DEPENDENCY_TEST_PYTHON="$fixture_dir/bin/python"
+    echo "  dependency fixture: created a temporary Python with packaging"
+  else
+    echo "  dependency fixture: could not create one; the coverage ratchet will fall short"
+  fi
+fi
+
 # --- 9. coverage ratchet ----------------------------------------------------
 # .testcoverage.yml reads `profile: cover.out` at the repo root. *.out is
 # git-ignored, and it is removed again below.
