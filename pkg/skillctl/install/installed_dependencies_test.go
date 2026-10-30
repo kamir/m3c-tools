@@ -404,7 +404,10 @@ func TestInstalledSkillNoProvisioningOrIgnoreBypass(t *testing.T) {
 func TestInstalledSkillGraphSelectedRuntime(t *testing.T) {
 	home := snapshotTestHome(t)
 	base := os.Getenv("M3C_DEPENDENCY_TEST_PYTHON")
-	if base == "" || !filepath.IsAbs(base) {
+	if base == "" {
+		t.Skip("explicit fixture Python with packaging not selected")
+	}
+	if !filepath.IsAbs(base) {
 		t.Fatal("explicit absolute fixture Python with packaging is required")
 	}
 	script := `

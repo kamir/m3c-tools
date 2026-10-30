@@ -114,6 +114,14 @@ stoppt `make ci` beim zweiten Schritt. Das Stage-2-Skript
 festgelegte Version; manuelle Installation geht ebenfalls. Die verbindliche
 Konfiguration ist `.golangci.yml`.
 
+**`make ci` braucht auch PyYAML.** Der Schritt `check-required-checks` endet mit `3` und
+`this gate needs python3 with PyYAML`, wenn `import yaml` scheitert. Führen Sie
+`python3 -m pip install pyyaml` aus. `make qa-all` braucht zusätzlich `pytest` und `ruff`.
+
+**Tests mit Abhängigkeits-Fixture werden ohne Fixture übersprungen.** Tests, die ein Python mit
+`packaging` brauchen, laufen nur, wenn `M3C_DEPENDENCY_TEST_PYTHON` dessen absoluten Pfad enthält,
+und werden sonst übersprungen. Die CI setzt die Variable immer.
+
 Die Dokumentations-Gates liegen in `./scripts/check-docs.sh` und blockieren Releases:
 
 | Gate | Binary | Prüft |
