@@ -459,6 +459,12 @@ func fetchRevokedOnline(home string) (map[string]struct{}, bool, error) {
 		// fail-closed rule). Fail CLOSED (grace-bounded) rather than fetch/verify.
 		return revokedUnavailableUnderManaged(home)
 	}
+	if isGitRegistryLocator(tr.Registry) {
+		// A git registry has no ER1 revocation authority to fetch; its signed events
+		// reach the durable set through pull and the sweep.
+		cached, _ := readRevokedCache(home, revokedCacheTTL)
+		return cached, false, nil
+	}
 	// MANAGED + valid pinned key from here: a fetch failure must fail CLOSED (bounded
 	// by the AUTHENTICATED grace window) rather than degrade to an empty/stale set.
 	cfg, err := resolveER1Config(envOr("ER1_TARGET", "prod"))

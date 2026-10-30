@@ -149,8 +149,8 @@
     {
       "de": "docs/v2/nutzer/tutorial-szenario-01-eigene-skills-mehrere-maschinen.de.md",
       "en": "docs/v2/nutzer/tutorial-szenario-01-eigene-skills-mehrere-maschinen.en.md",
-      "de_sha256": "22f77dbbe5940e6bf93a269858343201d276427b4a3811e31598856599e2a1c3",
-      "en_sha256": "dfda685bd0774f1b7a1b47afe3ffc1eaefdad35ee45135a01148686316e2f742"
+      "de_sha256": "dbf05606464a44e122521777ca7eaa3adb75ff7e3a68615e7e9678ba45f87467",
+      "en_sha256": "372142b1fecb56d6650faf596132f3e29676ed9119200e8f3493bce657722a05"
     },
     {
       "de": "docs/v2/nutzer/tutorial-szenario-02-erster-signierter-skill.de.md",
@@ -179,8 +179,8 @@
     {
       "de": "docs/v2/referenz/manual-skillctl.de.md",
       "en": "docs/v2/referenz/manual-skillctl.md",
-      "de_sha256": "e22ca87808e07804cd09c3208be2b51cd0c69363bc85a0f9d13fc41c92de143e",
-      "en_sha256": "f92fcd7605e83898055cca2c834210bea85a1cc810520d772554452d772a34af"
+      "de_sha256": "58fa22864df515dde438c6756d46a46eb12bf352bcd4d1b459f280b9679962a7",
+      "en_sha256": "038f1db4be2e72aa624d253908e09e5c3642b58e8aee8255acc33819b7bdb565"
     },
     {
       "de": "docs/v2/sicherheit/audit-spur.de.md",
@@ -209,8 +209,8 @@
     {
       "de": "THREAT_MODEL.de.md",
       "en": "THREAT_MODEL.md",
-      "de_sha256": "9919998c7a9b297ceedae00d798deaa8e7791f6b26a0465894da3f77297a3c5b",
-      "en_sha256": "05dcc842405ffaf1c189ed23d906f28e28938d821deb84426002532d5898231c"
+      "de_sha256": "c1664cb72ea4b3050dfc006c7db8c7c027b6f5fc9ab1e59d11f6cc56a807969a",
+      "en_sha256": "d01c04c3f9be46dcfd4c9bb4be720d0e8e6e3e2abefe61e1540e7e060f3e5570"
     },
     {
       "de": "COMPATIBILITY.de.md",

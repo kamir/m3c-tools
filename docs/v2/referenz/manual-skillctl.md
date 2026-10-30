@@ -830,6 +830,8 @@ rejects malformed, incomplete or contradictory success results. The human defaul
 remains unchanged. Sidecar-tier verification currently has no machine trust contract;
 `verify --json` rejects that fallback explicitly. The separate `verify --all` sweep has the versioned inventory contract described below.
 
+**Git registries in the sweep.** `verify --all` first reads the signed revoke events of every git registry an installed skill came from, and adds verified digests to the local grow-only set. A revoked skill gets verdict `17`; the process exits `1`. A registry that cannot be read fills `revocation_unavailable`, and the sweep does not report success.
+
 **`verify --all`: the fleet sweep** (SPEC-0247 P0.2). `--all` is detected *before* flag
 parsing and switches to a different flag set, because the sweep is a different job: verify
 every installed skill, report one verdict per skill, and optionally quarantine the failures.
@@ -2142,6 +2144,8 @@ chain, and emits an allow/deny decision as JSON on stdout. **Fail-closed**: if i
 or verify the event, it denies. Wire it in your Claude Code settings as a hook; do **not** run
 it by hand. Running it interactively prints a fail-closed deny (unreadable stdin) and exits
 `2`.
+
+**Git registries.** The hook reads no registry. It denies a skill whose digest is in the local grow-only set that `pull` and `verify --all` fill from signed revoke events, with `refusal_code` `17`. A revocation takes effect at the machine's next refresh.
 
 **Revocation freshness is fail-closed at the gate too (FR-0045 D4).** Beyond the trust chain,
 the hook enforces the SPEC-0279 freshness contract: an **emergency deny**, or a revocation
