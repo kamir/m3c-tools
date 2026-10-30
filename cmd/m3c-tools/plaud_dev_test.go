@@ -236,3 +236,18 @@ func TestResolveDevSelection(t *testing.T) {
 		}
 	})
 }
+
+// TestPlaudUploadTags proves every Plaud upload carries the link back to its
+// recording as source:plaud://<id>, next to the optional extra and user tags.
+func TestPlaudUploadTags(t *testing.T) {
+	cases := []struct{ id, extra, tags, want string }{
+		{"of_7e40a0ab070aac0b225152be35e976e7", "", "", "plaud,source:plaud://of_7e40a0ab070aac0b225152be35e976e7"},
+		{"of_1", "todo.transcribe", "", "todo.transcribe,plaud,source:plaud://of_1"},
+		{"of_1", "", "a,b", "plaud,source:plaud://of_1,a,b"},
+	}
+	for _, c := range cases {
+		if got := plaudUploadTags(c.id, c.extra, c.tags); got != c.want {
+			t.Errorf("plaudUploadTags(%q, %q, %q) = %q, want %q", c.id, c.extra, c.tags, got, c.want)
+		}
+	}
+}

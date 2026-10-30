@@ -240,6 +240,10 @@ scraped web session (`plaud list` / `plaud sync`, driven by the `web.plaud.ai` t
 the official developer API (`plaud dev …`, driven by the durable OAuth token). Both write
 into the same tracking ledger, so an item synced by one is not re-synced by the other.
 
+Every ER1 item that `plaud dev sync` uploads carries the tags `plaud` and
+`source:plaud://<id>`. `<id>` is the recording ID that `plaud dev list` shows, for example
+`of_7e40a0ab070aac0b225152be35e976e7`. Filter on that tag to find the ER1 item of a recording.
+
 | Subcommand | Meaning |
 |------------|---------|
 | `plaud list` | List Plaud recordings with sync status |

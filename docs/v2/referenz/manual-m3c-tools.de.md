@@ -253,6 +253,10 @@ dem dauerhaften OAuth-Token). Beide schreiben in dasselbe Tracking-Verzeichnis;
 eine über einen Weg synchronisierte Aufnahme wird über den anderen nicht erneut
 synchronisiert.
 
+Jedes ER1-Item, das `plaud dev sync` hochlädt, trägt die Tags `plaud` und
+`source:plaud://<id>`. `<id>` ist die Aufnahme-ID, die `plaud dev list` zeigt, zum Beispiel
+`of_7e40a0ab070aac0b225152be35e976e7`. Über diesen Tag findest du das ER1-Item einer Aufnahme.
+
 | Unterbefehl | Bedeutung |
 |------------|---------|
 | `plaud list` | Plaud-Aufnahmen mit Synchronisierungsstatus auflisten |
