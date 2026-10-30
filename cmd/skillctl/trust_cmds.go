@@ -20,6 +20,7 @@ package main
 
 import (
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"flag"
@@ -255,11 +256,13 @@ func runTrustAddAuthor(args []string, stdout, stderr io.Writer) int {
 func runTrustFingerprint(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("trust fingerprint", flag.ContinueOnError)
 	fs.SetOutput(stderr)
+	asB64 := fs.Bool("b64", false, "Print the raw 32-byte key in base64, the pubkey_b64 and peer add --pubkey value, instead of the fingerprint.")
 	fs.Usage = func() {
-		fmt.Fprintln(stderr, "Usage: skillctl trust fingerprint <key.pub>")
+		fmt.Fprintln(stderr, "Usage: skillctl trust fingerprint [--b64] <key.pub>")
 		fmt.Fprintln(stderr, "")
 		fmt.Fprintln(stderr, "Print sha256:<hex> of an ed25519 public key. Read this value aloud on a")
 		fmt.Fprintln(stderr, "call; the other side passes it to `trust add-author --pin`.")
+		fmt.Fprintln(stderr, "--b64 prints the raw key in base64 for `peer add --pubkey` and pubkey_b64.")
 	}
 	if err := fs.Parse(args); err != nil {
 		return exitUsage
@@ -272,6 +275,10 @@ func runTrustFingerprint(args []string, stdout, stderr io.Writer) int {
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return exitGeneric
+	}
+	if *asB64 {
+		fmt.Fprintln(stdout, base64.StdEncoding.EncodeToString(pub))
+		return exitOK
 	}
 	sum := sha256.Sum256(pub)
 	fmt.Fprintf(stdout, "sha256:%s\n", hex.EncodeToString(sum[:]))
