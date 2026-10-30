@@ -263,7 +263,8 @@ run "keygen (Autor)"       0 "$SKILLCTL" keygen --out "$WS/keys/mitarbeiter"
 run "keygen (Herausgeber)" 0 "$SKILLCTL" keygen --out "$WS/keys/alice-herausgeber"
 run "keygen (Reviewer)"    0 "$SKILLCTL" keygen --out "$WS/keys/alice-reviewer"
 
-if [ "$(stat -f '%Lp' "$WS/keys/mitarbeiter.priv" 2>/dev/null || stat -c '%a' "$WS/keys/mitarbeiter.priv" 2>/dev/null)" = "600" ]; then
+# GNU first: on Linux `stat -f` succeeds and describes the filesystem instead.
+if [ "$(stat -c '%a' "$WS/keys/mitarbeiter.priv" 2>/dev/null || stat -f '%Lp' "$WS/keys/mitarbeiter.priv" 2>/dev/null)" = "600" ]; then
   ok "der private Schluessel hat Modus 0600"
 else
   bad "der private Schluessel hat NICHT Modus 0600 (sign faellt darauf fail-closed)"
