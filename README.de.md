@@ -207,8 +207,8 @@ Auswirkungen benennen können.
 
 **Befehle:** `inventory`, `verify`. Der schreibende Teil (`new`, `stage`, `distribute`, `retire`)
 ist noch nicht implementiert; diese Verben beenden sich ausdrücklich mit Exit 2.
-`secretctl` liegt in jedem Release neben den anderen beiden Werkzeugen;
-`make build-secretctl` baut es aus dem Quellcode.
+`secretctl` erscheint ab v2.13.1 mit jedem m3c-tools-Release; `make build-secretctl`
+baut es aus dem Quellcode.
 Siehe [secretctl-Referenz](docs/v2/entwickler/secretctl.de.md).
 
 ---
