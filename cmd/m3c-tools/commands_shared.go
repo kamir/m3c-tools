@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/signal"
@@ -256,6 +257,11 @@ func cmdStatus(args []string) {
 	completed, _ := db.CountByStatus(tracking.RetryStatusCompleted)
 	failed, _ := db.CountByStatus(tracking.RetryStatusFailed)
 
+	if err := printUploadQueue(os.Stdout, er1.NewQueue(er1.DefaultQueuePath())); err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading upload queue: %v\n", err)
+		os.Exit(1)
+	}
+
 	fmt.Printf("ER1 Retry Queue Status:\n")
 	fmt.Printf("  pending:   %d\n", pending)
 	fmt.Printf("  retrying:  %d\n", retrying)
@@ -279,6 +285,23 @@ func cmdStatus(args []string) {
 			fmt.Println()
 		}
 	}
+}
+
+// printUploadQueue reports the queue that failed uploads go to and `retry` works on.
+func printUploadQueue(w io.Writer, q *er1.Queue) error {
+	entries, err := q.ReadEntries()
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "Uploads waiting for retry: %d\n", len(entries))
+	for _, e := range entries {
+		fmt.Fprintf(w, "  %-40s  attempts=%d", e.ID, e.RetryCount)
+		if e.LastError != "" {
+			fmt.Fprintf(w, "  error=%q", e.LastError)
+		}
+		fmt.Fprintln(w)
+	}
+	return nil
 }
 
 func printRetryEntry(e *tracking.RetryEntry) {
