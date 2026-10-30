@@ -1,3 +1,5 @@
+Für die Installer brauchen Sie cosign oder ein OpenSSL mit ed25519-Unterstützung. macOS bringt beides nicht mit; führen Sie dort `brew install cosign` aus. Der Bau aus dem Quellcode braucht beides nicht.
+
 ---
 layout: default
 title: Voraussetzungen

@@ -276,13 +276,13 @@ Jetzt die Konsumentenseite, in einem eigenen Zuhause:
 mkdir -p "$WS/kunde/.claude"
 cat > "$WS/kunde/.claude/trust-roots.yaml" <<YAML
 registry: local://$WS/registry.git
-pubkey_b64: $(openssl pkey -pubin -in "$WS/keys/alice-herausgeber.pub" -outform DER | tail -c 32 | base64)
-fingerprint: sha256:$(openssl pkey -pubin -in "$WS/keys/alice-herausgeber.pub" -outform DER | tail -c 32 | shasum -a 256 | awk '{print $1}')
+pubkey_b64: $(skillctl trust fingerprint --b64 "$WS/keys/alice-herausgeber.pub")
+fingerprint: $(skillctl trust fingerprint "$WS/keys/alice-herausgeber.pub")
 governance_minimum: green
 governance_quorum: 1
 signers:
   - reviewer_id: id:alice-reviewer@kup
-    pubkey_b64: $(openssl pkey -pubin -in "$WS/keys/alice-reviewer.pub" -outform DER | tail -c 32 | base64)
+    pubkey_b64: $(skillctl trust fingerprint --b64 "$WS/keys/alice-reviewer.pub")
 YAML
 
 HOME="$WS/kunde" skillctl pull --registry "local://$WS/registry.git" --skill hello-kup \
@@ -403,10 +403,8 @@ mkdir -p ~/.config/m3c/skill-keys
 skillctl keygen --out ~/.config/m3c/skill-keys/mitarbeiter
 
 # M2. Fingerprint und Rohschlüssel, für Punkt 7 aus Teil 0.
-openssl pkey -pubin -in ~/.config/m3c/skill-keys/mitarbeiter.pub -outform DER \
-  | tail -c 32 | base64
-openssl pkey -pubin -in ~/.config/m3c/skill-keys/mitarbeiter.pub -outform DER \
-  | tail -c 32 | shasum -a 256
+skillctl trust fingerprint --b64 ~/.config/m3c/skill-keys/mitarbeiter.pub
+skillctl trust fingerprint ~/.config/m3c/skill-keys/mitarbeiter.pub
 
 # M3. Selbstprüfung, bevor Alice Zeit investiert.
 skillctl propose <skill-name> --intent green
@@ -574,7 +572,7 @@ Bundle-Signaturen. Was eine Ablehnung bedeutet:
 | `gate 5: revoked` | widerrufen | nicht installieren |
 | `gate 2/3: digest` bzw. `bundle sigs` | Bytes oder Signatur passen nicht | Bundle neu beziehen, nicht weitermachen |
 
-**Achtung beim Skripten:** ein Pull, der alle Bundles verwirft, endet mit Prozess-Exit `1`
+**Achtung beim Skripten:** ein Pull, der alle Bundles verwirft, endet mit einem typisierten Prozess-Exit wie `13` oder `6`
 und der Zeile `NOT installing: N bundle(s) were skipped`. Ein Pull, der **nichts** zu tun
 findet, endet mit `0`. Prüfen Sie in Automatisierungen die `✅`-Zeilen, nicht nur den Code.
 

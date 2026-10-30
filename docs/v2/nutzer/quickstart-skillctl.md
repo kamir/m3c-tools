@@ -30,7 +30,7 @@ no admin rights required.
 
 **Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/kamir/m3c-tools/6f517440e7edf64c74f0f625a46291769d086f98/tools/skillctl-install.ps1 | iex
+irm https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/skillctl-install.ps1 | iex
 ```
 
 Installs to `%LOCALAPPDATA%\Programs\skillctl` after verifying cosign provenance + SHA-256.
@@ -41,16 +41,16 @@ two `skillctl.exe` on your `PATH`.
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/6f517440e7edf64c74f0f625a46291769d086f98/tools/skillctl-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/skillctl-install.sh | bash
 ```
 
 Override the target dir or the release with `INSTALL_DIR=…` / `RELEASE_BASE=…`.
 
-**Bootstrap integrity.** The one-liner URLs are pinned to the **immutable commit `6f51744`**
+**Bootstrap integrity.** The one-liner URLs are pinned to the **immutable commit `953dd07`**
 (not the mutable `master` branch, where one rewrite could swap the bootstrap script *and* every
 pin inside it). Verify the fetched bytes out-of-band before trusting them, expected SHA-256:
-`tools/skillctl-install.ps1` → `a00826f30599439718f5ea126f81b8a78b4c28aa96980e1b136db65396a34177`;
-`tools/skillctl-install.sh` → `dea4b86b78d20eeff28524240034efcb0c96c35016238434a8e7c97c7278dabc`.
+`tools/skillctl-install.ps1` → `a85f73ba04d279033d1bfad348f71931297df06511c75c9313bde1eb2883ed2b`;
+`tools/skillctl-install.sh` → `a013791fbe2ae90a109e98c26cca88874348e3aa7d4164832dc8d52bddf5a2b8`.
 The [README Install section](../../../README.md#install) has a copy-paste verify-then-run recipe. On
 each new signed release, bump the pinned commit **and** these hashes together.
 
@@ -60,7 +60,7 @@ The unsigned per-arch skillctl assets that used to ride along on the `v*` produc
 been **retired**: don't look for them there. To install by hand, pull the raw binary and its
 `SHA256SUMS` from the signed release and verify integrity *before* moving it onto your `PATH`:
 ```bash
-BASE="https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.3.1"   # latest signed tag
+BASE="https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.6.2"
 curl -sLO "$BASE/skillctl-darwin-arm64"     # or darwin-amd64 / linux-amd64 / linux-arm64 / windows-amd64.exe
 curl -sLO "$BASE/SHA256SUMS"
 grep ' skillctl-darwin-arm64$' SHA256SUMS | shasum -a 256 -c -     # integrity gate. Fails closed on mismatch
@@ -229,7 +229,7 @@ offline under `demo/kup-training/artifacts/`, with a sandboxed fake home, so you
 have an ER1 account.
 
 End it with evidence rather than a feeling:
-`./run-and-prove.sh --skip-online --json ride-report.json`.
+`./run-and-prove.sh --skip-online --chain-only --json ride-report.json`.
 
 Then keep the muscle with [`skillctl-demo --mode kata`](quickstart-skillctl-demo.md#5-training-mode-kata-shipped),
 five drills whose every beat is a real exit code.
@@ -305,26 +305,40 @@ unmodified, with nothing but the two files in front of them.**
 
 ---
 
-## 6. Trust a registry, then install
+## 6. Publish to a local registry, pin it, install
 
-To pull and install skills from a registry, first **pin** that registry's public key in your
-trust roots (`~/.claude/skill-trust-roots.yaml`):
-
-```bash
-skillctl trust add --registry <url> --pubkey <registry.pub>   # pin a key (optional: --id <key-id>)
-skillctl trust list                                           # show pinned registries
-```
-
-Then install: this pulls the bundle, runs the full trust-chain verifier, and installs
-atomically under `~/.claude/skills/<name>/`, refusing if **any** step fails:
+A registry on your disk needs no server. It uses the same code path as a Git registry on GitHub or GitLab. The order matters: publish and attest first, then pin, then install.
 
 ```bash
-skillctl install my-skill@1.0.0        # or a digest pin: my-skill@sha256:<hex>
-skillctl verify  my-skill              # re-run the trust check on an installed skill
-skillctl verify  --all                 # re-verify everything (catches new revocations)
+K=~/.config/m3c/skill-keys
+REG="local://$HOME/skill-registry.git"
+DIGEST="sha256:$(skillctl sign --key "$K/mykey.priv" my-skill.skb | awk '/^digest:/ {print $2}')"
+
+skillctl registry init --registry "$REG"
+skillctl publish my-skill@1.0.0 --bundle my-skill.skb --version 1.0.0 \
+  --registry "$REG" --key "$K/mykey.priv" --identity id:me@local --yes
+skillctl publish --attest my-skill@1.0.0 --digest "$DIGEST" --level green --rationale "reviewed" \
+  --registry "$REG" --key "$K/mykey.priv" --identity id:me@local --yes
+
+skillctl peer add mine "$REG" \
+  --pubkey "$(skillctl trust fingerprint --b64 "$K/mykey.pub")" \
+  --pin "$(skillctl trust fingerprint "$K/mykey.pub")"
+
+skillctl pull --registry "$REG" --skill my-skill --install --trust-mode --dry-run-install --no-checkpoint
 ```
 
-The verifier returns **numbered exit codes** so automation can branch precisely:
+The last command prints a plan and a token that is valid for five minutes. Read the plan, then confirm:
+
+```bash
+skillctl pull --registry "$REG" --skill my-skill --install --trust-mode \
+  --confirm-install --dry-run-install-token <TOKEN> --no-checkpoint
+skillctl verify my-skill
+skillctl verify --all
+```
+
+The skill is now under `~/.claude/skills/my-skill/`. `verify` exits `0`.
+
+The verifier returns numbered exit codes so automation can branch precisely:
 
 | Code | Meaning | Code | Meaning |
 |-----:|---------|-----:|---------|
@@ -332,6 +346,9 @@ The verifier returns **numbered exit codes** so automation can branch precisely:
 | `10` | digest mismatch | `14` | `depends_on` unsatisfied |
 | `11` | author signature invalid | `15` | blob missing |
 | `12` | registry not in trust roots | `16` | tenant blocked (CISO verdict) |
+| `17` | revoked | | |
+
+Installing from an HTTP registry with `skillctl trust add` and `skillctl install` is in the [manual](../referenz/manual-skillctl.md#trust-manage-trust-roots). That route has no client authentication.
 
 ---
 
@@ -366,17 +383,16 @@ skillctl verify-hook
 skillctl gate-stats --since 168h        # decisions, top blocks, cache-hit rate
 ```
 
-Now an agent literally cannot invoke a skill that isn't authorized and provable.
+The gate then denies a managed skill that fails the trust chain or is revoked. By default it still allows skills `skillctl` does not manage, such as plugin skills and a `SKILL.md` you placed by hand. To deny those too, set `unmanaged_skills: deny` in `~/.claude/skillctl/gate-policy.yaml`.
 
 ---
 
 ## Bonus: give an agent a provable identity
 
 ```bash
-skillctl agentid issue  --owner <you> --owner-key mykey.priv \
-                        --for-agent <agent-id> --skills my-skill --intents summarize
-skillctl agentid verify --bundle agent.mandate --offline    # verify offline against pinned keys
-skillctl agentid show   --bundle agent.mandate              # owner, grant, expiry, fingerprints
+skillctl agentid issue --owner <you> --owner-key mykey.priv \
+                       --for-agent <agent-id> --skills my-skill --intents summarize
+skillctl agentid show agentid.json          # owner, grant, expiry, fingerprints
 ```
 
 An **AgentID** is an owner-signed mandate that says *this agent may use these skills for these

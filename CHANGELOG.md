@@ -15,6 +15,17 @@ version is ldflags-stamped (`skillctl version`). Release tags: `skillctl/vX.Y.Z`
   a verbatim move ships half-extracted shared state, so it needs a dedicated
   refactor pass, not a release-eve edit.
 
+## [skillctl/v0.6.2], 2026-10-30, revocation handling and installers
+
+### Fixed
+- Revocation handling for git registries: `pull` and `verify --all` add verified revoke events to the local grow-only set, and `verify-hook` and `verify <name>` enforce it. A host pinned to a git registry no longer depends on an ER1 revocation fetch.
+- `verify-hook` and `verify --all` find the pin of a registry added with `peer add`, so a clean skill on that route is allowed.
+
+### Added
+- `skillctl trust fingerprint --b64` prints the raw key, so the guides need no `openssl`.
+- The installers register an hourly user-level service that runs `skillctl verify --all --json`. `SKILLCTL_NO_SERVICE=1` skips it.
+- The release workflow signs the ed25519 fallback `SHA256SUMS.sig`.
+
 ## [skillctl/v0.6.1], 2026-09-25, a report you can hand to a person, and a path that was inside /usr all along
 7 commits after `skillctl/v0.6.0`, plus this entry.
 

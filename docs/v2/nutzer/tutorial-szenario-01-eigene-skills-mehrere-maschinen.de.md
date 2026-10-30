@@ -81,8 +81,8 @@ Sie brauchen ihn auf jeder weiteren Maschine, und Sie brauchen ihn in einer Form
 vorlesen können:
 
 ```bash
-openssl pkey -pubin -in ~/.config/m3c/skill-keys/alice.pub -outform DER | tail -c 32 | base64
-openssl pkey -pubin -in ~/.config/m3c/skill-keys/alice.pub -outform DER | tail -c 32 | shasum -a 256
+skillctl trust fingerprint --b64 ~/.config/m3c/skill-keys/alice.pub
+skillctl trust fingerprint ~/.config/m3c/skill-keys/alice.pub
 ```
 
 Die erste Zeile ist der rohe Schlüssel in Base64 (der Wert `pubkey_b64`), die zweite der
@@ -525,7 +525,7 @@ Andere Maschinen erfahren von einem Widerruf im Git-Registry beim nächsten `pul
 Beide prüfen das Ereignis gegen den gepinnten Schlüssel und nehmen den Digest in einen lokalen Satz auf,
 der nur wächst. Ab dann verweigert `verify-hook` den Skill, und `verify <name>` endet mit `17`.
 `verify --all` meldet für den Skill das Urteil `17` und endet mit `1`. Bis zu dieser Aktualisierung lädt
-der Skill weiter; lassen Sie `verify --all` deshalb nach Zeitplan laufen.
+der Skill weiter. Der Installer richtet einen stündlichen Dienst ein, der `verify --all --json` ausführt; siehe [Zeitplanung](../../../tools/scheduling/README.de.md).
 Der Widerruf ist signiert und offline prüfbar, und eine veraltete oder zurückgedrehte
 Widerrufsliste wird zurückgewiesen statt stillschweigend geglaubt (Exit `22`).
 
@@ -540,8 +540,7 @@ Nicht „hat funktioniert", sondern Zahlen:
   echo "Datum:        $(date -u +%FT%TZ)"
   echo "Host:         $(hostname)"
   skillctl version
-  echo "Fingerprint:  $(openssl pkey -pubin -in ~/.config/m3c/skill-keys/alice.pub \
-                        -outform DER | tail -c 32 | shasum -a 256 | awk '{print $1}')"
+  echo "Fingerprint:  $(skillctl trust fingerprint ~/.config/m3c/skill-keys/alice.pub)"
   echo "Digest:       $DIGEST"
   skillctl trust list
   skillctl verify --all

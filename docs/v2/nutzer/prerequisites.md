@@ -1,3 +1,5 @@
+To install a released binary with the installers you need cosign, or an OpenSSL with ed25519 support. Stock macOS has neither, so run `brew install cosign` there. Building from source needs neither.
+
 ---
 layout: default
 title: Prerequisites

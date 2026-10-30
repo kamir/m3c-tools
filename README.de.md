@@ -15,7 +15,7 @@ verpflichtenden Cloud-Vermittler.
 [![CI](https://github.com/kamir/m3c-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/kamir/m3c-tools/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/kamir/m3c-tools?sort=semver)](https://github.com/kamir/m3c-tools/releases/latest)
 [![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue)](README.md#install)
-[![Made with Go](https://img.shields.io/badge/Go-1.25%2B-00ADD8?logo=go)](https://go.dev)
+[![Made with Go](https://img.shields.io/badge/Go-1.26.10%2B-00ADD8?logo=go)](https://go.dev)
 [![Go Report Card](https://goreportcard.com/badge/github.com/kamir/m3c-tools)](https://goreportcard.com/report/github.com/kamir/m3c-tools)
 [![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://slsa.dev)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
@@ -60,20 +60,17 @@ vertrauenswürdig betriebene Agenten in Produktion.
 
 ## Einstieg in 60 Sekunden
 
-Wähle das passende Werkzeug. Alle drei stehen als einzelne statische Binärdateien in jedem
-[Release](https://github.com/kamir/m3c-tools/releases/latest) bereit. Alternativ kannst du sie
+Wähle das passende Werkzeug. Jedes hat einen eigenen Installer. Alternativ kannst du es
 [aus dem Quellcode bauen](#aus-dem-quellcode-bauen).
 
 ### `m3c-tools`: die erste Erinnerung erfassen
 
 ```bash
-# macOS (Apple Silicon): see Install below for Intel / Linux / Windows
-curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-darwin-arm64.tar.gz | tar xz \
-  && sudo mv m3c-tools-darwin-arm64 /usr/local/bin/m3c-tools
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/m3c-tools-install.sh | bash
 
-m3c-tools setup                         # guided onboarding (ER1 URL, login, key)
-m3c-tools transcript dQw4w9WgXcQ        # fetch a YouTube transcript, right now
-m3c-tools doctor                        # verify connectivity & config
+m3c-tools transcript dQw4w9WgXcQ        # no account needed
+m3c-tools doctor                        # shows what works without ER1
+m3c-tools setup                         # connect to ER1 for uploads
 ```
 
 → **Vollständige Anleitung:** [Schnellstart: m3c-tools](docs/v2/nutzer/quickstart-m3c-tools.de.md)
@@ -81,9 +78,7 @@ m3c-tools doctor                        # verify connectivity & config
 ### `skillctl`: den ersten Skill signieren und prüfen
 
 ```bash
-# macOS / Linux / Windows, signed installer: fetches the right binary from the
-# signed skillctl/v* release and verifies cosign/OIDC provenance + SHA-256 first.
-curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/6f517440e7edf64c74f0f625a46291769d086f98/tools/skillctl-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/skillctl-install.sh | bash
 
 skillctl keygen --out ~/.config/m3c/skill-keys/mykey            # ed25519 → mykey.priv + mykey.pub
 skillctl pack --skill ./my-skill -o my-skill.skb --name my-skill --version 1.0.0
@@ -236,90 +231,76 @@ Siehe [secretctl-Referenz](docs/v2/entwickler/secretctl.de.md).
 
 ## Installation
 
-Beide Binärdateien stehen in jedem [Release](https://github.com/kamir/m3c-tools/releases/latest).
-Tausche in den folgenden Einzeilern `m3c-tools` und `skillctl`, um das andere Werkzeug zu installieren.
+Jedes Werkzeug hat einen eigenen Installer und einen eigenen [Schnellstart](docs/v2/nutzer/quickstart-skillctl.de.md). Jeder findet die neueste Fassung seiner eigenen Linie, prüft Herkunft und SHA-256 und installiert für deinen Benutzer. Adminrechte brauchst du nicht.
 
-Die **Installer-Einzeiler** laden die passende Binärdatei, prüfen **cosign-Herkunft über GitHub OIDC
-und SHA-256** und installieren **für den aktuellen Benutzer ohne Administratorrechte**:
+Du brauchst cosign oder ein OpenSSL mit ed25519-Unterstützung. macOS bringt LibreSSL mit, das keines hat; führe dort `brew install cosign` aus. Ohne beides verweigert der Installer und sagt, was fehlt.
 
-**Windows (PowerShell):**
-
-```powershell
-irm https://raw.githubusercontent.com/kamir/m3c-tools/6f517440e7edf64c74f0f625a46291769d086f98/tools/skillctl-install.ps1 | iex
-```
-
-Installiert `skillctl` nach `%LOCALAPPDATA%\Programs\skillctl`, nachdem cosign-Herkunft und SHA-256
-geprüft wurden. `$env:INSTALL_DIR` und `$env:RELEASE_BASE` überschreiben die Vorgaben.
-Dies ist der leichte, benutzerbezogene Weg ohne Adminrechte. Der rechnerweite Installer
-`M3C-Tools-Setup.exe` ist eine Alternative. Verwende einen der beiden Wege, damit nicht zwei
-`skillctl.exe` im `PATH` landen.
-
-**macOS / Linux:**
+### skillctl installieren
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/6f517440e7edf64c74f0f625a46291769d086f98/tools/skillctl-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/skillctl-install.sh | bash
 ```
 
-Zielverzeichnis oder Release lassen sich mit `INSTALL_DIR=…` und `RELEASE_BASE=…` ändern;
-Vorgabe ist `~/.local/bin`. Geprüft wird das signierte `skillctl/v*`-Release mit cosign-Herkunft
-über GitHub OIDC und SHA-256. Ohne cosign gibt es einen **ed25519-Fallback**;
-siehe [skillctl-Schnellstart](docs/v2/nutzer/quickstart-skillctl.md#1-install).
+```powershell
+irm https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/skillctl-install.ps1 | iex
+```
 
-**Bootstrap-Integrität.** Die URLs sind auf den **unveränderlichen Commit `6f51744`** gepinnt.
-Auf dem veränderlichen `master` könnte eine einzige Änderung Skript und alle enthaltenen Pins
-austauschen (TOFU-Falle). Prüfe die geladenen Bytes über einen unabhängigen Kanal.
-Erwartete SHA-256-Werte:
+Das installiert nach `~/.local/bin`, unter Windows nach `%LOCALAPPDATA%\Programs\skillctl`. Außerdem richtet es einen Dienst auf Benutzerebene ein, der stündlich `skillctl verify --all --json` ausführt, damit Widerrufe diese Maschine erreichen. Mit `SKILLCTL_NO_SERVICE=1` überspringst du den Dienst. Widerrufe kommen dann nur mit `pull` oder `verify --all` an.
+
+### m3c-tools installieren
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/m3c-tools-install.sh | bash
+```
+
+```powershell
+irm https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/m3c-tools-install.ps1 | iex
+```
+
+Das installiert nach `~/.local/bin`, unter Windows nach `%LOCALAPPDATA%\Programs\m3c-tools`.
+
+Beide Installer verstehen `INSTALL_DIR=…` und `RELEASE_BASE=…`. Unter Windows ist `M3C-Tools-Setup.exe` aus dem Release eine Alternative. Verwende nur einen der beiden Wege.
+
+### Vor dem Ausführen prüfen
+
+Die URLs sind auf den unveränderlichen Commit `953dd07` gepinnt, nicht auf den veränderlichen `master`. Erwartete SHA-256-Werte:
 
 | Skript | SHA-256 |
 |--------|---------|
-| `tools/skillctl-install.ps1` | `a00826f30599439718f5ea126f81b8a78b4c28aa96980e1b136db65396a34177` |
-| `tools/skillctl-install.sh` | `dea4b86b78d20eeff28524240034efcb0c96c35016238434a8e7c97c7278dabc` |
+| `tools/skillctl-install.sh` | `a013791fbe2ae90a109e98c26cca88874348e3aa7d4164832dc8d52bddf5a2b8` |
+| `tools/skillctl-install.ps1` | `a85f73ba04d279033d1bfad348f71931297df06511c75c9313bde1eb2883ed2b` |
+| `tools/m3c-tools-install.sh` | `709f6bd339c1feedcb1e2156348823341b1192ba3c139765e2fff8f5fddf67e7` |
+| `tools/m3c-tools-install.ps1` | `b54a562f17fe6c1c8cf34375e002a0286859359e421f397a6bf95065f7dd3339` |
 
-Zuerst prüfen, dann ausführen statt direkt nach `iex` oder `bash` weiterzuleiten:
+```bash
+# macOS / Linux
+u='https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/skillctl-install.sh'
+f=$(mktemp); curl -fsSL "$u" -o "$f"
+echo 'a013791fbe2ae90a109e98c26cca88874348e3aa7d4164832dc8d52bddf5a2b8  '"$f" | shasum -a 256 -c - && bash "$f"
+```
 
 ```powershell
 # Windows
-$u = 'https://raw.githubusercontent.com/kamir/m3c-tools/6f517440e7edf64c74f0f625a46291769d086f98/tools/skillctl-install.ps1'
+$u = 'https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/skillctl-install.ps1'
 $f = "$env:TEMP\skillctl-install.ps1"; irm $u -OutFile $f
-if ((Get-FileHash $f -Algorithm SHA256).Hash -ne 'A00826F30599439718F5EA126F81B8A78B4C28AA96980E1B136DB65396A34177') { throw 'SHA-256 mismatch' }
+if ((Get-FileHash $f -Algorithm SHA256).Hash -ne 'A85F73BA04D279033D1BFAD348F71931297DF06511C75C9313BDE1EB2883ED2B') { throw 'SHA-256 mismatch' }
 & $f
 ```
 
 ```bash
 # macOS / Linux
-u='https://raw.githubusercontent.com/kamir/m3c-tools/6f517440e7edf64c74f0f625a46291769d086f98/tools/skillctl-install.sh'
+u='https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/m3c-tools-install.sh'
 f=$(mktemp); curl -fsSL "$u" -o "$f"
-echo 'dea4b86b78d20eeff28524240034efcb0c96c35016238434a8e7c97c7278dabc  '"$f" | shasum -a 256 -c - && bash "$f"
+echo '709f6bd339c1feedcb1e2156348823341b1192ba3c139765e2fff8f5fddf67e7  '"$f" | shasum -a 256 -c - && bash "$f"
 ```
 
-> Bei jedem neuen signierten Release den gepinnten Commit und beide Prüfsummen gemeinsam aktualisieren.
-
-<br>
-
-Manuelle Installation je Plattform aus dem Tar-Archiv:
-
-**macOS (Apple Silicon):**
-
-```bash
-curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-darwin-arm64.tar.gz | tar xz && sudo mv m3c-tools-darwin-arm64 /usr/local/bin/m3c-tools
+```powershell
+# Windows
+$u = 'https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/m3c-tools-install.ps1'
+$f = "$env:TEMP\m3c-tools-install.ps1"; irm $u -OutFile $f
+if ((Get-FileHash $f -Algorithm SHA256).Hash -ne 'B54A562F17FE6C1C8CF34375E002A0286859359E421F397A6BF95065F7DD3339') { throw 'SHA-256 mismatch' }
+& $f
 ```
-
-**macOS (Intel):**
-
-```bash
-curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-darwin-amd64.tar.gz | tar xz && sudo mv m3c-tools-darwin-amd64 /usr/local/bin/m3c-tools
-```
-
-**Linux (amd64):**
-
-```bash
-curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-linux-amd64.tar.gz | tar xz && sudo mv m3c-tools-linux-amd64 /usr/local/bin/m3c-tools
-```
-
-**Windows (manuell / GUI):** `m3c-tools-windows-amd64.zip` oder `M3C-Tools-Setup.exe` aus dem
-[aktuellen Release](https://github.com/kamir/m3c-tools/releases/latest) laden und zum `PATH`
-hinzufügen. Die vollständige PowerShell-Einrichtung steht im
-[Schnellstart: m3c-tools](docs/v2/nutzer/quickstart-m3c-tools.de.md).
 
 ### Plattformunterstützung
 
