@@ -922,6 +922,21 @@ type devSyncTotals struct {
 // syncOneDevRecording uploads ONE developer-API recording to ER1 (audio +
 // transcript + notes) and records it in the SHARED ledger (path plaud://<id>,
 // importType "plaud") + the SPEC-0117 server mapping. Returns the ER1 doc_id.
+// plaudUploadTags builds the ER1 tags of a Plaud upload. The source tag
+// `source:plaud://<id>` links the ER1 item back to its Plaud recording; it uses
+// the same path as the local ledger (plaud://<id>). The menubar import set it,
+// the `plaud dev` path did not, so no item since 2026-08 carried it.
+func plaudUploadTags(recID, extraTag, tags string) string {
+	allTags := "plaud,source:plaud://" + recID
+	if extraTag != "" {
+		allTags = extraTag + "," + allTags
+	}
+	if tags != "" {
+		allTags += "," + tags
+	}
+	return allTags
+}
+
 // localWhisperTranscript transcribes MP3 bytes on THIS Mac via the whisper CLI.
 // Returns "" if whisper is unavailable or fails (caller falls back to audio-only).
 
@@ -1117,13 +1132,7 @@ func syncOneDevRecording(client *plaud.DevClient, er1Cfg *er1.Config, contentTyp
 		audio = nil
 	}
 
-	allTags := "plaud"
-	if extraTag != "" {
-		allTags = extraTag + "," + allTags
-	}
-	if tags != "" {
-		allTags += "," + tags
-	}
+	allTags := plaudUploadTags(r.ID, extraTag, tags)
 	payload := &er1.UploadPayload{
 		TranscriptFilename: fmt.Sprintf("plaud_%s.txt", r.ID),
 		ImageFilename:      "placeholder-logo.png",
