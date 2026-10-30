@@ -71,6 +71,12 @@ class LanguageGateTests(unittest.TestCase):
         self.write_pair()
         self.assertTrue(any("examples differ" in e for e in gate.check(self.root, self.manifest)))
 
+    def test_tool_cache_is_not_a_published_document(self):
+        cache = self.root / "rag-mcp-server/.pytest_cache"
+        cache.mkdir(parents=True)
+        (cache / "README.md").write_text("# pytest cache directory\n")
+        self.assertEqual(gate.check(self.root, self.manifest), [])
+
     def test_missing_section(self):
         self.en += "\n## Additional section\n"
         self.write_pair()
