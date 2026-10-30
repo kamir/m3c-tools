@@ -269,13 +269,13 @@ Now the consumer side in its own home:
 mkdir -p "$WS/kunde/.claude"
 cat > "$WS/kunde/.claude/trust-roots.yaml" <<YAML
 registry: local://$WS/registry.git
-pubkey_b64: $(openssl pkey -pubin -in "$WS/keys/alice-herausgeber.pub" -outform DER | tail -c 32 | base64)
-fingerprint: sha256:$(openssl pkey -pubin -in "$WS/keys/alice-herausgeber.pub" -outform DER | tail -c 32 | shasum -a 256 | awk '{print $1}')
+pubkey_b64: $(skillctl trust fingerprint --b64 "$WS/keys/alice-herausgeber.pub")
+fingerprint: $(skillctl trust fingerprint "$WS/keys/alice-herausgeber.pub")
 governance_minimum: green
 governance_quorum: 1
 signers:
   - reviewer_id: id:alice-reviewer@kup
-    pubkey_b64: $(openssl pkey -pubin -in "$WS/keys/alice-reviewer.pub" -outform DER | tail -c 32 | base64)
+    pubkey_b64: $(skillctl trust fingerprint --b64 "$WS/keys/alice-reviewer.pub")
 YAML
 
 HOME="$WS/kunde" skillctl pull --registry "local://$WS/registry.git" --skill hello-kup \
@@ -393,10 +393,8 @@ mkdir -p ~/.config/m3c/skill-keys
 skillctl keygen --out ~/.config/m3c/skill-keys/mitarbeiter
 
 # M2. Fingerprint und Rohschlüssel, für Punkt 7 aus Teil 0.
-openssl pkey -pubin -in ~/.config/m3c/skill-keys/mitarbeiter.pub -outform DER \
-  | tail -c 32 | base64
-openssl pkey -pubin -in ~/.config/m3c/skill-keys/mitarbeiter.pub -outform DER \
-  | tail -c 32 | shasum -a 256
+skillctl trust fingerprint --b64 ~/.config/m3c/skill-keys/mitarbeiter.pub
+skillctl trust fingerprint ~/.config/m3c/skill-keys/mitarbeiter.pub
 
 # M3. Selbstprüfung, bevor Alice Zeit investiert.
 skillctl propose <skill-name> --intent green
@@ -564,7 +562,7 @@ bundle signatures. Refusals mean:
 | `gate 5: revoked` | Revoked | Do not install |
 | `gate 2/3: digest` or `bundle sigs` | Bytes or signature mismatch | Obtain the bundle again; do not continue |
 
-**When scripting:** A pull that rejects all bundles returns process exit `1`
+**When scripting:** A pull that rejects all bundles returns a typed process exit, such as `13` or `6`
 and `NOT installing: N bundle(s) were skipped`. A pull finding **nothing** to do
 returns `0`. In automation, inspect `✅` lines rather than the code alone.
 

@@ -33,10 +33,7 @@ alles Weitere baut auf diesem Befund auf.
 
 ## Teil A: das fertige Binary (alle Plattformen)
 
-1. Binary aus dem [aktuellen Release](https://github.com/kamir/m3c-tools/releases/latest)
-   holen. Die Plattform-Einzeiler (macOS arm64/amd64, Linux amd64, Windows)
-   stehen zum Kopieren in
-   [Quickstart: m3c-tools, Abschnitt 1](quickstart-m3c-tools.md#1-install).
+1. Führen Sie den Installer aus [Schnellstart: m3c-tools, Abschnitt 1](quickstart-m3c-tools.de.md#1-installieren) aus.
 
 2. Pruefen, dass das Binary antwortet:
 

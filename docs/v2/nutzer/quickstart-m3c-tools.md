@@ -20,40 +20,28 @@ YouTube transcript fetched and (optionally) uploaded.
 
 ## 1. Install
 
-You only need the single binary. Grab it from the
-[latest release](https://github.com/kamir/m3c-tools/releases/latest).
+This installs `m3c-tools` for your user, with no admin rights. You need cosign, or an OpenSSL with ed25519 support. On macOS run `brew install cosign` first.
 
-**macOS (Apple Silicon):**
 ```bash
-curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-darwin-arm64.tar.gz | tar xz \
-  && sudo mv m3c-tools-darwin-arm64 /usr/local/bin/m3c-tools
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/m3c-tools-install.sh | bash
 ```
 
-**macOS (Intel):**
-```bash
-curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-darwin-amd64.tar.gz | tar xz \
-  && sudo mv m3c-tools-darwin-amd64 /usr/local/bin/m3c-tools
-```
-
-**Linux (amd64):**
-```bash
-curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-linux-amd64.tar.gz | tar xz \
-  && sudo mv m3c-tools-linux-amd64 /usr/local/bin/m3c-tools
-```
-
-**Windows (PowerShell, as Administrator):**
 ```powershell
-New-Item -ItemType Directory -Force -Path C:\m3c-tools
-Invoke-WebRequest -Uri https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-windows-amd64.zip -OutFile "$env:TEMP\m3c-tools.zip"
-Expand-Archive -Path "$env:TEMP\m3c-tools.zip" -DestinationPath C:\m3c-tools -Force   # the zip already contains m3c-tools.exe, no rename needed
-$oldPath = [Environment]::GetEnvironmentVariable("PATH", "Machine")
-if ($oldPath -notlike "*C:\m3c-tools*") { [Environment]::SetEnvironmentVariable("PATH", "$oldPath;C:\m3c-tools", "Machine") }
+irm https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/m3c-tools-install.ps1 | iex
 ```
-Open a **new** terminal, then verify anywhere:
+
+The URLs are pinned to an immutable commit. Expected SHA-256:
+
+- `tools/m3c-tools-install.sh`: `709f6bd339c1feedcb1e2156348823341b1192ba3c139765e2fff8f5fddf67e7`
+- `tools/m3c-tools-install.ps1`: `b54a562f17fe6c1c8cf34375e002a0286859359e421f397a6bf95065f7dd3339`
+
+The [README](../../../README.md#verify-before-you-run) has a verify-then-run recipe.
+
+Check it, then fetch a first transcript. This needs no account:
 
 ```bash
 m3c-tools version
-m3c-tools help
+m3c-tools transcript dQw4w9WgXcQ
 ```
 
 > **Prefer to build from source?** You need Go 1.26.10+. On macOS the menu-bar GUI also needs
@@ -72,7 +60,7 @@ The wizard walks you through:
 
 1. **ER1 server URL**: defaults to `https://onboarding.guide/upload_2`.
 2. **Browser login**: opens Chrome and captures your User ID (context) automatically.
-3. **API key**: required for uploads (sent as the `X-API-KEY` header). Ask your ER1 admin.
+3. **API key**: required for uploads (sent as the `X-API-KEY` header). To request access, write to kamir@apache.org.
 4. **Default tags**: used for capture-device sync.
 
 It writes everything to `~/.m3c-tools.env`.
@@ -105,6 +93,7 @@ m3c-tools doctor
 
 `doctor` checks the active profile, authentication (API key and/or device token), DNS, TLS,
 and the ER1 `/health` and auth endpoints. Green across the board means you're ready.
+With no ER1 configured, it says so, names what works without one, and exits `0`.
 For a quick reachability-only check, use `m3c-tools check-er1`.
 
 ---
@@ -141,7 +130,7 @@ m3c-tools whisper meeting.wav --model base --language en
 
 Runs your local `whisper` binary. The first run downloads the model (~150 MB for `base`).
 
-### Batch-import a folder of audio
+### Batch-import a folder of audio (macOS)
 
 ```bash
 m3c-tools import-audio ~/m3c-inbox/ --run     # transcribe + upload + tag, end-to-end
@@ -193,7 +182,7 @@ m3c-tools pocket ...            # see: m3c-tools pocket --help
 | `subtitles are disabled for this video` | Expected. The capture still keeps the thumbnail + link. Add a voice note. |
 | Whisper "command not found" | Install it: `python3 -m pip install openai-whisper` (needs `ffmpeg`). |
 | `import-audio --run` exits `1` and reports `failed=1` | A transcription or an upload failed. A file with a failed transcription is not uploaded and is picked up again on the next run. A failed upload is queued; run `m3c-tools retry`. |
-| Upload fails, then retries | Failed uploads queue locally; run `m3c-tools retry` or check `m3c-tools status`. |
+| Upload fails, then retries | Failed uploads queue locally. `m3c-tools status` shows `Uploads waiting for retry`. `m3c-tools retry` delivers them and keeps running until you stop it with Ctrl+C. |
 
 ---
 

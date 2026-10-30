@@ -21,46 +21,33 @@ und ein YouTube-Transkript abgerufen und auf Wunsch hochgeladen.
 
 ## 1. Installieren
 
-Sie benötigen nur das einzelne Binary aus dem
-[aktuellen Release](https://github.com/kamir/m3c-tools/releases/latest).
+Das installiert `m3c-tools` für Ihren Benutzer, ohne Adminrechte. Sie brauchen cosign oder ein OpenSSL mit ed25519-Unterstützung. Führen Sie auf macOS zuerst `brew install cosign` aus.
 
-**macOS (Apple Silicon):**
 ```bash
-curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-darwin-arm64.tar.gz | tar xz \
-  && sudo mv m3c-tools-darwin-arm64 /usr/local/bin/m3c-tools
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/m3c-tools-install.sh | bash
 ```
 
-**macOS (Intel):**
-```bash
-curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-darwin-amd64.tar.gz | tar xz \
-  && sudo mv m3c-tools-darwin-amd64 /usr/local/bin/m3c-tools
-```
-
-**Linux (amd64):**
-```bash
-curl -sL https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-linux-amd64.tar.gz | tar xz \
-  && sudo mv m3c-tools-linux-amd64 /usr/local/bin/m3c-tools
-```
-
-**Windows (PowerShell als Administrator):**
 ```powershell
-New-Item -ItemType Directory -Force -Path C:\m3c-tools
-Invoke-WebRequest -Uri https://github.com/kamir/m3c-tools/releases/latest/download/m3c-tools-windows-amd64.zip -OutFile "$env:TEMP\m3c-tools.zip"
-Expand-Archive -Path "$env:TEMP\m3c-tools.zip" -DestinationPath C:\m3c-tools -Force   # the zip already contains m3c-tools.exe, no rename needed
-$oldPath = [Environment]::GetEnvironmentVariable("PATH", "Machine")
-if ($oldPath -notlike "*C:\m3c-tools*") { [Environment]::SetEnvironmentVariable("PATH", "$oldPath;C:\m3c-tools", "Machine") }
+irm https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/m3c-tools-install.ps1 | iex
 ```
-Ein **neues** Terminal öffnen und von beliebiger Stelle prüfen:
+
+Die URLs sind auf einen unveränderlichen Commit gepinnt. Erwartete SHA-256-Werte:
+
+- `tools/m3c-tools-install.sh`: `709f6bd339c1feedcb1e2156348823341b1192ba3c139765e2fff8f5fddf67e7`
+- `tools/m3c-tools-install.ps1`: `b54a562f17fe6c1c8cf34375e002a0286859359e421f397a6bf95065f7dd3339`
+
+Die [README](../../../README.de.md#vor-dem-ausführen-prüfen) enthält eine Anleitung zum Prüfen vor dem Ausführen.
+
+Prüfen Sie die Installation und holen Sie ein erstes Transkript. Dafür brauchen Sie kein Konto:
 
 ```bash
 m3c-tools version
-m3c-tools help
+m3c-tools transcript dQw4w9WgXcQ
 ```
 
-> **Lieber aus Quellcode bauen?** Go 1.26.10+ ist erforderlich. Auf macOS benötigt die
-> Menüleistenoberfläche außerdem `brew install pkg-config portaudio ffmpeg` und
-> `python3 -m pip install openai-whisper`. Danach `make install` ausführen.
-> Siehe [Build aus Quellcode](../../../README.md#build-from-source).
+> **Lieber aus dem Quellcode bauen?** Sie brauchen Go 1.26.10+. Auf macOS braucht die Menüleisten-GUI zusätzlich
+> `brew install pkg-config portaudio ffmpeg` und `python3 -m pip install openai-whisper`.
+> Danach `make install`. Siehe [Aus dem Quellcode bauen](../../../README.de.md#aus-dem-quellcode-bauen).
 
 ---
 
@@ -74,7 +61,7 @@ Der Assistent führt durch:
 
 1. **ER1-Server-URL**: Standard ist `https://onboarding.guide/upload_2`.
 2. **Browser-Login**: Öffnet Chrome und übernimmt Ihre Nutzer-ID, den Kontext, automatisch.
-3. **API-Key**: Für Uploads erforderlich, im Header `X-API-KEY` gesendet. Beim ER1-Administrator erfragen.
+3. **API-Key**: Für Uploads erforderlich, im Header `X-API-KEY` gesendet. Zugang erhalten Sie auf Anfrage an kamir@apache.org.
 4. **Standard-Tags**: Für die Synchronisation von Aufnahmegeräten.
 
 Alles wird nach `~/.m3c-tools.env` geschrieben.
@@ -109,6 +96,7 @@ m3c-tools doctor
 `doctor` prüft das aktive Profil, Authentisierung mit API-Key und/oder Geräte-Token,
 DNS, TLS sowie ER1-`/health` und Auth-Endpunkte. Ist alles grün, kann es losgehen.
 Für eine reine Erreichbarkeitsprüfung `m3c-tools check-er1` verwenden.
+Ist kein ER1 eingerichtet, sagt der Befehl das, nennt, was ohne ER1 funktioniert, und endet mit `0`.
 
 ---
 
@@ -145,7 +133,7 @@ m3c-tools whisper meeting.wav --model base --language en
 Führt Ihr lokales `whisper`-Binary aus. Beim ersten Einsatz wird das Modell heruntergeladen,
 für `base` etwa 150 MB.
 
-### Audioordner im Stapel importieren
+### Audioordner im Stapel importieren (macOS)
 
 ```bash
 m3c-tools import-audio ~/m3c-inbox/ --run     # transcribe + upload + tag, end-to-end
@@ -199,7 +187,7 @@ m3c-tools pocket ...            # see: m3c-tools pocket --help
 | `subtitles are disabled for this video` | Erwartetes Verhalten. Vorschaubild und Link bleiben erhalten. Eine Sprachnotiz ergänzen. |
 | Whisper meldet "command not found" | Mit `python3 -m pip install openai-whisper` installieren; benötigt `ffmpeg`. |
 | `import-audio --run` endet mit `1` und meldet `failed=1` | Eine Transkription oder ein Upload ist fehlgeschlagen. Eine Datei mit fehlgeschlagener Transkription wird nicht hochgeladen und beim nächsten Lauf neu aufgegriffen. Ein fehlgeschlagener Upload liegt in der Warteschlange; führen Sie `m3c-tools retry` aus. |
-| Upload schlägt fehl und wird wiederholt | Fehlgeschlagene Uploads werden lokal eingereiht. `m3c-tools retry` ausführen oder `m3c-tools status` prüfen. |
+| Upload schlägt fehl und wird wiederholt | Fehlgeschlagene Uploads liegen lokal in der Warteschlange. `m3c-tools status` zeigt `Uploads waiting for retry`. `m3c-tools retry` liefert sie aus und läuft weiter, bis Sie mit Strg+C stoppen. |
 
 ---
 

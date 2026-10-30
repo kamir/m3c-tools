@@ -78,8 +78,8 @@ wrote ~/.config/m3c/skill-keys/alice.pub  (mode 0644)
 You need it on every additional machine, in a form you can read aloud:
 
 ```bash
-openssl pkey -pubin -in ~/.config/m3c/skill-keys/alice.pub -outform DER | tail -c 32 | base64
-openssl pkey -pubin -in ~/.config/m3c/skill-keys/alice.pub -outform DER | tail -c 32 | shasum -a 256
+skillctl trust fingerprint --b64 ~/.config/m3c/skill-keys/alice.pub
+skillctl trust fingerprint ~/.config/m3c/skill-keys/alice.pub
 ```
 
 The first line is the raw public key in Base64, the `pubkey_b64` value; the second
@@ -512,7 +512,7 @@ on the next pull as `gate 5: revoked`, process exit `6`.
 Other machines learn about a Git registry revocation at their next `pull` or `verify --all`. Both
 verify the event against the pinned key and add the digest to a local set that only grows. From then
 on `verify-hook` denies the skill and `verify <name>` exits `17`. `verify --all` reports verdict `17`
-for the skill and exits `1`. Until that refresh the skill still loads, so run `verify --all` on a schedule.
+for the skill and exits `1`. Until that refresh the skill still loads. The installer registers an hourly service that runs `verify --all --json`; see [Scheduling](../../../tools/scheduling/README.md).
 Revocation is signed and offline-verifiable; stale or rolled-back lists are
 rejected rather than silently trusted, exit `22`.
 
@@ -527,8 +527,7 @@ Keep numbers rather than "it worked":
   echo "Datum:        $(date -u +%FT%TZ)"
   echo "Host:         $(hostname)"
   skillctl version
-  echo "Fingerprint:  $(openssl pkey -pubin -in ~/.config/m3c/skill-keys/alice.pub \
-                        -outform DER | tail -c 32 | shasum -a 256 | awk '{print $1}')"
+  echo "Fingerprint:  $(skillctl trust fingerprint ~/.config/m3c/skill-keys/alice.pub)"
   echo "Digest:       $DIGEST"
   skillctl trust list
   skillctl verify --all
