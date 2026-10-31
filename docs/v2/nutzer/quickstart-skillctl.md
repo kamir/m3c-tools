@@ -20,8 +20,8 @@ no server required. Then see how the same bundle flows through admit → install
 
 ## 1. Install
 
-`skillctl` is a single CLI binary, attached to every
-[release](https://github.com/kamir/m3c-tools/releases/latest). It runs identically on
+`skillctl` is a single CLI binary, attached to the signed
+[`skillctl/v*` releases](https://github.com/kamir/m3c-tools/releases?q=skillctl). It runs on
 macOS, Linux and Windows.
 
 The **one-liner installers** fetch the right binary for your host, **verify cosign provenance
@@ -42,7 +42,10 @@ two `skillctl.exe` on your `PATH`.
 **macOS / Linux:**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/ef6c6889b072d644b2fe9c82f3377f84565508c6/tools/skillctl-install.sh | bash
+export PATH="$HOME/.local/bin:$PATH"
 ```
+
+This makes the installed command available in this terminal. Repeat the export in a new terminal, or add it once to your shell startup file (for example `~/.zshrc` or `~/.bashrc`). If you set `INSTALL_DIR`, use that directory instead.
 
 Override the target dir or the release with `INSTALL_DIR=…` / `RELEASE_BASE=…`.
 
@@ -255,9 +258,18 @@ Both are PEM-wrapped ed25519 (PKCS#8 / SPKI).
 
 ## 3. Pack a skill into a sealed bundle
 
-A skill directory just needs a `SKILL.md`. Package it into a `.skb` bundle with a manifest:
+Create the example below in an empty working directory, then package it into a `.skb` bundle. If you already have a skill, use its directory instead of creating this example:
 
 ```bash
+mkdir -p my-skill
+cat > my-skill/SKILL.md <<'SKILL'
+---
+name: my-skill
+description: A small local example.
+---
+Reply with: Hello from my signed skill.
+SKILL
+
 skillctl pack \
   --skill ./my-skill \
   -o my-skill.skb \
@@ -300,7 +312,7 @@ skillctl verify-sig --pubkey ~/.config/m3c/skill-keys/mykey.pub my-skill.skb
 It recomputes the digest, finds the matching signature, and checks it. **No network, no CA.**
 
 ```
-Exit codes:  0 ok  ·  11 signature invalid  ·  1 other error  ·  2 usage
+Exit codes:  0 ok  ·  10 bundle bytes changed  ·  11 signature invalid  ·  1 other error  ·  2 usage
 ```
 
 That's the core loop: **anyone with your public key can prove a bundle is authentic and

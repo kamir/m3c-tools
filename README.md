@@ -66,11 +66,14 @@ Pick the tool you came for. Each has its own installer, and you can
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/ef6c6889b072d644b2fe9c82f3377f84565508c6/tools/m3c-tools-install.sh | bash
+export PATH="$HOME/.local/bin:$PATH"
 
-m3c-tools transcript dQw4w9WgXcQ        # no account needed
-m3c-tools doctor                        # shows what works without ER1
-m3c-tools setup                         # connect to ER1 for uploads
+m3c-tools version
+m3c-tools doctor                        # works without an ER1 account
+m3c-tools transcript dQw4w9WgXcQ        # requires YouTube to accept the request
 ```
+
+For uploads, connect to your own ER1 server with `m3c-tools setup er1`; this requires a server credential. A YouTube `429` is an external rate limit: pause and follow the quickstart troubleshooting steps.
 
 → **Full walkthrough:** [Quickstart: m3c-tools](docs/v2/nutzer/quickstart-m3c-tools.md)
 
@@ -78,6 +81,16 @@ m3c-tools setup                         # connect to ER1 for uploads
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/ef6c6889b072d644b2fe9c82f3377f84565508c6/tools/skillctl-install.sh | bash
+export PATH="$HOME/.local/bin:$PATH"
+
+mkdir -p my-skill
+cat > my-skill/SKILL.md <<'SKILL'
+---
+name: my-skill
+description: A small local example.
+---
+Reply with: Hello from my signed skill.
+SKILL
 
 skillctl keygen --out ~/.config/m3c/skill-keys/mykey            # ed25519 → mykey.priv + mykey.pub
 skillctl pack --skill ./my-skill -o my-skill.skb --name my-skill --version 1.0.0
@@ -240,6 +253,7 @@ You need cosign, or an OpenSSL with ed25519 support. Stock macOS ships LibreSSL,
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/ef6c6889b072d644b2fe9c82f3377f84565508c6/tools/skillctl-install.sh | bash
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
 ```powershell
@@ -252,6 +266,7 @@ This installs to `~/.local/bin`, on Windows to `%LOCALAPPDATA%\Programs\skillctl
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/ef6c6889b072d644b2fe9c82f3377f84565508c6/tools/m3c-tools-install.sh | bash
+export PATH="$HOME/.local/bin:$PATH"
 ```
 
 ```powershell
@@ -344,7 +359,7 @@ Report vulnerabilities privately using its disclosure instructions.
 
 ## Build from source
 
-Requires **Go 1.26.10+**. The macOS menu-bar GUI additionally needs `portaudio` + `ffmpeg` (cgo).
+Requires **Go 1.26.10+**. The current `make build` target also checks for `pkg-config`, `ffmpeg` and `whisper`, including on Linux; see [developer setup](docs/v2/entwickler/getting-started.md#part-a-build). `make build-skillctl` and `make build-secretctl` need no capture runtime. The macOS GUI additionally needs PortAudio (cgo).
 
 ```bash
 git clone https://github.com/kamir/m3c-tools.git && cd m3c-tools

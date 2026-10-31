@@ -1,5 +1,3 @@
-To install a released binary with the installers you need cosign, or an OpenSSL with ed25519 support. Stock macOS has neither, so run `brew install cosign` there. Building from source needs neither.
-
 ---
 layout: default
 title: Prerequisites
@@ -9,9 +7,11 @@ title: Prerequisites
 
 [Deutsch](prerequisites.de.md) · [English](prerequisites.md)
 
-Two tools, on every platform: **git** and **Go 1.26.10 or newer**. Everything else is
-optional and named as such below. If `git --version` and `go version` both answer, skip to
+For source builds and self-tests: **git** and **Go 1.26.10 or newer**. Additional
+requirements for capture and development are named below. If `git --version` and `go version` both answer, skip to
 [Quickstart: skillctl](quickstart-skillctl.md).
+
+For a released binary you need `curl` and `tar` on macOS/Linux, plus cosign or an OpenSSL with ed25519 support for signature verification. On macOS install cosign first with `brew install cosign`. Released binaries need neither Git nor Go. The Git/Go requirements on this page apply to source builds and the self-tests.
 
 ---
 
@@ -37,7 +37,7 @@ git --version
 go version
 ```
 
-`go version` must print **1.25.0 or higher**; that is what `go.mod` requires.
+`go version` must print **1.26.10 or higher**; that is what `go.mod` requires.
 
 ### If `winget` is not there
 
