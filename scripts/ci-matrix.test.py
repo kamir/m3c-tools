@@ -40,7 +40,7 @@ class HostedRunnerPolicyTests(unittest.TestCase):
 
     def test_axis_and_include_select_hosted_values(self):
         for matrix in [{"os": ["ubuntu-latest", "windows-latest"]},
-                       {"include": [{"os": "macos-14"}, {"os": "ubuntu-24.04-arm"}]},
+                       {"include": [{"os": "macos-15"}, {"os": "ubuntu-24.04-arm"}]},
                        {"os": ["ubuntu-latest"], "include": [{"os": "macos-latest"}]}]:
             with self.subTest(matrix=matrix):
                 candidate = job("${{ matrix.os }}")

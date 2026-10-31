@@ -94,7 +94,7 @@ import yaml
 
 # Exact reviewed labels; a custom label resembling a hosted image is not enough.
 HOSTED_RUNNERS = frozenset({
-    "ubuntu-latest", "ubuntu-24.04-arm", "macos-latest", "macos-14",
+    "ubuntu-latest", "ubuntu-24.04-arm", "macos-latest", "macos-15",
     "windows-latest",
 })
 MATRIX_RUNNER = re.compile(r"\$\{\{\s*matrix\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}")
