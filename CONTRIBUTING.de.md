@@ -8,8 +8,9 @@ Einrichtung, CI-Prüfungen und Konventionen, die beide Werkzeuge veröffentlichb
 ## Voraussetzungen
 
 - **Go 1.26.10+**.
-- Nur für die macOS-Menüleisten-GUI: `portaudio` und `ffmpeg` (cgo).
-  Die CLIs einschließlich `skillctl` benötigen beides nicht.
+- `make build` prüft aktuell auch unter Linux auf `pkg-config`, `ffmpeg` und `whisper`.
+  `make build-skillctl` benötigt diese Werkzeuge nicht. Siehe [Entwicklereinrichtung](docs/v2/entwickler/getting-started.de.md).
+- Die macOS-GUI braucht zusätzlich `portaudio` (cgo).
 - Für `make ci`: `golangci-lint` und `python3` mit PyYAML (`python3 -m pip install pyyaml`). Der
   Schritt `check-required-checks` endet ohne PyYAML mit `3`.
 - Für `make qa-all` zusätzlich `pytest` und `ruff`.

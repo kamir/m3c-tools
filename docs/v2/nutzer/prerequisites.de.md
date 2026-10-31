@@ -1,5 +1,3 @@
-Für die Installer brauchen Sie cosign oder ein OpenSSL mit ed25519-Unterstützung. macOS bringt beides nicht mit; führen Sie dort `brew install cosign` aus. Der Bau aus dem Quellcode braucht beides nicht.
-
 ---
 layout: default
 title: Voraussetzungen
@@ -9,9 +7,11 @@ title: Voraussetzungen
 
 [Deutsch](prerequisites.de.md) · [English](prerequisites.md)
 
-Zwei Werkzeuge auf jeder Plattform: **git** und **Go 1.26.10 oder neuer**. Alles andere
-ist optional und unten entsprechend gekennzeichnet. Wenn `git --version` und
+Für Quellcode-Builds und Selbsttests: **git** und **Go 1.26.10 oder neuer**. Zusätzliche
+Voraussetzungen für Capture und Entwicklung stehen unten. Wenn `git --version` und
 `go version` antworten, weiter zum [Quickstart: skillctl](quickstart-skillctl.de.md).
+
+Für ein veröffentlichtes Binary werden unter macOS/Linux `curl` und `tar` sowie cosign oder ein OpenSSL mit ed25519-Unterstützung für die Signaturprüfung benötigt. Auf macOS zuerst `brew install cosign` ausführen. Veröffentlichte Binaries benötigen weder Git noch Go. Die Git-/Go-Voraussetzungen auf dieser Seite gelten für Quellcode-Builds und Selbsttests.
 
 ---
 
@@ -37,7 +37,7 @@ git --version
 go version
 ```
 
-`go version` muss **1.25.0 oder höher** ausgeben; das verlangt `go.mod`.
+`go version` muss **1.26.10 oder höher** ausgeben; das verlangt `go.mod`.
 
 ### Wenn `winget` fehlt
 

@@ -174,7 +174,7 @@ Selbstauskunft: **Bestanden bedeutet einen echten Exit-Code.**
 | **K2 Detect tamper** | Einen veränderten Skill vor Ausführung erkennen | Auf Festplatte ändern → `verify --all` → Exit `10` | Drei Wiederholungen |
 | **K3 Govern reversibly** | Eine destruktive, nicht erzwingbare Operation ausführen | `audit --cleanup --dry-run-cleanup` → `--cleanup --confirm-delete` nach Mengenänderung → Exit `2` | Drei Wiederholungen |
 | **K4 Trust roots & install** | Ein Registry pinnen und nur zugelassene Inhalte installieren | `trust add → install → verify` → Exit `0` | Drei Wiederholungen |
-| **K5 Revoke & fail-closed** | Einen widerrufenen Skill offline und fail-closed verweigern | `verify --bundle … --revocations <signed-list>` → widerrufener Digest → Exit `17` | Drei Wiederholungen, zusätzlich S3 zur flottenweiten Verteilung lesen |
+| **K5 Revoke & fail-closed** | Einen widerrufenen Skill offline und fail-closed verweigern | `verify --bundle … --revocations <signed-list>` → widerrufener Digest → Exit `17` | Eine Wiederholung, zusätzlich S3 zur flottenweiten Verteilung lesen |
 
 K5 ist eine **echte** Übung: Die Offline-Sperre `verify --bundle --revocations` mit
 Exit `17` wird ausgeführt. Nur die **laufende flottenweite Verteilung** bleibt Roadmap,

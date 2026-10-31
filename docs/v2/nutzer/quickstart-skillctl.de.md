@@ -22,9 +22,9 @@ von admit über install bis revoke nachvollziehen.
 
 ## 1. Installieren
 
-`skillctl` ist ein einzelnes CLI-Binary in jedem
-[Release](https://github.com/kamir/m3c-tools/releases/latest). Es läuft auf macOS,
-Linux und Windows gleich.
+`skillctl` ist ein einzelnes CLI-Binary in den signierten
+[`skillctl/v*`-Releases](https://github.com/kamir/m3c-tools/releases?q=skillctl). Es läuft auf
+macOS, Linux und Windows.
 
 Die **Einzeilen-Installer** laden das passende Binary, **prüfen cosign-Provenance
 über GitHub OIDC und den SHA-256-Integritätsdigest** und installieren dann in ein
@@ -44,7 +44,10 @@ Varianten** verwenden, damit nicht zwei `skillctl.exe` in Ihrem `PATH` liegen.
 **macOS / Linux:**
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/ef6c6889b072d644b2fe9c82f3377f84565508c6/tools/skillctl-install.sh | bash
+export PATH="$HOME/.local/bin:$PATH"
 ```
+
+Damit ist der installierte Befehl in diesem Terminal verfügbar. Den Export in einem neuen Terminal wiederholen oder einmal in die Startdatei der Shell aufnehmen, etwa `~/.zshrc` oder `~/.bashrc`. Bei gesetztem `INSTALL_DIR` stattdessen dieses Verzeichnis verwenden.
 
 Zielverzeichnis oder Release mit `INSTALL_DIR=…` beziehungsweise `RELEASE_BASE=…` überschreiben.
 
@@ -268,9 +271,18 @@ Beide sind PEM-verpacktes ed25519, PKCS#8 beziehungsweise SPKI.
 
 ## 3. Einen Skill als versiegeltes Bundle paketieren
 
-Ein Skill-Verzeichnis benötigt nur `SKILL.md`. Mit Manifest in ein `.skb`-Bundle packen:
+Das folgende Beispiel in einem leeren Arbeitsverzeichnis anlegen und anschließend als `.skb`-Bundle paketieren. Bei einem vorhandenen Skill dessen Verzeichnis verwenden, statt das Beispiel anzulegen:
 
 ```bash
+mkdir -p my-skill
+cat > my-skill/SKILL.md <<'SKILL'
+---
+name: my-skill
+description: A small local example.
+---
+Reply with: Hello from my signed skill.
+SKILL
+
 skillctl pack \
   --skill ./my-skill \
   -o my-skill.skb \
@@ -314,7 +326,7 @@ Berechnet den Digest erneut, findet die passende Signatur und prüft sie.
 **Kein Netzwerk, keine CA.**
 
 ```
-Exit codes:  0 ok  ·  11 signature invalid  ·  1 other error  ·  2 usage
+Exit codes:  0 ok  ·  10 bundle bytes changed  ·  11 signature invalid  ·  1 other error  ·  2 usage
 ```
 
 Das ist der Kernablauf: **Jeder mit Ihrem öffentlichen Schlüssel kann Echtheit und
