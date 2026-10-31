@@ -60,7 +60,7 @@ The unsigned per-arch skillctl assets that used to ride along on the `v*` produc
 been **retired**: don't look for them there. To install by hand, pull the raw binary and its
 `SHA256SUMS` from the signed release and verify integrity *before* moving it onto your `PATH`:
 ```bash
-BASE="https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.6.2"
+BASE="https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.6.3"
 curl -sLO "$BASE/skillctl-darwin-arm64"     # or darwin-amd64 / linux-amd64 / linux-arm64 / windows-amd64.exe
 curl -sLO "$BASE/SHA256SUMS"
 grep ' skillctl-darwin-arm64$' SHA256SUMS | shasum -a 256 -c -     # integrity gate. Fails closed on mismatch

@@ -65,7 +65,7 @@ je Architektur wurden **eingestellt**. Dort nicht mehr danach suchen. Zur manuel
 Installation Binary und `SHA256SUMS` aus dem signierten Release laden und die Integrität
 **vor** dem Verschieben in `PATH` prüfen:
 ```bash
-BASE="https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.6.2"
+BASE="https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.6.3"
 curl -sLO "$BASE/skillctl-darwin-arm64"     # or darwin-amd64 / linux-amd64 / linux-arm64 / windows-amd64.exe
 curl -sLO "$BASE/SHA256SUMS"
 grep ' skillctl-darwin-arm64$' SHA256SUMS | shasum -a 256 -c -     # integrity gate. Fails closed on mismatch
