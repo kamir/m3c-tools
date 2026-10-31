@@ -797,7 +797,7 @@ func cmdSetup(args []string) {
 		if venvExists && whisperFound {
 			fmt.Println("Status: ready")
 		} else {
-			fmt.Println("Status: setup needed: run 'm3c-tools setup'")
+			fmt.Println("Status: setup needed: run 'm3c-tools setup whisper'")
 			os.Exit(1)
 		}
 		return
@@ -814,22 +814,8 @@ func cmdSetup(args []string) {
 		os.Exit(1)
 	}
 
-	// Run setup-venv.sh
-	setupScript := findSetupScript()
-	if setupScript == "" {
-		fmt.Fprintf(os.Stderr, "Error: setup-venv.sh not found.\n")
-		fmt.Fprintf(os.Stderr, "Expected next to the m3c-tools binary (e.g. <install-dir>/scripts/setup-venv.sh).\n")
-		os.Exit(1)
-	}
-
-	setupArgs := []string{setupScript}
-	if force {
-		setupArgs = append(setupArgs, "--force")
-	}
-	cmd := exec.Command("bash", setupArgs...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	// The release binary carries its own setup script; no checkout is required.
+	if err := whisper.SetupVenv(context.Background(), force, os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintf(os.Stderr, "\nSetup failed: %v\n", err)
 		os.Exit(1)
 	}
@@ -843,52 +829,12 @@ func cmdSetup(args []string) {
 		if er1.IsReachable(er1Cfg) {
 			fmt.Println("  ER1 server: REACHABLE")
 		} else {
-			fmt.Println("  ER1 server: UNREACHABLE (run 'm3c-tools setup --force' to reconfigure)")
+			fmt.Println("  ER1 server: UNREACHABLE (run 'm3c-tools setup er1' to reconfigure)")
 		}
 	} else {
-		fmt.Println("  ER1 not configured. Run 'm3c-tools setup --force' to set up ER1 onboarding.")
-		fmt.Println("  Or configure manually: cp .env.example ~/.m3c-tools.env")
+		fmt.Println("  ER1 not configured. Run 'm3c-tools setup er1' to set up ER1 onboarding.")
+		fmt.Println("  Or create ~/.m3c-tools.env with your ER1 server URL, credential and context.")
 	}
-}
-
-// findSetupScript locates setup-venv.sh anchored to the running binary's
-// install location.
-//
-// SEC-M12: it deliberately does NOT consult a cwd-relative "scripts/..." path.
-// The result is passed to `bash <script>`, so a cwd-relative lookup would let
-// anyone who can choose the working directory drop a malicious setup-venv.sh and
-// have it executed (working-dir hijack). All candidates are resolved against
-// os.Executable()'s directory (and its parent), then symlinks are resolved so
-// the returned path is absolute and stable.
-func findSetupScript() string {
-	exePath, err := os.Executable()
-	if err != nil {
-		return ""
-	}
-	// Resolve symlinks so a symlinked binary still anchors to its real install dir.
-	if resolved, rErr := filepath.EvalSymlinks(exePath); rErr == nil {
-		exePath = resolved
-	}
-	exeDir := filepath.Dir(exePath)
-
-	candidates := []string{
-		// Alongside the binary (e.g. release tarball layout).
-		filepath.Join(exeDir, "scripts", "setup-venv.sh"),
-		filepath.Join(exeDir, "setup-venv.sh"),
-		// One level up (e.g. <prefix>/bin/m3c-tools -> <prefix>/scripts/...).
-		filepath.Join(exeDir, "..", "scripts", "setup-venv.sh"),
-		// macOS app bundle Resources.
-		filepath.Join(exeDir, "..", "Resources", "setup-venv.sh"),
-	}
-	for _, c := range candidates {
-		if _, statErr := os.Stat(c); statErr == nil {
-			if abs, aErr := filepath.Abs(c); aErr == nil {
-				return abs
-			}
-			return c
-		}
-	}
-	return ""
 }
 
 func cmdCheckER1() {
