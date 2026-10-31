@@ -77,6 +77,18 @@ class LanguageGateTests(unittest.TestCase):
         (cache / "README.md").write_text("# pytest cache directory\n")
         self.assertEqual(gate.check(self.root, self.manifest), [])
 
+    def test_refresh_records_a_machine_edit(self):
+        (self.root / "docs/guide.md").write_text(self.en + "\nPin abc.\n")
+        (self.root / "docs/guide.de.md").write_text(self.de + "\nPin abc.\n")
+        self.assertTrue(gate.check(self.root, self.manifest))
+        gate.refresh(self.root, self.manifest, {"docs/guide.md", "docs/guide.de.md"})
+        self.assertEqual(gate.check(self.root, self.manifest), [])
+
+    def test_refresh_leaves_other_pairs_unreviewed(self):
+        (self.root / "docs/guide.md").write_text(self.en + "\nChanged.\n")
+        gate.refresh(self.root, self.manifest, {"docs/other.md"})
+        self.assertIn("changed since bilingual review", " ".join(gate.check(self.root, self.manifest)))
+
     def test_missing_section(self):
         self.en += "\n## Additional section\n"
         self.write_pair()
