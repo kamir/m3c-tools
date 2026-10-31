@@ -125,8 +125,8 @@
     {
       "de": "docs/v2/nutzer/quickstart-m3c-tools.de.md",
       "en": "docs/v2/nutzer/quickstart-m3c-tools.md",
-      "de_sha256": "6f3beacb4634049504c9099f8fd2b1c03a1096138d9c6daf09f6784dc6147c07",
-      "en_sha256": "93e12ba3855f40231713cacb7681db4964260f4f659dd80f82f029dcdde9950b"
+      "de_sha256": "7d18cfe8c1c5ff9c7c9971fb327678c4804639bea8e6e9201c60bef46eeadc00",
+      "en_sha256": "ecfce239c190c6e328c90fcbff52ea0b7d2196c14fab58a359d0067f4d8c2324"
     },
     {
       "de": "docs/v2/nutzer/quickstart-skillctl-demo.de.md",
@@ -137,8 +137,8 @@
     {
       "de": "docs/v2/nutzer/quickstart-skillctl.de.md",
       "en": "docs/v2/nutzer/quickstart-skillctl.md",
-      "de_sha256": "7c9e226c9f435d4ff357a3e175fedc66b6489c4d7138a10ed6598c3e072ec791",
-      "en_sha256": "d6d2079d675d02db29d4fe16b7cb6325d7f1b217eeee7a05a5d36259b3c5cf51"
+      "de_sha256": "c86246756996f933f5adb2dd49246978aa12dd3edebaa236c3e5eeebfae24735",
+      "en_sha256": "4496f1c4bd16e0d2edea94e197c5d6a0602da948ab5e3513c5347aa3d2f315db"
     },
     {
       "de": "docs/v2/nutzer/tutorial-katas-und-test-ride.de.md",
@@ -197,8 +197,8 @@
     {
       "de": "README.de.md",
       "en": "README.md",
-      "de_sha256": "ca5567a3b356726bf2541ec41f8ae9b1c6432c39e27ef7573812fa602a2a00a9",
-      "en_sha256": "604db69346c182db0af69f8257df020ff22612508d28ec3d4a16bcf3c22fb177"
+      "de_sha256": "670f181f5d01caccbda4b9f078b0171830fe22680b992b720f594c1e73f55d3b",
+      "en_sha256": "f4e5a409b9fb8c0db9798201b98ec8149eaa0ed9bf32e643bb09739f8b573f8c"
     },
     {
       "de": "SECURITY.de.md",

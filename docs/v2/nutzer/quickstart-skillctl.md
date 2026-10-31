@@ -30,7 +30,7 @@ no admin rights required.
 
 **Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/skillctl-install.ps1 | iex
+irm https://raw.githubusercontent.com/kamir/m3c-tools/ef6c6889b072d644b2fe9c82f3377f84565508c6/tools/skillctl-install.ps1 | iex
 ```
 
 Installs to `%LOCALAPPDATA%\Programs\skillctl` after verifying cosign provenance + SHA-256.
@@ -41,12 +41,12 @@ two `skillctl.exe` on your `PATH`.
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/skillctl-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/ef6c6889b072d644b2fe9c82f3377f84565508c6/tools/skillctl-install.sh | bash
 ```
 
 Override the target dir or the release with `INSTALL_DIR=…` / `RELEASE_BASE=…`.
 
-**Bootstrap integrity.** The one-liner URLs are pinned to the **immutable commit `953dd07`**
+**Bootstrap integrity.** The one-liner URLs are pinned to the **immutable commit `ef6c688`**
 (not the mutable `master` branch, where one rewrite could swap the bootstrap script *and* every
 pin inside it). Verify the fetched bytes out-of-band before trusting them, expected SHA-256:
 `tools/skillctl-install.ps1` → `a85f73ba04d279033d1bfad348f71931297df06511c75c9313bde1eb2883ed2b`;
@@ -60,7 +60,7 @@ The unsigned per-arch skillctl assets that used to ride along on the `v*` produc
 been **retired**: don't look for them there. To install by hand, pull the raw binary and its
 `SHA256SUMS` from the signed release and verify integrity *before* moving it onto your `PATH`:
 ```bash
-BASE="https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.6.2"
+BASE="https://github.com/kamir/m3c-tools/releases/download/skillctl/v0.6.3"
 curl -sLO "$BASE/skillctl-darwin-arm64"     # or darwin-amd64 / linux-amd64 / linux-arm64 / windows-amd64.exe
 curl -sLO "$BASE/SHA256SUMS"
 grep ' skillctl-darwin-arm64$' SHA256SUMS | shasum -a 256 -c -     # integrity gate. Fails closed on mismatch

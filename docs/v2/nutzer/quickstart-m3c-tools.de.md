@@ -24,11 +24,11 @@ und ein YouTube-Transkript abgerufen und auf Wunsch hochgeladen.
 Das installiert `m3c-tools` für Ihren Benutzer, ohne Adminrechte. Sie brauchen cosign oder ein OpenSSL mit ed25519-Unterstützung. Führen Sie auf macOS zuerst `brew install cosign` aus.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/m3c-tools-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/ef6c6889b072d644b2fe9c82f3377f84565508c6/tools/m3c-tools-install.sh | bash
 ```
 
 ```powershell
-irm https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/m3c-tools-install.ps1 | iex
+irm https://raw.githubusercontent.com/kamir/m3c-tools/ef6c6889b072d644b2fe9c82f3377f84565508c6/tools/m3c-tools-install.ps1 | iex
 ```
 
 Die URLs sind auf einen unveränderlichen Commit gepinnt. Erwartete SHA-256-Werte:
