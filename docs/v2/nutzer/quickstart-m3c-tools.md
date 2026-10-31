@@ -24,7 +24,10 @@ This installs `m3c-tools` for your user, with no admin rights. You need cosign, 
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/ef6c6889b072d644b2fe9c82f3377f84565508c6/tools/m3c-tools-install.sh | bash
+export PATH="$HOME/.local/bin:$PATH"
 ```
+
+This makes the installed command available in this terminal. Repeat the export in a new terminal, or add it once to your shell startup file (for example `~/.zshrc` or `~/.bashrc`). If you set `INSTALL_DIR`, use that directory instead.
 
 ```powershell
 irm https://raw.githubusercontent.com/kamir/m3c-tools/ef6c6889b072d644b2fe9c82f3377f84565508c6/tools/m3c-tools-install.ps1 | iex
@@ -37,12 +40,15 @@ The URLs are pinned to an immutable commit. Expected SHA-256:
 
 The [README](../../../README.md#verify-before-you-run) has a verify-then-run recipe.
 
-Check it, then fetch a first transcript. This needs no account:
+Check the installation first. `doctor` exits `0` with an explanation when ER1 has not been configured. Fetching a transcript then needs no account, but does depend on YouTube:
 
 ```bash
 m3c-tools version
+m3c-tools doctor
 m3c-tools transcript dQw4w9WgXcQ
 ```
+
+Expected: `version` prints the release version; without ER1, `doctor` prints `ER1 is not configured` and exits `0`. That confirms the local installation. A first capture succeeds when `transcript` prints the video text, or `whisper` transcribes your own audio after its runtime is installed. Uploads need the separate ER1 setup below; an unconfigured `doctor` result does not prove upload readiness. For YouTube HTTP `429`, follow Troubleshooting.
 
 > **Prefer to build from source?** You need Go 1.26.10+. On macOS the menu-bar GUI also needs
 > `brew install pkg-config portaudio ffmpeg` and `python3 -m pip install openai-whisper`.
@@ -53,8 +59,10 @@ m3c-tools transcript dQw4w9WgXcQ
 ## 2. Connect to ER1 (guided setup)
 
 ```bash
-m3c-tools setup
+m3c-tools setup er1
 ```
+
+On macOS, bare `m3c-tools setup` starts Whisper setup. Use `setup er1` explicitly to configure uploads.
 
 The wizard walks you through:
 
@@ -69,10 +77,15 @@ It writes everything to `~/.m3c-tools.env`.
 > device token. Uploads authenticate with an API key **or** a device token: set up at
 > least one. Run `m3c-tools login` any time to (re-)pair via the browser.
 
-**Prefer manual config?** Copy the template and edit it:
+**Prefer manual config?** Create this file, then replace the three example values with your server URL, credential and context. This works after a binary install; no repository clone is needed:
 
 ```bash
-cp .env.example ~/.m3c-tools.env
+umask 077
+cat > ~/.m3c-tools.env <<'ENV'
+ER1_API_URL=https://onboarding.guide/upload_2
+ER1_API_KEY=your-api-key
+ER1_CONTEXT_ID=your-context-id
+ENV
 ```
 
 ```ini
@@ -123,6 +136,30 @@ it to ER1. If subtitles are disabled, it still captures the **thumbnail and the 
 the observation is never empty. Add your own audio with `--audio note.wav`.
 
 ### Transcribe local audio
+
+Requires your own `meeting.wav`, Python and `ffmpeg`. The CLI does not bundle Whisper. The released macOS installer for v2.13.1 omits a helper required by `setup whisper`, so create the runtime directly with the following commands until a fixed release is published:
+
+Install the macOS prerequisites first with `brew install python ffmpeg`.
+
+```bash
+python3 -m venv "$HOME/.m3c-tools/venv"
+"$HOME/.m3c-tools/venv/bin/python" -m pip install --upgrade pip
+"$HOME/.m3c-tools/venv/bin/python" -m pip install openai-whisper
+export PATH="$HOME/.m3c-tools/venv/bin:$PATH"
+```
+
+On Debian/Ubuntu, create a user-scoped Python environment (installing OS packages requires administrator rights):
+
+```bash
+sudo apt-get install python3-venv ffmpeg
+python3 -m venv "$HOME/.m3c-tools/venv"
+"$HOME/.m3c-tools/venv/bin/python" -m pip install --upgrade pip
+"$HOME/.m3c-tools/venv/bin/python" -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+"$HOME/.m3c-tools/venv/bin/python" -m pip install openai-whisper
+export PATH="$HOME/.m3c-tools/venv/bin:$PATH"
+```
+
+This uses the [official PyTorch CPU packages](https://docs.pytorch.org/get-started/locally/), without requiring a GPU. Other Linux distributions need their equivalent Python-venv and ffmpeg packages. Check `ffmpeg -version` and `whisper --help` before proceeding. `doctor` checks ER1 configuration, not the Whisper installation.
 
 ```bash
 m3c-tools whisper meeting.wav --model base --language en
@@ -177,10 +214,11 @@ m3c-tools pocket ...            # see: m3c-tools pocket --help
 
 | Symptom | Fix |
 |---------|-----|
-| `doctor` shows `key_set=false` / auth failing | Your active profile has no real key. Re-run `m3c-tools setup` or `m3c-tools login`; ensure `ER1_API_KEY` isn't a placeholder. |
+| `doctor` shows `key_set=false` / auth failing | Your active profile has no real key. Re-run `m3c-tools setup er1` or `m3c-tools login`; ensure `ER1_API_KEY` isn't a placeholder. |
 | "Projects" menu stuck on *Loading projects…* | No ER1 credential reached the app. Fix the active profile's key or run `login`, then restart the menu-bar app. |
 | `subtitles are disabled for this video` | Expected. The capture still keeps the thumbnail + link. Add a voice note. |
-| Whisper "command not found" | Install it: `python3 -m pip install openai-whisper` (needs `ffmpeg`). |
+| YouTube returns HTTP `429` | YouTube is rate-limiting the request. Stop retrying and try later or use a proxy you control (`transcript --proxy-url`). `version` and `doctor` can still confirm the local installation. For your own audio use `whisper` after installing its runtime below. |
+| Whisper "command not found" | Follow the platform-specific runtime setup in “Transcribe local audio” above; it installs Whisper into a Python environment and requires `ffmpeg`. |
 | `import-audio --run` exits `1` and reports `failed=1` | A transcription or an upload failed. A file with a failed transcription is not uploaded and is picked up again on the next run. A failed upload is queued; run `m3c-tools retry`. |
 | Upload fails, then retries | Failed uploads queue locally. `m3c-tools status` shows `Uploads waiting for retry`. `m3c-tools retry` delivers them and keeps running until you stop it with Ctrl+C. |
 

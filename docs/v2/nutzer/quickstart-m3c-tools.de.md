@@ -25,7 +25,10 @@ Das installiert `m3c-tools` für Ihren Benutzer, ohne Adminrechte. Sie brauchen 
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/ef6c6889b072d644b2fe9c82f3377f84565508c6/tools/m3c-tools-install.sh | bash
+export PATH="$HOME/.local/bin:$PATH"
 ```
+
+Damit ist der installierte Befehl in diesem Terminal verfügbar. Den Export in einem neuen Terminal wiederholen oder einmal in die Startdatei der Shell aufnehmen, etwa `~/.zshrc` oder `~/.bashrc`. Bei gesetztem `INSTALL_DIR` stattdessen dieses Verzeichnis verwenden.
 
 ```powershell
 irm https://raw.githubusercontent.com/kamir/m3c-tools/ef6c6889b072d644b2fe9c82f3377f84565508c6/tools/m3c-tools-install.ps1 | iex
@@ -38,12 +41,15 @@ Die URLs sind auf einen unveränderlichen Commit gepinnt. Erwartete SHA-256-Wert
 
 Die [README](../../../README.de.md#vor-dem-ausführen-prüfen) enthält eine Anleitung zum Prüfen vor dem Ausführen.
 
-Prüfen Sie die Installation und holen Sie ein erstes Transkript. Dafür brauchen Sie kein Konto:
+Zuerst die Installation prüfen. Ohne eingerichtetes ER1 endet `doctor` mit einer Erklärung und Exit `0`. Für das anschließende Transkript ist kein Konto nötig; der Abruf hängt jedoch von YouTube ab:
 
 ```bash
 m3c-tools version
+m3c-tools doctor
 m3c-tools transcript dQw4w9WgXcQ
 ```
+
+Erwartet: `version` zeigt die Release-Version; ohne ER1 meldet `doctor` `ER1 is not configured` und endet mit `0`. Das bestätigt die lokale Installation. Die erste Erfassung gelingt, wenn `transcript` den Videotext ausgibt oder `whisper` nach Installation seiner Laufzeitwerkzeuge eine eigene Audiodatei transkribiert. Uploads benötigen die folgende ER1-Einrichtung; ein nicht konfiguriertes `doctor` bestätigt keine Upload-Bereitschaft. Bei YouTube-HTTP-`429` hilft die Fehlerbehebung unten.
 
 > **Lieber aus dem Quellcode bauen?** Sie brauchen Go 1.26.10+. Auf macOS braucht die Menüleisten-GUI zusätzlich
 > `brew install pkg-config portaudio ffmpeg` und `python3 -m pip install openai-whisper`.
@@ -54,8 +60,10 @@ m3c-tools transcript dQw4w9WgXcQ
 ## 2. Mit ER1 verbinden (geführte Einrichtung)
 
 ```bash
-m3c-tools setup
+m3c-tools setup er1
 ```
+
+Unter macOS startet `m3c-tools setup` ohne Unterbefehl die Whisper-Einrichtung. Für Uploads ausdrücklich `setup er1` verwenden.
 
 Der Assistent führt durch:
 
@@ -71,10 +79,15 @@ Alles wird nach `~/.m3c-tools.env` geschrieben.
 > Geräte-Token; mindestens eine Variante einrichten. Mit `m3c-tools login` lässt
 > sich die Browserkopplung jederzeit erneut ausführen.
 
-**Lieber manuell konfigurieren?** Vorlage kopieren und bearbeiten:
+**Lieber manuell konfigurieren?** Diese Datei anlegen und anschließend die drei Beispielwerte durch Server-URL, Zugangsdaten und Kontext ersetzen. Das funktioniert nach der Binärinstallation ohne Repository-Klon:
 
 ```bash
-cp .env.example ~/.m3c-tools.env
+umask 077
+cat > ~/.m3c-tools.env <<'ENV'
+ER1_API_URL=https://onboarding.guide/upload_2
+ER1_API_KEY=your-api-key
+ER1_CONTEXT_ID=your-context-id
+ENV
 ```
 
 ```ini
@@ -125,6 +138,30 @@ lädt es nach ER1 hoch. Sind Untertitel deaktiviert, bleiben **Vorschaubild und 
 damit die Beobachtung nicht leer ist. Eigenes Audio mit `--audio note.wav` hinzufügen.
 
 ### Lokales Audio transkribieren
+
+Voraussetzung sind Ihre eigene Datei `meeting.wav`, Python und `ffmpeg`. Das CLI enthält Whisper nicht. Dem veröffentlichten macOS-Installer von v2.13.1 fehlt ein für `setup whisper` benötigtes Hilfsskript. Bis zur Veröffentlichung einer korrigierten Version die Laufzeitumgebung direkt so anlegen:
+
+Zuerst die macOS-Voraussetzungen mit `brew install python ffmpeg` installieren.
+
+```bash
+python3 -m venv "$HOME/.m3c-tools/venv"
+"$HOME/.m3c-tools/venv/bin/python" -m pip install --upgrade pip
+"$HOME/.m3c-tools/venv/bin/python" -m pip install openai-whisper
+export PATH="$HOME/.m3c-tools/venv/bin:$PATH"
+```
+
+Unter Debian/Ubuntu eine Python-Umgebung für den eigenen Benutzer anlegen; die Installation der Betriebssystempakete benötigt Administratorrechte:
+
+```bash
+sudo apt-get install python3-venv ffmpeg
+python3 -m venv "$HOME/.m3c-tools/venv"
+"$HOME/.m3c-tools/venv/bin/python" -m pip install --upgrade pip
+"$HOME/.m3c-tools/venv/bin/python" -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+"$HOME/.m3c-tools/venv/bin/python" -m pip install openai-whisper
+export PATH="$HOME/.m3c-tools/venv/bin:$PATH"
+```
+
+Das verwendet die [offiziellen CPU-Pakete von PyTorch](https://docs.pytorch.org/get-started/locally/) und benötigt keine GPU. Andere Linux-Distributionen benötigen ihre entsprechenden Python-venv- und ffmpeg-Pakete. Vor dem Fortfahren `ffmpeg -version` und `whisper --help` prüfen. `doctor` prüft die ER1-Konfiguration, nicht die Whisper-Installation.
 
 ```bash
 m3c-tools whisper meeting.wav --model base --language en
@@ -182,10 +219,11 @@ m3c-tools pocket ...            # see: m3c-tools pocket --help
 
 | Symptom | Abhilfe |
 |---|---|
-| `doctor` zeigt `key_set=false` oder Authentisierung schlägt fehl | Das aktive Profil hat keinen echten Schlüssel. `m3c-tools setup` oder `m3c-tools login` erneut ausführen; `ER1_API_KEY` darf kein Platzhalter sein. |
+| `doctor` zeigt `key_set=false` oder Authentisierung schlägt fehl | Das aktive Profil hat keinen echten Schlüssel. `m3c-tools setup er1` oder `m3c-tools login` erneut ausführen; `ER1_API_KEY` darf kein Platzhalter sein. |
 | Projects-Menü bleibt bei *Loading projects…* stehen | Bei der App kam kein ER1-Credential an. Schlüssel im aktiven Profil korrigieren oder `login` ausführen, danach die Menüleisten-App neu starten. |
 | `subtitles are disabled for this video` | Erwartetes Verhalten. Vorschaubild und Link bleiben erhalten. Eine Sprachnotiz ergänzen. |
-| Whisper meldet "command not found" | Mit `python3 -m pip install openai-whisper` installieren; benötigt `ffmpeg`. |
+| YouTube antwortet mit HTTP `429` | YouTube begrenzt den Abruf. Weitere Versuche stoppen und später erneut probieren oder einen eigenen Proxy verwenden (`transcript --proxy-url`). `version` und `doctor` bestätigen weiterhin die lokale Installation. Für eigene Audiodateien nach Installation der unten genannten Laufzeitwerkzeuge `whisper` verwenden. |
+| Whisper "command not found" | Die plattformspezifische Einrichtung unter „Lokales Audio transkribieren“ oben verwenden; sie installiert Whisper in einer Python-Umgebung und benötigt `ffmpeg`. |
 | `import-audio --run` endet mit `1` und meldet `failed=1` | Eine Transkription oder ein Upload ist fehlgeschlagen. Eine Datei mit fehlgeschlagener Transkription wird nicht hochgeladen und beim nächsten Lauf neu aufgegriffen. Ein fehlgeschlagener Upload liegt in der Warteschlange; führen Sie `m3c-tools retry` aus. |
 | Upload schlägt fehl und wird wiederholt | Fehlgeschlagene Uploads liegen lokal in der Warteschlange. `m3c-tools status` zeigt `Uploads waiting for retry`. `m3c-tools retry` liefert sie aus und läuft weiter, bis Sie mit Strg+C stoppen. |
 
