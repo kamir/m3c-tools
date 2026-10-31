@@ -65,7 +65,7 @@ Pick the tool you came for. Each has its own installer, and you can
 ### `m3c-tools`: capture your first memory
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/m3c-tools-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/ef6c6889b072d644b2fe9c82f3377f84565508c6/tools/m3c-tools-install.sh | bash
 
 m3c-tools transcript dQw4w9WgXcQ        # no account needed
 m3c-tools doctor                        # shows what works without ER1
@@ -77,7 +77,7 @@ m3c-tools setup                         # connect to ER1 for uploads
 ### `skillctl`: sign and verify your first skill
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/skillctl-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/ef6c6889b072d644b2fe9c82f3377f84565508c6/tools/skillctl-install.sh | bash
 
 skillctl keygen --out ~/.config/m3c/skill-keys/mykey            # ed25519 → mykey.priv + mykey.pub
 skillctl pack --skill ./my-skill -o my-skill.skb --name my-skill --version 1.0.0
@@ -239,11 +239,11 @@ You need cosign, or an OpenSSL with ed25519 support. Stock macOS ships LibreSSL,
 ### Install skillctl
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/skillctl-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/ef6c6889b072d644b2fe9c82f3377f84565508c6/tools/skillctl-install.sh | bash
 ```
 
 ```powershell
-irm https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/skillctl-install.ps1 | iex
+irm https://raw.githubusercontent.com/kamir/m3c-tools/ef6c6889b072d644b2fe9c82f3377f84565508c6/tools/skillctl-install.ps1 | iex
 ```
 
 This installs to `~/.local/bin`, on Windows to `%LOCALAPPDATA%\Programs\skillctl`. It also registers a user-level service that runs `skillctl verify --all --json` every hour, so revocations reach this machine. Set `SKILLCTL_NO_SERVICE=1` to skip the service. Then revocations arrive only with `pull` or `verify --all`.
@@ -251,11 +251,11 @@ This installs to `~/.local/bin`, on Windows to `%LOCALAPPDATA%\Programs\skillctl
 ### Install m3c-tools
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/m3c-tools-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/ef6c6889b072d644b2fe9c82f3377f84565508c6/tools/m3c-tools-install.sh | bash
 ```
 
 ```powershell
-irm https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/m3c-tools-install.ps1 | iex
+irm https://raw.githubusercontent.com/kamir/m3c-tools/ef6c6889b072d644b2fe9c82f3377f84565508c6/tools/m3c-tools-install.ps1 | iex
 ```
 
 This installs to `~/.local/bin`, on Windows to `%LOCALAPPDATA%\Programs\m3c-tools`.
@@ -264,7 +264,7 @@ Both installers take `INSTALL_DIR=…` and `RELEASE_BASE=…`. The machine-wide 
 
 ### Verify before you run
 
-The URLs are pinned to the immutable commit `953dd07`, not the mutable `master` branch. Expected SHA-256:
+The URLs are pinned to the immutable commit `ef6c688`, not the mutable `master` branch. Expected SHA-256:
 
 | Script | SHA-256 |
 |--------|---------|
@@ -275,14 +275,14 @@ The URLs are pinned to the immutable commit `953dd07`, not the mutable `master` 
 
 ```bash
 # macOS / Linux
-u='https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/skillctl-install.sh'
+u='https://raw.githubusercontent.com/kamir/m3c-tools/ef6c6889b072d644b2fe9c82f3377f84565508c6/tools/skillctl-install.sh'
 f=$(mktemp); curl -fsSL "$u" -o "$f"
 echo 'a013791fbe2ae90a109e98c26cca88874348e3aa7d4164832dc8d52bddf5a2b8  '"$f" | shasum -a 256 -c - && bash "$f"
 ```
 
 ```powershell
 # Windows
-$u = 'https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/skillctl-install.ps1'
+$u = 'https://raw.githubusercontent.com/kamir/m3c-tools/ef6c6889b072d644b2fe9c82f3377f84565508c6/tools/skillctl-install.ps1'
 $f = "$env:TEMP\skillctl-install.ps1"; irm $u -OutFile $f
 if ((Get-FileHash $f -Algorithm SHA256).Hash -ne 'A85F73BA04D279033D1BFAD348F71931297DF06511C75C9313BDE1EB2883ED2B') { throw 'SHA-256 mismatch' }
 & $f
@@ -290,14 +290,14 @@ if ((Get-FileHash $f -Algorithm SHA256).Hash -ne 'A85F73BA04D279033D1BFAD348F719
 
 ```bash
 # macOS / Linux
-u='https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/m3c-tools-install.sh'
+u='https://raw.githubusercontent.com/kamir/m3c-tools/ef6c6889b072d644b2fe9c82f3377f84565508c6/tools/m3c-tools-install.sh'
 f=$(mktemp); curl -fsSL "$u" -o "$f"
 echo '709f6bd339c1feedcb1e2156348823341b1192ba3c139765e2fff8f5fddf67e7  '"$f" | shasum -a 256 -c - && bash "$f"
 ```
 
 ```powershell
 # Windows
-$u = 'https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/m3c-tools-install.ps1'
+$u = 'https://raw.githubusercontent.com/kamir/m3c-tools/ef6c6889b072d644b2fe9c82f3377f84565508c6/tools/m3c-tools-install.ps1'
 $f = "$env:TEMP\m3c-tools-install.ps1"; irm $u -OutFile $f
 if ((Get-FileHash $f -Algorithm SHA256).Hash -ne 'B54A562F17FE6C1C8CF34375E002A0286859359E421F397A6BF95065F7DD3339') { throw 'SHA-256 mismatch' }
 & $f

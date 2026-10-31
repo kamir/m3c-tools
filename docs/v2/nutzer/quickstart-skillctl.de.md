@@ -32,7 +32,7 @@ Die **Einzeilen-Installer** laden das passende Binary, **prüfen cosign-Provenan
 
 **Windows (PowerShell):**
 ```powershell
-irm https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/skillctl-install.ps1 | iex
+irm https://raw.githubusercontent.com/kamir/m3c-tools/ef6c6889b072d644b2fe9c82f3377f84565508c6/tools/skillctl-install.ps1 | iex
 ```
 
 Installiert nach `%LOCALAPPDATA%\Programs\skillctl`, nach Prüfung von cosign-Provenance
@@ -43,13 +43,13 @@ Varianten** verwenden, damit nicht zwei `skillctl.exe` in Ihrem `PATH` liegen.
 
 **macOS / Linux:**
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/953dd07dfe440309f5702f296346b5e85bc5c1e1/tools/skillctl-install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kamir/m3c-tools/ef6c6889b072d644b2fe9c82f3377f84565508c6/tools/skillctl-install.sh | bash
 ```
 
 Zielverzeichnis oder Release mit `INSTALL_DIR=…` beziehungsweise `RELEASE_BASE=…` überschreiben.
 
 **Integrität des Bootstraps.** Die Einzeiler-URLs sind auf den **unveränderlichen Commit
-`953dd07`** gepinnt, statt auf den veränderlichen Branch `master`, auf dem eine Umschreibung
+`ef6c688`** gepinnt, statt auf den veränderlichen Branch `master`, auf dem eine Umschreibung
 Bootstrap-Skript und alle darin enthaltenen Pins gleichzeitig austauschen könnte.
 Die heruntergeladenen Bytes vor dem Vertrauen unabhängig prüfen. Erwartete SHA-256:
 `tools/skillctl-install.ps1` → `a85f73ba04d279033d1bfad348f71931297df06511c75c9313bde1eb2883ed2b`;
