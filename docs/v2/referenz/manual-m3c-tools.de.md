@@ -498,7 +498,7 @@ m3c-tools setup [flags]
 ```
 
 **Unter macOS** werden die virtuelle Python-Umgebung eingerichtet und whisper
-für lokale Transkription installiert.
+für lokale Transkription installiert. Dem veröffentlichten Installer von v2.13.1 fehlt der externe Helfer, den dessen Binary erwartet. Die [manuelle Laufzeiteinrichtung](../nutzer/quickstart-m3c-tools.de.md#lokales-audio-transkribieren) verwenden.
 
 | Flag | Argument | Standard | Bedeutung |
 |------|----------|---------|---------|

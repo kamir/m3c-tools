@@ -479,7 +479,7 @@ m3c-tools setup [flags]
 ```
 
 **On macOS** this sets up the Python virtual environment and installs whisper for local
-transcription.
+transcription. The released v2.13.1 installer omits the external helper its binary expects; use the [manual runtime setup](../nutzer/quickstart-m3c-tools.md#transcribe-local-audio).
 
 | Flag | Argument | Default | Meaning |
 |------|----------|---------|---------|

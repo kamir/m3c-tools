@@ -167,7 +167,7 @@ Nothing is self-reported, **a "pass" is a real exit code.**
 | **K2 Detect tamper** | catch a modified skill before it runs | edit on disk → `verify --all` → exit `10` | 3 reps |
 | **K3 Govern reversibly** | run a destructive op that refuses to be forced | `audit --cleanup --dry-run-cleanup` → `--cleanup --confirm-delete` on a drifted set → exit `2` | 3 reps |
 | **K4 Trust roots & install** | pin a registry and install only what's admitted | `trust add → install → verify` → exit `0` | 3 reps |
-| **K5 Revoke & fail-closed** | deny a revoked skill offline, fail-closed | `verify --bundle … --revocations <signed-list>` → revoked digest → exit `17` | 3 reps (+ the S3 fleet-propagation roadmap panel to read) |
+| **K5 Revoke & fail-closed** | deny a revoked skill offline, fail-closed | `verify --bundle … --revocations <signed-list>` → revoked digest → exit `17` | 1 rep (+ the S3 fleet-propagation roadmap panel to read) |
 
 K5 is now a **live** beat: the offline revocation deny (`verify --bundle --revocations` → exit
 `17`) runs for real. What remains roadmap is only **live fleet propagation**: the offline demo
