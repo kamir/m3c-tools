@@ -98,12 +98,26 @@ def check(root, manifest):
     return errors
 
 
+def refresh(root, manifest, names):
+    """Record new digests for pairs a machine rewrote, such as a release pin bump."""
+    data = json.loads(manifest.read_text(encoding="utf-8"))
+    for pair in data["pairs"]:
+        if pair["de"] in names or pair["en"] in names:
+            for language in ("de", "en"):
+                payload = (root / pair[language]).read_bytes()
+                pair[f"{language}_sha256"] = hashlib.sha256(payload).hexdigest()
+    manifest.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parent.parent)
     parser.add_argument("--manifest", type=Path, default=Path("docs/languages.json"))
+    parser.add_argument("--refresh", nargs="*", metavar="DOC", help="record digests for the pairs of these documents, then check")
     args = parser.parse_args()
     try:
+        if args.refresh is not None:
+            refresh(args.root, args.root / args.manifest, set(args.refresh))
         errors = check(args.root, args.root / args.manifest)
     except (OSError, ValueError, KeyError, UnicodeError) as error:
         print(f"doc-languages: invalid setup: {error}", file=sys.stderr)

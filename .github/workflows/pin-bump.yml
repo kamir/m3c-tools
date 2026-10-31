@@ -86,6 +86,11 @@ jobs:
       - name: Die erzeugten Doku-Seiten mitziehen
         run: ./scripts/check-docpages.sh --fix
 
+      # The language gate pins a digest of each published page, and the bump only
+      # rewrote commit hashes. Without this the bump PR fails the gate every time.
+      - name: Record the digests of the rewritten pages
+        run: git diff --name-only -- "*.md" | xargs python3 scripts/check-doc-languages.py --refresh
+
       # A bad bump must fail here, not become a pull request. The bumper only
       # rewrites; this is what judges the result.
       - name: Verify the result
