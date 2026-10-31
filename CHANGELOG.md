@@ -31,7 +31,7 @@ version is ldflags-stamped (`skillctl version`). Release tags: `skillctl/vX.Y.Z`
 ### Fixed
 - **`skillctl audit` tells a clean Git install from a broken one.** Before, a clean and
   a tampered install both reported below minimum with exit 2. A clean install now exits
-  0. A tampered or revoked install exits 2 and names the broken trust chain.
+  0. A tampered or revoked install exits 3 and names the broken trust chain.
 
 ## [skillctl/v0.6.2], 2026-10-30, one installer per tool and revocation handling
 
