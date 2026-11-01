@@ -353,7 +353,7 @@ jobs:
 
       - name: Upload test execution records
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: test-records-python-gate-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: test-results/
@@ -440,7 +440,7 @@ jobs:
 
       - name: Upload test execution records
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: test-records-docs-gate-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: test-results/
@@ -543,7 +543,7 @@ jobs:
 
       - name: Upload test execution records
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: test-records-test-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: test-results/
@@ -617,7 +617,7 @@ jobs:
 
       - name: Upload test execution records
         if: always() && steps.classify.outputs.code == 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: test-records-skillctl-race-${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: test-results/
@@ -909,7 +909,7 @@ jobs:
         # for a commit that is in the product. A build on a pull request is a
         # gate result, and the result is the conclusion, not the bytes.
         if: github.event_name == 'push'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: m3c-tools-macos
           retention-days: 7
@@ -980,7 +980,7 @@ jobs:
         # for a commit that is in the product. A build on a pull request is a
         # gate result, and the result is the conclusion, not the bytes.
         if: github.event_name == 'push'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: m3c-tools-cross
           retention-days: 7
