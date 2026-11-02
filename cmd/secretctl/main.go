@@ -80,7 +80,8 @@ func registryFlag(fs *flag.FlagSet) *string {
 // the first non-flag argument, which turned the second order into a usage
 // error. Only tokens naming a flag of fs consume a following value; an
 // unknown flag stays a flag so Parse reports it. A literal "--" ends flag
-// parsing and is kept, so nothing after it is ever read as a flag.
+// parsing and is kept, so nothing after it is ever read as a flag. A value
+// flag that ends the arguments stays a parse error.
 func flagsFirst(fs *flag.FlagSet, args []string) []string {
 	var flags, positional []string
 	for i := 0; i < len(args); i++ {
@@ -105,10 +106,14 @@ func flagsFirst(fs *flag.FlagSet, args []string) []string {
 		if b, ok := fl.Value.(interface{ IsBoolFlag() bool }); ok && b.IsBoolFlag() {
 			continue
 		}
-		if i+1 < len(args) {
-			i++
-			flags = append(flags, args[i])
+		if i+1 == len(args) {
+			// A value flag with nothing after it: return it last and
+			// without the "--", so Parse reports the missing value instead
+			// of reading "--" or a positional as the value.
+			return flags
 		}
+		i++
+		flags = append(flags, args[i])
 	}
 	return append(append(flags, "--"), positional...)
 }

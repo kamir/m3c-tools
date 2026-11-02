@@ -48,13 +48,17 @@ func TestBUG0450_VerifyAcceptsFlagsAfterName(t *testing.T) {
 	}
 }
 
-// A second positional is still an error, and `--` still ends flag parsing.
+// A second positional is still an error, `--` still ends flag parsing, and
+// a value flag without a value is still a usage error.
 func TestBUG0450_StrayArgumentsStayUsageErrors(t *testing.T) {
 	path := incompleteTestRegistry(t, nil, "")
 	for _, args := range [][]string{
 		{"demo", "extra", "--registry", path},
 		{"--registry", path, "--", "demo", "--old"},
 		{"demo", "--no-such-flag"},
+		{"demo", "--registry"},
+		{"demo", "--old", "--registry"},
+		{"--registry"},
 	} {
 		var stdout, stderr bytes.Buffer
 		if code := cmdVerify(args, &stdout, &stderr); code != 2 {
