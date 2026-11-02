@@ -146,3 +146,32 @@ func TestPublishAllReportSeparatesAdmitFromAttest(t *testing.T) {
 		t.Errorf("report does not count admit and attest separately:\n%s", out.String())
 	}
 }
+
+// The batch fakes above copy what the admit reports, so on their own they
+// cannot catch a lost assignment in the production admit. This drives the REAL
+// runPublishAdmit (dry-run, so no POST) and checks that it fills the result the
+// batch hands to attest: the bundle it packed, the auto version and the digest.
+func TestRunPublishAdmitReportsWhatItPacked(t *testing.T) {
+	_, key := batchFixture(t, "real-admit")
+	var res admitResult
+	var out, errBuf bytes.Buffer
+	rc := runPublishAdmit(&out, &errBuf, publishAdmitArgs{name: "real-admit", identity: "id:probe@test",
+		keyPath: key, dryRun: true, noCheckpoint: true, result: &res})
+	if rc != 0 {
+		t.Fatalf("admit dry run exited %d\n%s%s", rc, out.String(), errBuf.String())
+	}
+	if res.version != "0.0.0" {
+		t.Errorf("result version = %q, want the auto version 0.0.0", res.version)
+	}
+	raw, err := os.ReadFile(res.bundlePath)
+	if err != nil {
+		t.Fatalf("result bundle path %q is not readable: %v", res.bundlePath, err)
+	}
+	d, _ := sha256Hex(raw)
+	if res.digest != "sha256:"+d {
+		t.Errorf("result digest %q is not the digest of %s (sha256:%s)", res.digest, res.bundlePath, d)
+	}
+	if !strings.Contains(out.String(), res.digest) {
+		t.Errorf("result digest differs from the digest the plan printed:\n%s", out.String())
+	}
+}
