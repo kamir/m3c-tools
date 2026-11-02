@@ -638,6 +638,9 @@ func doctorPlaud() diag.Section {
 	return s
 }
 
+// plaudDevTokenSoon is how close to expiry doctor flags the developer token.
+const plaudDevTokenSoon = 2 * time.Hour
+
 // doctorPlaudDevToken reports the developer-API OAuth token file that
 // 'plaud dev' and the menubar sync read (BUG-0446). It only reads the file: it
 // neither refreshes the token nor asks Plaud whether it is accepted, so an
@@ -669,8 +672,19 @@ func doctorPlaudDevToken(path string) diag.Check {
 		return diag.Check{Name: name, Status: diag.Warn,
 			Detail: fmt.Sprintf("access token expired %s ago (%s); the next sync tries a refresh, if that fails: %s", ago, exp.Format("2006-01-02 15:04"), relogin)}
 	}
+	left := time.Until(exp).Round(time.Minute)
+	if left < plaudDevTokenSoon {
+		// AC-05 of BUG-0446: the token lives about 24h, so this close to
+		// expiry a stopped refresh run means the channel dies within hours.
+		if t.RefreshToken == "" {
+			return diag.Check{Name: name, Status: diag.Fail,
+				Detail: fmt.Sprintf("expires in %s (%s), no refresh token: %s", left, exp.Format("2006-01-02 15:04"), relogin)}
+		}
+		return diag.Check{Name: name, Status: diag.Warn,
+			Detail: fmt.Sprintf("expires in %s (%s); a sync in the last hour before expiry refreshes it, if none runs: %s", left, exp.Format("2006-01-02 15:04"), relogin)}
+	}
 	return diag.Check{Name: name, Status: diag.OK,
-		Detail: fmt.Sprintf("present, expires in %s (%s); not checked against Plaud", time.Until(exp).Round(time.Hour), exp.Format("2006-01-02 15:04"))}
+		Detail: fmt.Sprintf("present, expires in %s (%s); not checked against Plaud", left, exp.Format("2006-01-02 15:04"))}
 }
 
 // doctorDevices checks device pairing status via the ER1 devices API.

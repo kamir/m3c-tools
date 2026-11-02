@@ -103,3 +103,21 @@ func TestDoctorPlaud_DeveloperTokenStates(t *testing.T) {
 		t.Errorf("unreadable file: status %v, want Fail", c.Status)
 	}
 }
+
+// BUG-0446 AC-05: the developer token lives 24h; one close to expiry is the
+// quiet death of the channel when the refresh run stops, so doctor flags it.
+func TestDoctorPlaud_DeveloperTokenCloseToExpiry(t *testing.T) {
+	home := doctorPlaudTestHome(t)
+	writeDevTokenFile(t, home, time.Now().Add(90*time.Minute), "")
+	if c := findDoctorCheck(t, doctorPlaud(), "Plaud developer token"); c.Status != diag.Fail || !strings.Contains(c.Detail, "expires in") {
+		t.Errorf("no refresh token, 90m left: %v %q, want Fail", c.Status, c.Detail)
+	}
+	writeDevTokenFile(t, home, time.Now().Add(90*time.Minute), "rt")
+	if c := findDoctorCheck(t, doctorPlaud(), "Plaud developer token"); c.Status != diag.Warn || !strings.Contains(c.Detail, "refresh") {
+		t.Errorf("refresh token, 90m left: %v %q, want Warn naming the refresh", c.Status, c.Detail)
+	}
+	writeDevTokenFile(t, home, time.Now().Add(3*time.Hour), "")
+	if c := findDoctorCheck(t, doctorPlaud(), "Plaud developer token"); c.Status != diag.OK {
+		t.Errorf("3h left: %v %q, want OK", c.Status, c.Detail)
+	}
+}
