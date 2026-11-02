@@ -62,6 +62,7 @@ Nach Domäne gegliedert:
 | `setup` | Grundlage des Onboarding-Ablaufs SPEC-0175. |
 | `httpsafe` | Kleine HTTP-Härtungshilfen ohne Abhängigkeiten, gemeinsam von Clients verwendet. |
 | `diag` | Diagnosetypen und Darstellung für doctor/check. |
+| `cliargs` | Gemeinsame Argumentbehandlung der CLIs: Flags werden auch nach dem Namen angenommen (BUG-0450). |
 | `testutil` | Gemeinsame Testhilfen. |
 
 ## E. Desktop-UI (`pkg/`)
