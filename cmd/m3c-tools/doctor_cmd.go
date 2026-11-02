@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/kamir/m3c-tools/pkg/auth"
 	"github.com/kamir/m3c-tools/pkg/config"
@@ -512,8 +513,8 @@ func quoteServerBody(body []byte, secrets ...string) string {
 		}
 	}
 	text := strings.Map(func(r rune) rune {
-		if r < 0x20 || r == 0x7f {
-			return ' '
+		if !unicode.IsPrint(r) {
+			return ' ' // control, C1, bidi override and line separators included
 		}
 		return r
 	}, strings.TrimSpace(raw))

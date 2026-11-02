@@ -119,6 +119,9 @@ func TestQuoteServerBody(t *testing.T) {
 	if got := quoteServerBody(nil); got != "(empty body)" {
 		t.Errorf("empty: %q", got)
 	}
+	if got := quoteServerBody([]byte("a\u009bb\u202ec\u2028d\u0085e")); got != "a b c d e" {
+		t.Errorf("C1, bidi and separators: %q", got)
+	}
 	if got := quoteServerBody([]byte("a\nb\x1bc")); got != "a b c" {
 		t.Errorf("control chars: %q", got)
 	}
