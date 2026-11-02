@@ -25,7 +25,7 @@ func cmdInventory(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("inventory", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	regPath := registryFlag(fs)
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(flagsFirst(fs, args)); err != nil {
 		return 2
 	}
 	if fs.NArg() != 1 {

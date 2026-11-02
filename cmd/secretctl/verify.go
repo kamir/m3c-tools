@@ -25,7 +25,7 @@ func cmdVerify(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	regPath := registryFlag(fs)
 	old := fs.Bool("old", false, "Expect refusal instead of acceptance: the proof that a rotation finished.")
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(flagsFirst(fs, args)); err != nil {
 		return 2
 	}
 	if fs.NArg() != 1 {

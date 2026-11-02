@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
 func main() {
@@ -71,4 +72,43 @@ It never prints a secret. It reports places and fingerprints.
 // registryFlag wires the shared --registry flag onto a flag set.
 func registryFlag(fs *flag.FlagSet) *string {
 	return fs.String("registry", DefaultRegistryPath(), "Path to the secret registry.")
+}
+
+// flagsFirst returns args with every flag (and its value) moved before the
+// positionals, so that `inventory <name> --registry <path>` parses like
+// `inventory --registry <path> <name>` (BUG-0450). Go's flag package stops at
+// the first non-flag argument, which turned the second order into a usage
+// error. Only tokens naming a flag of fs consume a following value; an
+// unknown flag stays a flag so Parse reports it. A literal "--" ends flag
+// parsing and is kept, so nothing after it is ever read as a flag.
+func flagsFirst(fs *flag.FlagSet, args []string) []string {
+	var flags, positional []string
+	for i := 0; i < len(args); i++ {
+		t := args[i]
+		if t == "--" {
+			positional = append(positional, args[i+1:]...)
+			break
+		}
+		if len(t) < 2 || t[0] != '-' {
+			positional = append(positional, t)
+			continue
+		}
+		flags = append(flags, t)
+		name := strings.TrimLeft(t, "-")
+		if strings.Contains(name, "=") {
+			continue
+		}
+		fl := fs.Lookup(name)
+		if fl == nil {
+			continue
+		}
+		if b, ok := fl.Value.(interface{ IsBoolFlag() bool }); ok && b.IsBoolFlag() {
+			continue
+		}
+		if i+1 < len(args) {
+			i++
+			flags = append(flags, args[i])
+		}
+	}
+	return append(append(flags, "--"), positional...)
 }
