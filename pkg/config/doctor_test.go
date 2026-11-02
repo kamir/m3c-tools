@@ -20,8 +20,10 @@ func TestValidateProfile_Healthy(t *testing.T) {
 	p := &Profile{
 		Name: "good",
 		Vars: map[string]string{
-			"ER1_API_URL":    "https://onboarding.guide/upload_2",
-			"ER1_API_KEY":    "e25ce814-5bb6-4f99-9f08-88d603db391c",
+			"ER1_API_URL": "https://onboarding.guide/upload_2",
+			// An obvious dummy in the UUID shape of a legacy key: not a
+			// placeholder and long enough, so the profile is healthy.
+			"ER1_API_KEY":    "00000000-0000-4000-8000-000000000000",
 			"ER1_CONTEXT_ID": "107677460544181387647___mft",
 		},
 	}
