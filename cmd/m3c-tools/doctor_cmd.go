@@ -49,20 +49,27 @@ func cmdDoctor() {
 		fmt.Println("  For uploads, run: m3c-tools setup")
 		return
 	}
-	report := diag.Report{}
-
-	report.Sections = append(report.Sections, doctorProfile())
-	report.Sections = append(report.Sections, doctorAuth())
-	report.Sections = append(report.Sections, doctorConfigConsistency())
-	report.Sections = append(report.Sections, doctorConnectivity())
-	report.Sections = append(report.Sections, doctorPlaud())
-	report.Sections = append(report.Sections, doctorDevices())
-
+	report := buildDoctorReport()
 	report.Print()
 
 	if report.HasFailures() {
 		os.Exit(1)
 	}
+}
+
+// buildDoctorReport runs every doctor section. The server's answer on the
+// credential is placed in the Authentication block (BUG-0447 AC-04).
+func buildDoctorReport() diag.Report {
+	authSec := doctorAuth()
+	authSec.Checks = append(authSec.Checks, doctorAuthEndpoint())
+	return diag.Report{Sections: []diag.Section{
+		doctorProfile(),
+		authSec,
+		doctorConfigConsistency(),
+		doctorConnectivity(),
+		doctorPlaud(),
+		doctorDevices(),
+	}}
 }
 
 // doctorProfile checks the active profile and file existence.
@@ -110,46 +117,7 @@ func doctorAuth() diag.Section {
 	// Check device token (loaded into env at startup from keychain or file).
 	tokenEnv := os.Getenv("ER1_DEVICE_TOKEN")
 	if tokenEnv != "" {
-		// Token was loaded at startup: check for expiration info.
-		dt := loadTokenForDoctor()
-		if dt != nil {
-			if dt.IsExpired() {
-				s.Checks = append(s.Checks, diag.Check{
-					Name: "Device token", Status: diag.Fail,
-					Detail: fmt.Sprintf("expired (%s): run 'm3c-tools login' to refresh", dt.ExpiresAt),
-				})
-			} else {
-				if dt.ExpiresAt != "" {
-					exp, err := time.Parse(time.RFC3339, dt.ExpiresAt)
-					if err == nil {
-						remaining := time.Until(exp).Truncate(time.Hour * 24)
-						detail := fmt.Sprintf("valid (expires %s, %s remaining)", dt.ExpiresAt[:10], remaining)
-						if remaining < 7*24*time.Hour {
-							s.Checks = append(s.Checks, diag.Check{
-								Name: "Device token", Status: diag.Warn,
-								Detail: fmt.Sprintf("expiring soon (%s): consider re-login", dt.ExpiresAt[:10]),
-							})
-						} else {
-							s.Checks = append(s.Checks, diag.Check{
-								Name: "Device token", Status: diag.OK, Detail: detail,
-							})
-						}
-					} else {
-						s.Checks = append(s.Checks, diag.Check{
-							Name: "Device token", Status: diag.OK, Detail: "valid (no expiry parsed)",
-						})
-					}
-				} else {
-					s.Checks = append(s.Checks, diag.Check{
-						Name: "Device token", Status: diag.OK, Detail: "valid (no expiry set)",
-					})
-				}
-			}
-		} else {
-			s.Checks = append(s.Checks, diag.Check{
-				Name: "Device token", Status: diag.OK, Detail: "loaded (in env)",
-			})
-		}
+		s.Checks = append(s.Checks, doctorDeviceTokenCheck(loadTokenForDoctor()))
 	} else if auth.HasStoredToken() {
 		// Stored but wasn't loaded, likely decryption failed or expired at startup.
 		s.Checks = append(s.Checks, diag.Check{
@@ -215,6 +183,34 @@ func doctorAuth() diag.Section {
 	}
 
 	return s
+}
+
+// doctorDeviceTokenCheck reports what doctor can know locally about the device
+// token loaded at startup. The token is opaque, so the only local facts are
+// its presence and the expiry recorded beside it. Whether the server accepts
+// it is the "Auth endpoint" check in the same block (BUG-0447), so nothing
+// here gets a green mark.
+func doctorDeviceTokenCheck(dt *auth.DeviceToken) diag.Check {
+	const name = "Device token"
+	const unchecked = "not checked against the server (see Auth endpoint)"
+	if dt == nil {
+		return diag.Check{Name: name, Status: diag.Unverified, Detail: "present (in env), no stored record: " + unchecked}
+	}
+	if dt.IsExpired() {
+		return diag.Check{Name: name, Status: diag.Fail,
+			Detail: fmt.Sprintf("expired (%s): run 'm3c-tools login' to refresh", dt.ExpiresAt)}
+	}
+	if dt.ExpiresAt == "" {
+		return diag.Check{Name: name, Status: diag.Unverified, Detail: "present, opaque, no local expiry: " + unchecked}
+	}
+	exp, _ := time.Parse(time.RFC3339, dt.ExpiresAt) // IsExpired already rejected an unparsable value
+	remaining := time.Until(exp).Truncate(24 * time.Hour)
+	if remaining < 7*24*time.Hour {
+		return diag.Check{Name: name, Status: diag.Warn,
+			Detail: fmt.Sprintf("expiring soon (%s): consider re-login", dt.ExpiresAt[:10])}
+	}
+	return diag.Check{Name: name, Status: diag.Unverified,
+		Detail: fmt.Sprintf("present, local expiry %s (%s remaining): %s", dt.ExpiresAt[:10], remaining, unchecked)}
 }
 
 // loadTokenForDoctor loads the device token for display purposes.
@@ -431,21 +427,38 @@ func doctorConnectivity() diag.Section {
 		})
 	}
 
-	// Authenticated endpoint: tests actual auth.
-	if !auth.HasAuth(cfg.APIKey) {
-		s.Checks = append(s.Checks, diag.Check{
-			Name: "Auth endpoint", Status: diag.Skipped, Detail: "no credentials to test",
-		})
-		return s
-	}
+	return s
+}
 
+// doctorAuthEndpoint asks the ER1 server whether the configured credential is
+// accepted. It belongs to the Authentication block, next to the local token
+// facts it confirms or contradicts (BUG-0447 AC-04). A refusal quotes the
+// server instead of guessing a cause (AC-03).
+func doctorAuthEndpoint() diag.Check {
+	cfg := er1.LoadConfig()
+	baseURL := cfg.APIURL
+	if idx := strings.LastIndex(baseURL, "/upload"); idx > 0 {
+		baseURL = baseURL[:idx]
+	}
+	if !auth.HasAuth(cfg.APIKey) {
+		return diag.Check{Name: "Auth endpoint", Status: diag.Skipped, Detail: "no credentials to test"}
+	}
+	client := &http.Client{Timeout: 10 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect}
+	if !cfg.VerifySSL {
+		// #nosec G402 -- gegated durch pkg/er1.applyTLSVerificationPolicy (SEC-M7),
+		// die beim Laden der Config VerifySSL fuer JEDEN Nicht-Loopback-Host
+		// fail-closed auf true zwingt. Nach BUG-0445 nimmt kein Aufrufer diesen
+		// Wert mehr nachtraeglich zurueck; wer es wieder tut, muss hier neu pruefen.
+		client.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+	}
 	// Use /api/v2/devices which supports all auth methods including Bearer tokens (SPEC-0127).
 	req, err := http.NewRequest("GET", baseURL+"/api/v2/devices", nil)
 	if err != nil {
-		s.Checks = append(s.Checks, diag.Check{
+		return diag.Check{
 			Name: "Auth endpoint", Status: diag.Fail, Detail: fmt.Sprintf("request error: %v", err),
-		})
-		return s
+		}
 	}
 	for k, v := range cfg.AuthHeaders() {
 		req.Header.Set(k, v)
@@ -457,42 +470,61 @@ func doctorConnectivity() diag.Section {
 		}
 	}
 
-	start = time.Now()
-	resp, err = client.Do(req)
-	elapsed = time.Since(start)
+	start := time.Now()
+	resp, err := client.Do(req)
+	elapsed := time.Since(start)
 	if err != nil {
-		s.Checks = append(s.Checks, diag.Check{
+		return diag.Check{
 			Name: "Auth endpoint", Status: diag.Fail, Detail: fmt.Sprintf("unreachable: %v", err),
-		})
-		return s
+		}
 	}
-	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20)) //nolint:errcheck // draining the response body for connection reuse; the data is discarded
-	resp.Body.Close()                                     //nolint:errcheck // best-effort close of the read-only diagnostic response body
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	resp.Body.Close() //nolint:errcheck // best-effort close of the read-only diagnostic response body
 
 	switch resp.StatusCode {
 	case http.StatusOK:
-		s.Checks = append(s.Checks, diag.Check{
+		return diag.Check{
 			Name: "Auth endpoint", Status: diag.OK,
 			Detail: fmt.Sprintf("HTTP %d (%s) [%s]", resp.StatusCode, elapsed.Round(time.Millisecond), auth.AuthMethod()),
-		})
-	case http.StatusUnauthorized:
-		s.Checks = append(s.Checks, diag.Check{
+		}
+	case http.StatusUnauthorized, http.StatusForbidden:
+		return diag.Check{
 			Name: "Auth endpoint", Status: diag.Fail,
-			Detail: fmt.Sprintf("HTTP 401: %s is invalid or expired", auth.AuthMethod()),
-		})
-	case http.StatusForbidden:
-		s.Checks = append(s.Checks, diag.Check{
-			Name: "Auth endpoint", Status: diag.Fail,
-			Detail: fmt.Sprintf("HTTP 403: %s rejected", auth.AuthMethod()),
-		})
+			Detail: fmt.Sprintf("HTTP %d for the %s, server said: %s", resp.StatusCode, auth.AuthMethod(), quoteServerBody(body, cfg.APIKey, os.Getenv("ER1_DEVICE_TOKEN"))),
+		}
 	default:
-		s.Checks = append(s.Checks, diag.Check{
+		return diag.Check{
 			Name: "Auth endpoint", Status: diag.Warn,
 			Detail: fmt.Sprintf("HTTP %d (unexpected)", resp.StatusCode),
-		})
+		}
 	}
+}
 
-	return s
+// quoteServerBody renders at most 200 bytes of a server reply as one
+// printable line, so doctor reports what the server said rather than a guess.
+// Every non-empty secret is replaced by [redacted] in case the server echoes
+// the credential back.
+func quoteServerBody(body []byte, secrets ...string) string {
+	const maxQuote = 200
+	raw := string(body)
+	for _, sec := range secrets {
+		if sec != "" {
+			raw = strings.ReplaceAll(raw, sec, "[redacted]")
+		}
+	}
+	text := strings.Map(func(r rune) rune {
+		if r < 0x20 || r == 0x7f {
+			return ' '
+		}
+		return r
+	}, strings.TrimSpace(raw))
+	if text == "" {
+		return "(empty body)"
+	}
+	if len(text) > maxQuote {
+		text = strings.ToValidUTF8(text[:maxQuote], "") + "..."
+	}
+	return text
 }
 
 // readEnvFile reads a .env file and returns key-value pairs.

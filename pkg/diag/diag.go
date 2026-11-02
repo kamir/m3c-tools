@@ -8,10 +8,11 @@ import "fmt"
 type Status int
 
 const (
-	OK      Status = iota // check passed
-	Fail                  // check failed. Action needed
-	Warn                  // works but suboptimal
-	Skipped               // not configured / not needed
+	OK         Status = iota // check passed
+	Fail                     // check failed. Action needed
+	Warn                     // works but suboptimal
+	Skipped                  // not configured / not needed
+	Unverified               // present locally, but no server answer covers it (BUG-0447)
 )
 
 // Symbol returns the terminal indicator for a status.
@@ -25,6 +26,8 @@ func (s Status) Symbol() string {
 		return "!"
 	case Skipped:
 		return "\u00b7" // ·
+	case Unverified:
+		return "\u25cb" // ○
 	default:
 		return "?"
 	}
