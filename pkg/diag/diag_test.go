@@ -11,6 +11,7 @@ func TestStatusSymbols(t *testing.T) {
 		{Fail, "\u2717"},
 		{Warn, "!"},
 		{Skipped, "\u00b7"},
+		{Unverified, "\u25cb"},
 	}
 	for _, tt := range tests {
 		if got := tt.status.Symbol(); got != tt.want {
