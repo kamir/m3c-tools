@@ -66,19 +66,24 @@ func runRegistryLs(args []string, stdout, stderr io.Writer) int {
 	skillName := fs.String("skill", "", "Filter: only this skill.")
 	registrySpec := fs.String("registry", "self", "Registry: \"self\"/\"er1://…\" (ER1) or \"gitlab://host/group/proj\".")
 	er1Target := fs.String("er1-target", envOr("ER1_TARGET", "prod"), "ER1 target.")
-	er1Context := fs.String("er1-context", envOr("ER1_CONTEXT", "skills"), "ER1 context.")
+	er1Context := fs.String("er1-context", envOr("ER1_CONTEXT", "skills"), "ER1 context. A bare name is prefixed with the owner id.")
 	if err := fs.Parse(reorderFlagArgs(fs, args)); err != nil {
 		return 2
 	}
 	if artifact.SchemeOf(*registrySpec) != "er1" {
 		return runRegistryLsBackend(*registrySpec, *skillName, *latest, stdout, stderr)
 	}
+	ctxID, err := registryReadContext(*er1Context)
+	if err != nil {
+		fmt.Fprintf(stderr, "registry ls: %v\n", err)
+		return 1
+	}
 	cfg, err := resolveER1Config(*er1Target)
 	if err != nil {
 		fmt.Fprintf(stderr, "registry ls: %v\n", err)
 		return 1
 	}
-	listing, err := registry.ListRegistry(cfg, *er1Context, registry.ListOpts{
+	listing, err := registry.ListRegistry(cfg, ctxID, registry.ListOpts{
 		OnlySkill:  *skillName,
 		OnlyLatest: *latest,
 	})
@@ -86,6 +91,7 @@ func runRegistryLs(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "registry ls: %v\n", err)
 		return 1
 	}
+	fmt.Fprintf(stdout, "context: %s\n", safeCell(ctxID))
 	if len(listing.Skills) == 0 {
 		fmt.Fprintln(stdout, "(no skills in registry)")
 		return 0
@@ -100,6 +106,22 @@ func runRegistryLs(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stdout, "%-32s %-10s %-72s %-8s %s\n", safeCell(s.Name), strOr(safeCell(s.LatestVersion), "?"), safeCell(s.LatestDigest), strOr(safeCell(s.LatestGovernance), ": "), status)
 	}
 	return 0
+}
+
+// registryReadContext resolves --er1-context for the read commands the same
+// way publish and pull do (BUG-0437). ER1 contexts are named
+// "<owner>___<name>"; the default "skills" is only a suffix. The read commands
+// used the flag raw, asked a context that does not exist, and answered with an
+// empty catalogue. A name that is still bare after resolution (no owner id from
+// ER1_USER_ID or ER1_CONTEXT_ID) cannot be an ER1 context, so it is an error:
+// an empty answer to a question about a place that does not exist is no answer.
+func registryReadContext(raw string) (string, error) {
+	ctx := ownerPrefixedContext(raw)
+	if !strings.Contains(ctx, "___") {
+		return "", fmt.Errorf("ER1 context %q has no owner prefix, so no such context exists; "+
+			"set ER1_USER_ID, or pass the full name with --er1-context <owner>___<name>", raw)
+	}
+	return ctx, nil
 }
 
 // runRegistryLsBackend renders `registry ls` from a SPEC-0356 artifact backend
@@ -138,7 +160,7 @@ func runRegistryShow(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	registrySpec := fs.String("registry", "self", "Registry: \"self\"/\"er1://…\" (ER1) or \"gitlab://host/group/proj\".")
 	er1Target := fs.String("er1-target", envOr("ER1_TARGET", "prod"), "ER1 target.")
-	er1Context := fs.String("er1-context", envOr("ER1_CONTEXT", "skills"), "ER1 context.")
+	er1Context := fs.String("er1-context", envOr("ER1_CONTEXT", "skills"), "ER1 context. A bare name is prefixed with the owner id.")
 	if err := fs.Parse(reorderFlagArgs(fs, args)); err != nil {
 		return 2
 	}
@@ -149,14 +171,19 @@ func runRegistryShow(args []string, stdout, stderr io.Writer) int {
 	if artifact.SchemeOf(*registrySpec) != "er1" {
 		return runRegistryShowBackend(*registrySpec, fs.Arg(0), stdout, stderr)
 	}
+	ctxID, err := registryReadContext(*er1Context)
+	if err != nil {
+		fmt.Fprintf(stderr, "registry show: %v\n", err)
+		return 1
+	}
 	cfg, err := resolveER1Config(*er1Target)
 	if err != nil {
 		fmt.Fprintf(stderr, "registry show: %v\n", err)
 		return 1
 	}
-	view, err := registry.ShowSkill(cfg, *er1Context, fs.Arg(0))
+	view, err := registry.ShowSkill(cfg, ctxID, fs.Arg(0))
 	if err != nil {
-		fmt.Fprintf(stderr, "registry show: %v\n", err)
+		fmt.Fprintf(stderr, "registry show: %v (context: %s)\n", err, safeCell(ctxID))
 		return 1
 	}
 	fmt.Fprintf(stdout, "kind:            %s\n", strOr(view.Kind, "skill"))

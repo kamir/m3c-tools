@@ -15,6 +15,13 @@ version is ldflags-stamped (`skillctl version`). Release tags: `skillctl/vX.Y.Z`
   a verbatim move ships half-extracted shared state, so it needs a dedicated
   refactor pass, not a release-eve edit.
 
+### Fixed
+- `registry ls` and `registry show` no longer report an empty registry for a
+  context that does not exist (BUG-0437). They resolve `--er1-context` with the
+  owner prefix, as `publish` and `pull` do, so the default `skills` reads
+  `<owner>___skills`. `registry ls` prints the context it read. A name that stays
+  bare because no owner is resolvable exits `1` with an error.
+
 ## [skillctl/v0.6.2], 2026-10-30, revocation handling and installers
 
 ### Fixed

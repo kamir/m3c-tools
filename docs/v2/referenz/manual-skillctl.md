@@ -2095,6 +2095,13 @@ Flags: `[--latest] [--skill <name>] [--er1-target …] [--er1-context …]`.
 one skill or one digest.
 Usage: `registry show <name | sha256:<hex>> [--er1-target …] [--er1-context …]`.
 
+Both commands resolve `--er1-context` like `publish` and `pull`: a bare name such as
+the default `skills` gets the owner prefix (`<owner>___skills`, owner from
+`ER1_USER_ID` or `ER1_CONTEXT_ID`). `registry ls` prints the resolved context on
+its first line. If no owner can be resolved, the bare name cannot be an ER1
+context, and both commands exit `1` with an error instead of reporting an empty
+registry (BUG-0437).
+
 ```bash
 skillctl registry ls --latest
 skillctl registry show my-skill
