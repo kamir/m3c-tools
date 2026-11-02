@@ -107,7 +107,10 @@ m3c-tools doctor
 ```
 
 `doctor` prüft das aktive Profil, Authentisierung mit API-Key und/oder Geräte-Token,
-DNS, TLS sowie ER1-`/health` und Auth-Endpunkte. Ist alles grün, kann es losgehen.
+DNS, TLS sowie ER1-`/health` und Auth-Endpunkte. Steht nirgends ein ✗, kann es losgehen.
+Ein ○ markiert etwas, das lokal vorhanden ist, aber von keiner Serverantwort bestätigt
+wird; das Urteil des Servers über die Zugangsdaten steht in der Zeile `Auth endpoint` im
+selben Block Authentication.
 Für eine reine Erreichbarkeitsprüfung `m3c-tools check-er1` verwenden.
 Ist kein ER1 eingerichtet, sagt der Befehl das, nennt, was ohne ER1 funktioniert, und endet mit `0`.
 

@@ -82,11 +82,24 @@ func (r Report) Print() {
 	for _, s := range r.Sections {
 		s.Print()
 	}
+	fmt.Println(r.ResultLine())
+}
+
+// ResultLine is the closing verdict. Without failures it only says "passed"
+// when no check is Unverified: a local fact that no server answer covers is
+// not a pass (BUG-0447).
+func (r Report) ResultLine() string {
 	if r.HasFailures() {
-		fmt.Println("Result: CHECKS FAILED \u2717")
-	} else {
-		fmt.Println("Result: ALL CHECKS PASSED \u2713")
+		return "Result: CHECKS FAILED \u2717"
 	}
+	for _, s := range r.Sections {
+		for _, c := range s.Checks {
+			if c.Status == Unverified {
+				return "Result: NO FAILURES; lines marked \u25cb were found locally but not confirmed by a server"
+			}
+		}
+	}
+	return "Result: ALL CHECKS PASSED \u2713"
 }
 
 // HasFailures returns true if any section has a failed check.

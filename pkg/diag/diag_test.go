@@ -1,6 +1,9 @@
 package diag
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestStatusSymbols(t *testing.T) {
 	tests := []struct {
@@ -84,4 +87,19 @@ func containsStr(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+func TestReportResultLine(t *testing.T) {
+	sec := func(st Status) Report {
+		return Report{Sections: []Section{{Title: "x", Checks: []Check{{Name: "a", Status: OK}, {Name: "b", Status: st}}}}}
+	}
+	if got := sec(OK).ResultLine(); !strings.Contains(got, "ALL CHECKS PASSED") {
+		t.Errorf("all OK: %q", got)
+	}
+	if got := sec(Unverified).ResultLine(); strings.Contains(got, "PASSED") || !strings.Contains(got, "not confirmed") {
+		t.Errorf("unverified: %q", got)
+	}
+	if got := sec(Fail).ResultLine(); !strings.Contains(got, "FAILED") {
+		t.Errorf("fail: %q", got)
+	}
 }
