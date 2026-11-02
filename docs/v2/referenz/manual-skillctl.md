@@ -1997,7 +1997,7 @@ Publishes to your personal ER1 `self` registry (SPEC-0225). Three modes: admit a
 | `-inline-max` | Inline base64 cap; larger bundles need a claim-check (default `262144`). |
 | `-no-checkpoint` | Don't append a checkpoint to the open SPEC-0213 session. |
 | `-no-runbook-publish` | Don't auto-register the skill's runbook into the THOH catalog (SPEC-0275). |
-| `-dry-run` | Print the plan + rendered item body; don't POST or pack. |
+| `-dry-run` | Print the plan with the bundle digest; don't sign or POST. Without `--bundle` it still packs `./<name>@<version>.skb`, so the digest is real. Needs no signing key. |
 | `-yes` | Skip the 🟡 confirm pause (scripted runs). |
 
 ```bash

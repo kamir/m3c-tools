@@ -2195,7 +2195,7 @@ und Attestierung für jeden Eintrag im Veröffentlichungsmanifest.
 | `-inline-max` | Obergrenze eingebetteter Base64-Daten, standardmäßig `262144`; größere Bundles benötigen Claim-Check. |
 | `-no-checkpoint` | Keinen Prüfpunkt an die offene Sitzung nach SPEC-0213 anhängen. |
 | `-no-runbook-publish` | Runbook des Skills nicht automatisch im THOH-Katalog registrieren (SPEC-0275). |
-| `-dry-run` | Plan und gerenderten Eintragsinhalt ausgeben; weder POST noch Packen. |
+| `-dry-run` | Plan mit Bundle-Digest ausgeben; weder signieren noch POST. Ohne `--bundle` packt es trotzdem `./<name>@<version>.skb`, damit der Digest echt ist. Braucht keinen Signierschlüssel. |
 | `-yes` | 🟡 Bestätigungspause für Skriptläufe überspringen. |
 
 ```bash

@@ -39,10 +39,10 @@ func eigenesArbeitsverzeichnis(t *testing.T) {
 //
 // Zwei Gruende, warum das kein Beiwerk ist:
 //
-//  1. --dry-run laesst den POST aus, packt aber und laedt DANN den Schluessel.
-//     Ein frisches HOME hat keinen, also scheitert der Befehl mit Ausstieg 1,
-//     NACHDEM das Buendel schon geschrieben ist. Ein Test ohne Schluessel misst
-//     den fehlenden Schluessel statt des Packers.
+//  1. Bis BUG-0464 lud --dry-run den Schluessel NACH dem Packen und scheiterte
+//     ohne ihn mit Ausstieg 1, obwohl das Buendel schon geschrieben war. Seitdem
+//     braucht der trockene Lauf keinen Schluessel mehr; der Wegwerfschluessel
+//     bleibt, damit diese Tests nicht davon abhaengen, ob er gelesen wird.
 //  2. Der Schluessel ist ein Wegwerfschluessel im Temp-HOME, nie der des
 //     Betreibers. Ein Test, der den echten Signierschluessel braucht, laeuft
 //     nur dort, wo dieser liegt, und ist damit kein Test, sondern eine
