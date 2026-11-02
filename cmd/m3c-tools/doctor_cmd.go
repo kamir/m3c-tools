@@ -479,7 +479,7 @@ func doctorAuthEndpoint() diag.Check {
 		}
 	}
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	resp.Body.Close() //nolint:errcheck // best-effort close of the read-only diagnostic response body
+	_ = resp.Body.Close() // best-effort close of the read-only diagnostic response body
 
 	switch resp.StatusCode {
 	case http.StatusOK:
