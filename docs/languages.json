@@ -77,8 +77,8 @@
     {
       "de": "docs/v2/entwickler/secretctl.de.md",
       "en": "docs/v2/entwickler/secretctl.md",
-      "de_sha256": "661855624727fa1a2c19ff84cb7df7258ae150c7d6649e210a1992efb101d67e",
-      "en_sha256": "9dc30a4efe77c55aa44c12a6f2eb0e9e922521f02a39669410606b61297b8f03"
+      "de_sha256": "42d6c5a1de2de5adf1cd518a0b16655c0e361c994e33c3e8569e8439bbf9165c",
+      "en_sha256": "67ae9d10890bdc8d5d78ba9d58adcd596fea971d2a92a320ecedb504fc51baac"
     },
     {
       "de": "docs/v2/entwickler/skillctl-sim.de.md",

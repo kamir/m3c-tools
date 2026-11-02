@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"text/tabwriter"
+
+	"github.com/kamir/m3c-tools/pkg/cliargs"
 )
 
 // verify asks the service, PER HOLDER, whether the value that holder carries is
@@ -25,7 +27,7 @@ func cmdVerify(args []string, stdout, stderr io.Writer) int {
 	fs.SetOutput(stderr)
 	regPath := registryFlag(fs)
 	old := fs.Bool("old", false, "Expect refusal instead of acceptance: the proof that a rotation finished.")
-	if err := fs.Parse(flagsFirst(fs, args)); err != nil {
+	if err := fs.Parse(cliargs.FlagsFirst(fs, args)); err != nil {
 		return 2
 	}
 	if fs.NArg() != 1 {

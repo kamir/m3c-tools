@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kamir/m3c-tools/pkg/cliargs"
 	"github.com/kamir/m3c-tools/pkg/skillctl/auditevent"
 	"github.com/kamir/m3c-tools/pkg/skillctl/install"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
@@ -91,7 +92,7 @@ func runInstall(args []string, stdout, stderr io.Writer) (code int) {
 		fs.PrintDefaults()
 	}
 
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(cliargs.FlagsFirst(fs, args)); err != nil {
 		return exitUsage
 	}
 
@@ -320,7 +321,7 @@ func runVerify(args []string, stdout, stderr io.Writer) (code int) {
 		fs.PrintDefaults()
 	}
 
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(cliargs.FlagsFirst(fs, args)); err != nil {
 		return exitUsage
 	}
 
