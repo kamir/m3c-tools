@@ -24,6 +24,8 @@ func TestReportPlaudLoginFailure_NamesTheManualPaths(t *testing.T) {
 		plaud.PlaudTokenEnvVar + "=<token> m3c-tools plaud auth",
 		"tokenstr",
 		"authorization",
+		"starts with 'eyJ'",
+		"leave out any 'bearer'",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("failure output lacks %q:\n%s", want, out)
