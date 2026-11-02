@@ -124,7 +124,7 @@ func TestVerify_ScalarAndListAttenuationValues(t *testing.T) {
 			if len(tok.Attenuations) != 1 || tok.Attenuations[0].Rule != c.rule {
 				t.Fatalf("vector changed shape: %+v", tok.Attenuations)
 			}
-			if v := any(tok.Attenuations[0].Value); !c.check(v) {
+			if v := tok.Attenuations[0].Value; !c.check(v) {
 				t.Fatalf("value decoded as %T %v, not as the wire shape", v, v)
 			}
 			if res := signAndVerify(t, tok); !res.OK {
