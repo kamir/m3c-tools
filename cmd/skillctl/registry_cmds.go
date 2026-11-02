@@ -120,7 +120,7 @@ func registryReadContext(raw string) (string, error) {
 	ctx := ownerPrefixedContext(raw)
 	owner, name, ok := strings.Cut(ctx, "___")
 	if !ok || owner == "" || name == "" {
-		return "", fmt.Errorf("ER1 context %q has no owner prefix, so no such context exists; "+
+		return "", fmt.Errorf("ER1 context %q is not of the form <owner>___<name>, so no such context exists; "+
 			"set ER1_USER_ID, or pass the full name with --er1-context <owner>___<name>", raw)
 	}
 	return ctx, nil
