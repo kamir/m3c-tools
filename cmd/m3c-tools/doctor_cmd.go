@@ -648,7 +648,7 @@ const plaudDevTokenSoon = 2 * time.Hour
 func doctorPlaudDevToken(path string) diag.Check {
 	const name = "Plaud developer token"
 	const relogin = "re-run: node tools/plaud-mcp-login.mjs"
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- path is plaud.DefaultMCPTokenPath() under the user home; read-only
 	if os.IsNotExist(err) {
 		return diag.Check{Name: name, Status: diag.Skipped, Detail: "not configured (" + path + ")"}
 	}
