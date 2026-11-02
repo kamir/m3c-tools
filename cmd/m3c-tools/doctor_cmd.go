@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -579,6 +580,8 @@ func doctorPlaud() diag.Section {
 		}
 	}
 
+	s.Checks = append(s.Checks, doctorPlaudDevToken(plaud.DefaultMCPTokenPath()))
+
 	// Check plaud-sync API reachability (uses ER1 base URL).
 	cfg := er1.LoadConfig()
 	baseURL := er1.BaseURLFromConfig(cfg)
@@ -633,6 +636,41 @@ func doctorPlaud() diag.Section {
 	}
 
 	return s
+}
+
+// doctorPlaudDevToken reports the developer-API OAuth token file that
+// 'plaud dev' and the menubar sync read (BUG-0446). It only reads the file: it
+// neither refreshes the token nor asks Plaud whether it is accepted, so an
+// unexpired file is reported as present, not as valid.
+func doctorPlaudDevToken(path string) diag.Check {
+	const name = "Plaud developer token"
+	const relogin = "re-run: node tools/plaud-mcp-login.mjs"
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return diag.Check{Name: name, Status: diag.Skipped, Detail: "not configured (" + path + ")"}
+	}
+	if err != nil {
+		return diag.Check{Name: name, Status: diag.Fail, Detail: fmt.Sprintf("cannot read %s: %v", path, err)}
+	}
+	var t plaud.DevTokenFile
+	if json.Unmarshal(data, &t) != nil || t.AccessToken == "" {
+		return diag.Check{Name: name, Status: diag.Fail, Detail: "no access_token in " + path + ": " + relogin}
+	}
+	if t.ExpiresAt <= 0 {
+		return diag.Check{Name: name, Status: diag.Warn, Detail: "present, no expiry recorded: not checked against Plaud"}
+	}
+	exp := time.UnixMilli(t.ExpiresAt)
+	if time.Now().After(exp) {
+		ago := time.Since(exp).Round(time.Hour)
+		if t.RefreshToken == "" {
+			return diag.Check{Name: name, Status: diag.Fail,
+				Detail: fmt.Sprintf("expired %s ago (%s), no refresh token: %s", ago, exp.Format("2006-01-02 15:04"), relogin)}
+		}
+		return diag.Check{Name: name, Status: diag.Warn,
+			Detail: fmt.Sprintf("access token expired %s ago (%s); the next sync tries a refresh, if that fails: %s", ago, exp.Format("2006-01-02 15:04"), relogin)}
+	}
+	return diag.Check{Name: name, Status: diag.OK,
+		Detail: fmt.Sprintf("present, expires in %s (%s); not checked against Plaud", time.Until(exp).Round(time.Hour), exp.Format("2006-01-02 15:04"))}
 }
 
 // doctorDevices checks device pairing status via the ER1 devices API.
