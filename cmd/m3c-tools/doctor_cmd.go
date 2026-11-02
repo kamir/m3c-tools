@@ -647,7 +647,7 @@ func doctorPlaudTokenVerdict(cfg *plaud.Config, ts *plaud.TokenSession) diag.Che
 			Detail: fmt.Sprintf("present, not verified: Plaud API check failed (%v); %s", err, saved)}
 	case !ok:
 		return diag.Check{Name: "Plaud token", Status: diag.Fail,
-			Detail: fmt.Sprintf("rejected by Plaud (expired or revoked, %s): run 'm3c-tools plaud auth login'", saved)}
+			Detail: fmt.Sprintf("not accepted by Plaud (the API did not answer status 0, %s): run 'm3c-tools plaud auth login'", saved)}
 	}
 	return diag.Check{Name: "Plaud token", Status: diag.OK, Detail: "accepted by Plaud (" + saved + ")"}
 }

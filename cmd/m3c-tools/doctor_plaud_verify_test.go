@@ -115,3 +115,13 @@ func TestDoctorPlaudToken_UnreachableIsNotValid(t *testing.T) {
 		t.Errorf("unreachable API: %v %q, want Warn saying the token is not verified", c.Status, c.Detail)
 	}
 }
+
+// A body that is not Plaud's JSON envelope (a captive portal, a proxy page) is
+// not proof that the token expired: the detail must not claim it was.
+func TestDoctorPlaudToken_NonJSONAnswerDoesNotClaimExpiry(t *testing.T) {
+	setupDoctorPlaudFake(t, plaudStatusHandler(`<html>sign in to the wifi</html>`), false)
+	c := plaudTokenCheck(t)
+	if c.Status == diag.OK || strings.Contains(c.Detail, "expired") || strings.Contains(c.Detail, "revoked") {
+		t.Errorf("non-JSON answer: %v %q, want not OK and no expiry claim", c.Status, c.Detail)
+	}
+}
