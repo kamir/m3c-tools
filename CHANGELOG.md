@@ -16,11 +16,13 @@ version is ldflags-stamped (`skillctl version`). Release tags: `skillctl/vX.Y.Z`
   refactor pass, not a release-eve edit.
 
 ### Fixed
-- `registry ls` and `registry show` no longer report an empty registry for a
-  context that does not exist (BUG-0437). They resolve `--er1-context` with the
-  owner prefix, as `publish` and `pull` do, so the default `skills` reads
-  `<owner>___skills`. `registry ls` prints the context it read. A name that stays
-  bare because no owner is resolvable exits `1` with an error.
+- `registry ls` and `registry show` no longer query the bare context `skills`,
+  which does not exist (BUG-0437). They resolve `--er1-context` with the owner
+  prefix, as `publish` and `pull` do, so the default reads `<owner>___skills`. A
+  name that stays bare because no owner is resolvable exits `1` with an error.
+  A prefixed context that does not exist (a typo) still lists empty, because the
+  client has no way to ask ER1 whether a context exists; the `context:` line
+  that `registry ls` now prints shows which one was read.
 
 ## [skillctl/v0.6.2], 2026-10-30, revocation handling and installers
 

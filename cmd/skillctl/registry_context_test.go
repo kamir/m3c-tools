@@ -100,7 +100,7 @@ func TestBUG0437_UnresolvableContextIsAnErrorNotAnEmptyList(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			registryReadEnv(t, "")
 			if strings.Contains(ownerPrefixedContext("skills"), "___") {
-				t.Skip("an owner is resolvable on this machine (device token); the bare case cannot be built")
+				t.Skip("an owner is still resolvable from the environment; the bare case cannot be built")
 			}
 			srv, asked := fakeRegistryER1(t)
 			var stdout, stderr bytes.Buffer
