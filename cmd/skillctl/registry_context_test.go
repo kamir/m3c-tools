@@ -137,3 +137,18 @@ func TestBUG0437_FullContextIsUsedAsGiven(t *testing.T) {
 		t.Fatalf("no request; stderr=%s", &stderr)
 	}
 }
+
+// An empty owner or name part is not a context either ("___skills", "7___").
+func TestBUG0437_EmptyOwnerOrNameIsAnError(t *testing.T) {
+	registryReadEnv(t, "7")
+	srv, asked := fakeRegistryER1(t)
+	for _, c := range []string{"___skills", "7___", ""} {
+		var stdout, stderr bytes.Buffer
+		if code := runRegistryLs([]string{"--er1-target", srv.URL, "--er1-context", c}, &stdout, &stderr); code == 0 {
+			t.Fatalf("--er1-context %q: exit 0, stdout=%s", c, &stdout)
+		}
+	}
+	if len(asked()) != 0 {
+		t.Fatalf("asked ER1 for contexts that cannot exist: %v", asked())
+	}
+}

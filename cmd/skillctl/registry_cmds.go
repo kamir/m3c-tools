@@ -113,11 +113,13 @@ func runRegistryLs(args []string, stdout, stderr io.Writer) int {
 // "<owner>___<name>"; the default "skills" is only a suffix. The read commands
 // used the flag raw, asked a context that does not exist, and answered with an
 // empty catalogue. A name that is still bare after resolution (no owner id from
-// ER1_USER_ID or ER1_CONTEXT_ID) cannot be an ER1 context, so it is an error:
+// ER1_USER_ID or ER1_CONTEXT_ID), or one with an empty owner or name part,
+// cannot be an ER1 context, so it is an error:
 // an empty answer to a question about a place that does not exist is no answer.
 func registryReadContext(raw string) (string, error) {
 	ctx := ownerPrefixedContext(raw)
-	if !strings.Contains(ctx, "___") {
+	owner, name, ok := strings.Cut(ctx, "___")
+	if !ok || owner == "" || name == "" {
 		return "", fmt.Errorf("ER1 context %q has no owner prefix, so no such context exists; "+
 			"set ER1_USER_ID, or pass the full name with --er1-context <owner>___<name>", raw)
 	}
