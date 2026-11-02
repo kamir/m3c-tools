@@ -144,7 +144,7 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 
 		// UX
 		yes    = fs.Bool("yes", false, "Skip the 🟡 confirm pause (scripted runs).")
-		dryRun = fs.Bool("dry-run", false, "Print the plan with the bundle digest; do not sign or POST. Without --bundle it still packs ./<name>@<version>.skb, so the digest is real. Needs no signing key.")
+		dryRun = fs.Bool("dry-run", false, "Print the plan; do not POST. Admit (the default mode): needs no signing key and signs nothing, but without --bundle still packs ./<name>@<version>.skb so the digest is real. --attest / --revoke: still load the key and sign locally. --all: prints the batch plan only.")
 	)
 	// SPEC-0096 room mapping (SPEC-0246 §7). Repeatable; each value is a room's
 	// room_label, stamped as a bare tag so room members can read the bundle.

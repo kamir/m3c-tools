@@ -133,7 +133,10 @@ func TestPublishDryRunHelpSaysItPacks(t *testing.T) {
 	if j := strings.Index(line, "\n  -"); j > 0 {
 		line = line[:j]
 	}
-	if strings.Contains(line, "do not POST or pack") || !strings.Contains(line, "packs") || !strings.Contains(line, "no signing key") {
+	// The flag is shared by every publish mode. The no-key promise must be
+	// scoped to admit, because --attest / --revoke still load and use the key.
+	if strings.Contains(line, "do not POST or pack") || !strings.Contains(line, "packs") ||
+		!strings.Contains(line, "no signing key") || !strings.Contains(line, "--attest / --revoke: still load the key") {
 		t.Errorf("dry-run help does not describe what it does:\n%s", line)
 	}
 }
