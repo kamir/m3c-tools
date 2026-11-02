@@ -648,7 +648,7 @@ const plaudDevTokenSoon = 2 * time.Hour
 func doctorPlaudDevToken(path string) diag.Check {
 	const name = "Plaud developer token"
 	const relogin = "re-run: node tools/plaud-mcp-login.mjs"
-	data, err := os.ReadFile(path) // #nosec G304 -- path is plaud.DefaultMCPTokenPath() under the user home; read-only
+	data, err := os.ReadFile(path) // #nosec G304 -- path is plaud.DefaultMCPTokenPath() (the user home, else a CWD-relative .plaud); read-only
 	if os.IsNotExist(err) {
 		return diag.Check{Name: name, Status: diag.Skipped, Detail: "not configured (" + path + ")"}
 	}
@@ -672,8 +672,9 @@ func doctorPlaudDevToken(path string) diag.Check {
 		return diag.Check{Name: name, Status: diag.Warn,
 			Detail: fmt.Sprintf("access token expired %s ago (%s); the next sync tries a refresh, if that fails: %s", ago, exp.Format("2006-01-02 15:04"), relogin)}
 	}
-	left := time.Until(exp).Round(time.Minute)
-	if left < plaudDevTokenSoon {
+	until := time.Until(exp)
+	left := until.Round(time.Minute) // display only; the threshold uses the exact value
+	if until < plaudDevTokenSoon {
 		// AC-05 of BUG-0446: the token lives about 24h, so this close to
 		// expiry a stopped refresh run means the channel dies within hours.
 		if t.RefreshToken == "" {
@@ -681,7 +682,7 @@ func doctorPlaudDevToken(path string) diag.Check {
 				Detail: fmt.Sprintf("expires in %s (%s), no refresh token: %s", left, exp.Format("2006-01-02 15:04"), relogin)}
 		}
 		return diag.Check{Name: name, Status: diag.Warn,
-			Detail: fmt.Sprintf("expires in %s (%s); a sync in the last hour before expiry refreshes it, if none runs: %s", left, exp.Format("2006-01-02 15:04"), relogin)}
+			Detail: fmt.Sprintf("expires in %s (%s); from 1h before expiry, or after it, the next sync tries a refresh, if that fails: %s", left, exp.Format("2006-01-02 15:04"), relogin)}
 	}
 	return diag.Check{Name: name, Status: diag.OK,
 		Detail: fmt.Sprintf("present, expires in %s (%s); not checked against Plaud", left, exp.Format("2006-01-02 15:04"))}

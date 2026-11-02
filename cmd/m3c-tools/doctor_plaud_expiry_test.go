@@ -116,6 +116,11 @@ func TestDoctorPlaud_DeveloperTokenCloseToExpiry(t *testing.T) {
 	if c := findDoctorCheck(t, doctorPlaud(), "Plaud developer token"); c.Status != diag.Warn || !strings.Contains(c.Detail, "refresh") {
 		t.Errorf("refresh token, 90m left: %v %q, want Warn naming the refresh", c.Status, c.Detail)
 	}
+	// The threshold uses the exact remaining time, not the rounded display.
+	writeDevTokenFile(t, home, time.Now().Add(2*time.Hour-20*time.Second), "")
+	if c := findDoctorCheck(t, doctorPlaud(), "Plaud developer token"); c.Status != diag.Fail {
+		t.Errorf("1h59m40s left: %v %q, want Fail", c.Status, c.Detail)
+	}
 	writeDevTokenFile(t, home, time.Now().Add(3*time.Hour), "")
 	if c := findDoctorCheck(t, doctorPlaud(), "Plaud developer token"); c.Status != diag.OK {
 		t.Errorf("3h left: %v %q, want OK", c.Status, c.Detail)
