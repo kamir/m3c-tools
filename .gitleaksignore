@@ -18,3 +18,9 @@ ab11e26f1879acdd167b107896c10e01c2f02658:demo/kup-training/artifacts/keys/mirko.
 # rejected by the server on 2026-11-02, 12 of 12 probes). The value is dead;
 # only this exact historical location is suppressed, not the rule.
 78fca8b60c628d86cc32942220570c7234ac3dd3:pkg/config/doctor_test.go:er1-api-key-legacy:24
+
+# A JWT-shaped test fixture with no readable claims (not a credential) in one
+# commit of the doctor Plaud-token pull request (BUG-0447). That pull request
+# now builds the value at run time; this entry only keeps the history scan from
+# reporting the old commit while its branch exists, and can go once it is gone.
+85f0bd15cf14039a66dfe55ad3f3c6b09304f6cb:cmd/m3c-tools/doctor_plaud_verify_test.go:generic-api-key:54
