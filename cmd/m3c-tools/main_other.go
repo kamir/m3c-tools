@@ -482,7 +482,7 @@ func cmdPlaudAuth(args []string) {
 		fmt.Println("Extracting token from Chrome...")
 		token, err := plaud.ExtractTokenFromChrome()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error extracting token: %v\n", err)
+			reportPlaudLoginFailure(os.Stderr, err)
 			os.Exit(1)
 		}
 		session := &plaud.TokenSession{Token: token, SavedAt: time.Now()}
@@ -1895,4 +1895,20 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// reportPlaudLoginFailure explains a failed 'plaud auth login' and names the
+// ways in that do not depend on reading the right Chrome over CDP (BUG-0168,
+// fix direction 4). On Windows the debug Chrome is a separate profile, so a
+// user logged in to Plaud in their normal browser hits this path.
+func reportPlaudLoginFailure(w io.Writer, err error) {
+	fmt.Fprintf(w, "Error extracting token: %v\n", err)
+	fmt.Fprintln(w, "The token was not found in the Chrome this tool reads. Other ways in:")
+	fmt.Fprintln(w, "  m3c-tools plaud auth --from-er1            (token stored once in the ER1 vault)")
+	fmt.Fprintln(w, "  m3c-tools plaud auth --token-file <path>   (a file holding the token)")
+	fmt.Fprintf(w, "  %s=<token> m3c-tools plaud auth\n", plaud.PlaudTokenEnvVar)
+	fmt.Fprintln(w, "To copy the token from a browser where you are logged in to Plaud: open DevTools (F12),")
+	fmt.Fprintln(w, "then Application > Local Storage > the plaud.ai origin and copy the value of 'tokenstr',")
+	fmt.Fprintln(w, "or Network > any api.plaud.ai request > the 'authorization' request header, and copy the")
+	fmt.Fprintln(w, "token that follows 'bearer'.")
 }
