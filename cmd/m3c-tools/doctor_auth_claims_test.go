@@ -129,3 +129,62 @@ func TestQuoteServerBody(t *testing.T) {
 		t.Errorf("truncation: len %d", len(got))
 	}
 }
+
+// BUG-0447 follow-up: once the server accepts the device token, the Device
+// token line is covered by a server answer and turns green, so a healthy
+// device-token setup ends with ALL CHECKS PASSED (QA check C2 keys on it).
+func TestDoctorReport_ServerAcceptedDeviceTokenIsGreen(t *testing.T) {
+	doctorClaimsHome(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"devices":[{"device_type":"cli","device_name":"test","status":"active"}]}`)
+	}))
+	defer srv.Close()
+	t.Setenv("ER1_API_URL", srv.URL+"/upload_2")
+	t.Setenv("ER1_DEVICE_TOKEN", "opaque-test-token")
+	t.Setenv("ER1_CONTEXT_ID", "testuser___testctx") // a configured install has one
+
+	report := buildDoctorReport()
+	var authSec diag.Section
+	for _, s := range report.Sections {
+		if s.Title == "Authentication" {
+			authSec = s
+		}
+	}
+	if c, _ := checkNamed(authSec, "Auth endpoint"); c.Status != diag.OK {
+		t.Fatalf("precondition: Auth endpoint = %v %q, want OK", c.Status, c.Detail)
+	}
+	c, _ := checkNamed(authSec, "Device token")
+	if c.Status != diag.OK || !strings.Contains(c.Detail, "accepted by the server") {
+		t.Errorf("Device token after HTTP 200: %v %q, want OK naming the server answer", c.Status, c.Detail)
+	}
+	if got := report.ResultLine(); !strings.Contains(got, "ALL CHECKS PASSED") {
+		for _, s := range report.Sections {
+			for _, ch := range s.Checks {
+				t.Logf("%s / %s", s.Title, ch.String())
+			}
+		}
+		t.Errorf("result line = %q, want ALL CHECKS PASSED", got)
+	}
+}
+
+// Without a server answer the line stays neutral (AC-02).
+func TestDoctorReport_RejectedDeviceTokenStaysUnverified(t *testing.T) {
+	doctorClaimsHome(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health" {
+			return
+		}
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+	t.Setenv("ER1_API_URL", srv.URL+"/upload_2")
+	t.Setenv("ER1_DEVICE_TOKEN", "opaque-test-token")
+	for _, s := range buildDoctorReport().Sections {
+		if s.Title == "Authentication" {
+			if c, _ := checkNamed(s, "Device token"); c.Status != diag.Unverified {
+				t.Errorf("Device token after HTTP 401: %v %q, want Unverified", c.Status, c.Detail)
+			}
+		}
+	}
+}

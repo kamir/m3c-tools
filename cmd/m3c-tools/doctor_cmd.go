@@ -61,7 +61,11 @@ func cmdDoctor() {
 // credential is placed in the Authentication block (BUG-0447 AC-04).
 func buildDoctorReport() diag.Report {
 	authSec := doctorAuth()
-	authSec.Checks = append(authSec.Checks, doctorAuthEndpoint())
+	endpoint := doctorAuthEndpoint()
+	if endpoint.Status == diag.OK && auth.AuthMethod() == "device token" {
+		raiseServerAcceptedDeviceToken(&authSec)
+	}
+	authSec.Checks = append(authSec.Checks, endpoint)
 	return diag.Report{Sections: []diag.Section{
 		doctorProfile(),
 		authSec,
@@ -185,6 +189,21 @@ func doctorAuth() diag.Section {
 	return s
 }
 
+// deviceTokenUnchecked ends a Device token line no server answer covers yet.
+const deviceTokenUnchecked = "not checked against the server (see Auth endpoint)"
+
+// raiseServerAcceptedDeviceToken turns a neutral Device token line green once
+// the Auth endpoint accepted the device token: a server answer now covers it
+// (BUG-0447 AC-02). A Warn or Fail line keeps its local finding.
+func raiseServerAcceptedDeviceToken(s *diag.Section) {
+	for i, c := range s.Checks {
+		if c.Name == "Device token" && c.Status == diag.Unverified {
+			s.Checks[i].Status = diag.OK
+			s.Checks[i].Detail = strings.Replace(c.Detail, deviceTokenUnchecked, "accepted by the server (Auth endpoint HTTP 200)", 1)
+		}
+	}
+}
+
 // doctorDeviceTokenCheck reports what doctor can know locally about the device
 // token loaded at startup. The token is opaque, so the only local facts are
 // its presence and the expiry recorded beside it. Whether the server accepts
@@ -192,16 +211,15 @@ func doctorAuth() diag.Section {
 // here gets a green mark.
 func doctorDeviceTokenCheck(dt *auth.DeviceToken) diag.Check {
 	const name = "Device token"
-	const unchecked = "not checked against the server (see Auth endpoint)"
 	if dt == nil {
-		return diag.Check{Name: name, Status: diag.Unverified, Detail: "present (in env), no stored record: " + unchecked}
+		return diag.Check{Name: name, Status: diag.Unverified, Detail: "present (in env), no stored record: " + deviceTokenUnchecked}
 	}
 	if dt.IsExpired() {
 		return diag.Check{Name: name, Status: diag.Fail,
 			Detail: fmt.Sprintf("expired (%s): run 'm3c-tools login' to refresh", dt.ExpiresAt)}
 	}
 	if dt.ExpiresAt == "" {
-		return diag.Check{Name: name, Status: diag.Unverified, Detail: "present, opaque, no local expiry: " + unchecked}
+		return diag.Check{Name: name, Status: diag.Unverified, Detail: "present, opaque, no local expiry: " + deviceTokenUnchecked}
 	}
 	exp, _ := time.Parse(time.RFC3339, dt.ExpiresAt) // IsExpired already rejected an unparsable value
 	remaining := time.Until(exp).Truncate(24 * time.Hour)
@@ -210,7 +228,7 @@ func doctorDeviceTokenCheck(dt *auth.DeviceToken) diag.Check {
 			Detail: fmt.Sprintf("expiring soon (%s): consider re-login", dt.ExpiresAt[:10])}
 	}
 	return diag.Check{Name: name, Status: diag.Unverified,
-		Detail: fmt.Sprintf("present, local expiry %s (%s remaining): %s", dt.ExpiresAt[:10], remaining, unchecked)}
+		Detail: fmt.Sprintf("present, local expiry %s (%s remaining): %s", dt.ExpiresAt[:10], remaining, deviceTokenUnchecked)}
 }
 
 // loadTokenForDoctor loads the device token for display purposes.
