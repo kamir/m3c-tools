@@ -108,8 +108,8 @@ m3c-tools doctor
 
 `doctor` prüft das aktive Profil, Authentisierung mit API-Key und/oder Geräte-Token,
 DNS, TLS sowie ER1-`/health` und Auth-Endpunkte. Steht nirgends ein ✗ und trägt die Zeile
-`Auth endpoint` ein ✓, kann es losgehen. Ein ○ markiert etwas, das lokal vorhanden ist,
-aber von keiner Serverantwort bestätigt wird; das Urteil des Servers über die Zugangsdaten
+`Auth endpoint` ein ✓, kann es losgehen. Ein ○ markiert etwas, das keine Serverantwort
+bestätigt; das Urteil des Servers über die Zugangsdaten
 steht in dieser Zeile `Auth endpoint` im Block `Authentication`. Lautet die letzte Zeile
 `Result: NO FAILURES; lines marked ○ ...`, ist nichts fehlgeschlagen, aber mindestens eine
 ○-Zeile wurde von keinem Server bestätigt.

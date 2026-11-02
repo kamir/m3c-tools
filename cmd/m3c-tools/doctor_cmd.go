@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -505,13 +506,23 @@ func doctorAuthEndpoint() diag.Check {
 	_ = resp.Body.Close() // best-effort close of the read-only diagnostic response body
 
 	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+		// Not a failure the user caused, but no answer about the credential
+		// either, so it must not end in ALL CHECKS PASSED.
 		return diag.Check{
-			Name: "Auth endpoint", Status: diag.Warn,
-			Detail: fmt.Sprintf("HTTP %d redirect to %s, not followed: the credential was not checked", resp.StatusCode, redirectOrigin(resp)),
+			Name: "Auth endpoint", Status: diag.Unverified,
+			Detail: fmt.Sprintf("HTTP %d %s, not followed: the credential was not checked", resp.StatusCode, redirectTarget(resp)),
 		}
 	}
 	switch resp.StatusCode {
 	case http.StatusOK:
+		if !isDevicesResponse(body) {
+			// An SPA catch-all, a captive portal or a proxy page also answers
+			// 200; only the devices answer shows the server took the credential.
+			return diag.Check{
+				Name: "Auth endpoint", Status: diag.Unverified,
+				Detail: fmt.Sprintf("HTTP 200 for the %s, but the body is not a devices answer (%s): the credential was not checked", auth.AuthMethod(), quoteServerBody(body, cfg.APIKey, os.Getenv("ER1_DEVICE_TOKEN"))),
+			}
+		}
 		return diag.Check{
 			Name: "Auth endpoint", Status: diag.OK,
 			Detail: fmt.Sprintf("HTTP %d (%s) [%s]", resp.StatusCode, elapsed.Round(time.Millisecond), auth.AuthMethod()),
@@ -529,14 +540,37 @@ func doctorAuthEndpoint() diag.Check {
 	}
 }
 
-// redirectOrigin names only the scheme and host a redirect points to, never
-// its path or query, which can carry login state.
-func redirectOrigin(resp *http.Response) string {
+// redirectTarget describes a 3xx answer by the scheme and host it points to,
+// never by its path or query, which can carry login state.
+func redirectTarget(resp *http.Response) string {
+	switch resp.StatusCode {
+	case http.StatusNotModified:
+		return "(not modified)"
+	case http.StatusMultipleChoices:
+		return "(multiple choices)"
+	}
+	if resp.Header.Get("Location") == "" {
+		return "redirect with no Location header"
+	}
 	u, err := resp.Location()
 	if err != nil || u.Host == "" {
-		return "an unreadable location"
+		return "redirect to an unparsable Location header"
 	}
-	return u.Scheme + "://" + u.Host
+	return "redirect to " + u.Scheme + "://" + u.Host
+}
+
+// isDevicesResponse reports whether body is the devices list the endpoint
+// returns to an accepted credential: {"devices": [...]} or a bare JSON array,
+// the two shapes er1.ListDevices reads.
+func isDevicesResponse(body []byte) bool {
+	var wrapper struct {
+		Devices *[]json.RawMessage `json:"devices"`
+	}
+	if json.Unmarshal(body, &wrapper) == nil && wrapper.Devices != nil {
+		return true
+	}
+	var list []json.RawMessage
+	return json.Unmarshal(body, &list) == nil && list != nil
 }
 
 // quoteServerBody renders at most 200 bytes of a server reply as one

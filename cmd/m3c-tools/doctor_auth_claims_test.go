@@ -201,17 +201,78 @@ func TestDoctorReport_RedirectIsNotAcceptance(t *testing.T) {
 		"cross-origin SSO":  func(string) string { return sso.URL + "/sso/login?next=x" },
 		"same-origin login": func(base string) string { return "/login" },
 	}
-	for name, location := range cases {
-		t.Run(name, func(t *testing.T) {
+	creds := map[string]func(t *testing.T){
+		"device token": func(t *testing.T) { t.Setenv("ER1_DEVICE_TOKEN", "bogus-test-token") },
+		"api key only": func(t *testing.T) { t.Setenv("ER1_API_KEY", "bogus-test-token") },
+	}
+	for credName, setCred := range creds {
+		for name, location := range cases {
+			t.Run(credName+"/"+name, func(t *testing.T) {
+				redirectCase(t, location, setCred)
+			})
+		}
+	}
+}
+
+func redirectCase(t *testing.T, location func(string) string, setCred func(*testing.T)) {
+	t.Helper()
+	doctorClaimsHome(t)
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/health", "/login":
+			fmt.Fprint(w, "<html>ok</html>")
+		default:
+			http.Redirect(w, r, location(srv.URL), http.StatusFound)
+		}
+	}))
+	defer srv.Close()
+	t.Setenv("ER1_API_URL", srv.URL+"/upload_2")
+	setCred(t)
+	t.Setenv("ER1_CONTEXT_ID", "testuser___testctx")
+
+	report := buildDoctorReport()
+	var authSec diag.Section
+	for _, s := range report.Sections {
+		if s.Title == "Authentication" {
+			authSec = s
+		}
+	}
+	ep, _ := checkNamed(authSec, "Auth endpoint")
+	if ep.Status == diag.OK || !strings.Contains(ep.Detail, "redirect") || strings.Contains(ep.Detail, "bogus-test-token") {
+		t.Errorf("Auth endpoint after a redirect: %v %q, want a non-OK line naming the redirect", ep.Status, ep.Detail)
+	}
+	if dt, _ := checkNamed(authSec, "Device token"); dt.Status == diag.OK {
+		t.Errorf("Device token after a redirect: %v %q, want not OK", dt.Status, dt.Detail)
+	}
+	if got := report.ResultLine(); strings.Contains(got, "ALL CHECKS PASSED") {
+		t.Errorf("result line after a redirect = %q", got)
+	}
+}
+
+// F2 of the BUG-0447 review: a 200 is acceptance only when it is the devices
+// answer. An SPA catch-all, a captive portal or an empty body says nothing
+// about the credential.
+func TestDoctorReport_AuthEndpoint200NeedsDevicesJSON(t *testing.T) {
+	cases := []struct {
+		name, ctype, body string
+		accepted          bool
+	}{
+		{"html page", "text/html", "<!doctype html><html><body>Welcome, please sign in</body></html>", false},
+		{"empty body", "application/json", "", false},
+		{"plain text", "text/plain", "ok", false},
+		{"devices object", "application/json", `{"devices":[{"device_type":"cli","device_name":"t","status":"active"}]}`, true},
+		{"bare array", "application/json", `[{"device_type":"cli","device_name":"t","status":"active"}]`, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
 			doctorClaimsHome(t)
-			var srv *httptest.Server
-			srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				switch r.URL.Path {
-				case "/health", "/login":
-					fmt.Fprint(w, "<html>ok</html>")
-				default:
-					http.Redirect(w, r, location(srv.URL), http.StatusFound)
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/health" {
+					return
 				}
+				w.Header().Set("Content-Type", c.ctype)
+				fmt.Fprint(w, c.body)
 			}))
 			defer srv.Close()
 			t.Setenv("ER1_API_URL", srv.URL+"/upload_2")
@@ -226,15 +287,44 @@ func TestDoctorReport_RedirectIsNotAcceptance(t *testing.T) {
 				}
 			}
 			ep, _ := checkNamed(authSec, "Auth endpoint")
-			if ep.Status == diag.OK || !strings.Contains(ep.Detail, "redirect") || strings.Contains(ep.Detail, "bogus-test-token") {
-				t.Errorf("Auth endpoint after a redirect: %v %q, want a non-OK line naming the redirect", ep.Status, ep.Detail)
+			dt, _ := checkNamed(authSec, "Device token")
+			passed := strings.Contains(report.ResultLine(), "ALL CHECKS PASSED")
+			if c.accepted {
+				if ep.Status != diag.OK || dt.Status != diag.OK {
+					t.Errorf("devices JSON: Auth endpoint %v %q, Device token %v, want both OK", ep.Status, ep.Detail, dt.Status)
+				}
+				return
 			}
-			if dt, _ := checkNamed(authSec, "Device token"); dt.Status == diag.OK {
-				t.Errorf("Device token after a redirect: %v %q, want not OK", dt.Status, dt.Detail)
-			}
-			if got := report.ResultLine(); strings.Contains(got, "ALL CHECKS PASSED") {
-				t.Errorf("result line after a redirect = %q", got)
+			if ep.Status != diag.Unverified || dt.Status == diag.OK || passed {
+				t.Errorf("%s: Auth endpoint %v %q, Device token %v, passed=%v; want Unverified, not OK, not passed", c.name, ep.Status, ep.Detail, dt.Status, passed)
 			}
 		})
+	}
+}
+
+func TestRedirectWording(t *testing.T) {
+	mk := func(code int, loc string) *http.Response {
+		req := httptest.NewRequest("GET", "https://er1.example/api/v2/devices", nil)
+		h := http.Header{}
+		if loc != "" {
+			h.Set("Location", loc)
+		}
+		return &http.Response{StatusCode: code, Header: h, Request: req}
+	}
+	for _, c := range []struct {
+		code int
+		loc  string
+		want string
+	}{
+		{302, "https://sso.example:8443/p?tok=SECRET", "redirect to https://sso.example:8443"},
+		{307, "/login", "redirect to https://er1.example"},
+		{302, "", "no Location header"},
+		{304, "", "not modified"},
+		{300, "", "multiple choices"},
+	} {
+		got := redirectTarget(mk(c.code, c.loc))
+		if !strings.Contains(got, c.want) || strings.Contains(got, "SECRET") || strings.Contains(got, "/p") {
+			t.Errorf("HTTP %d %q: %q, want %q and no path or query", c.code, c.loc, got, c.want)
+		}
 	}
 }

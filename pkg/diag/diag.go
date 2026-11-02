@@ -86,8 +86,8 @@ func (r Report) Print() {
 }
 
 // ResultLine is the closing verdict. Without failures it only says "passed"
-// when no check is Unverified: a local fact that no server answer covers is
-// not a pass (BUG-0447).
+// when no check is Unverified: something no server answer confirms is not a
+// pass (BUG-0447).
 func (r Report) ResultLine() string {
 	if r.HasFailures() {
 		return "Result: CHECKS FAILED \u2717"
@@ -95,7 +95,7 @@ func (r Report) ResultLine() string {
 	for _, s := range r.Sections {
 		for _, c := range s.Checks {
 			if c.Status == Unverified {
-				return "Result: NO FAILURES; lines marked \u25cb were found locally but not confirmed by a server"
+				return "Result: NO FAILURES; lines marked \u25cb are not confirmed by a server"
 			}
 		}
 	}

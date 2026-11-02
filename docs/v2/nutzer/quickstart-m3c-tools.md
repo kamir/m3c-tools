@@ -106,7 +106,7 @@ m3c-tools doctor
 
 `doctor` checks the active profile, authentication (API key and/or device token), DNS, TLS,
 and the ER1 `/health` and auth endpoints. No ✗, and a ✓ on the `Auth endpoint` line, mean
-you're ready. A ○ marks something found locally that no server answer covers; the server's
+you're ready. A ○ marks something that no server answer confirms; the server's
 verdict on your credential is that `Auth endpoint` line in the `Authentication` block. A
 last line `Result: NO FAILURES; lines marked ○ ...` means nothing failed, but at least
 one ○ line was not confirmed by a server.
