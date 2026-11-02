@@ -188,3 +188,53 @@ func TestDoctorReport_RejectedDeviceTokenStaysUnverified(t *testing.T) {
 		}
 	}
 }
+
+// A redirect never confirms the credential: a followed hop drops the
+// Authorization header and any login page answers 200. Neither redirect may
+// produce an OK Auth endpoint, an OK Device token or ALL CHECKS PASSED.
+func TestDoctorReport_RedirectIsNotAcceptance(t *testing.T) {
+	sso := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "<html>sign in</html>")
+	}))
+	defer sso.Close()
+	cases := map[string]func(base string) string{
+		"cross-origin SSO":  func(string) string { return sso.URL + "/sso/login?next=x" },
+		"same-origin login": func(base string) string { return "/login" },
+	}
+	for name, location := range cases {
+		t.Run(name, func(t *testing.T) {
+			doctorClaimsHome(t)
+			var srv *httptest.Server
+			srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/health", "/login":
+					fmt.Fprint(w, "<html>ok</html>")
+				default:
+					http.Redirect(w, r, location(srv.URL), http.StatusFound)
+				}
+			}))
+			defer srv.Close()
+			t.Setenv("ER1_API_URL", srv.URL+"/upload_2")
+			t.Setenv("ER1_DEVICE_TOKEN", "bogus-test-token")
+			t.Setenv("ER1_CONTEXT_ID", "testuser___testctx")
+
+			report := buildDoctorReport()
+			var authSec diag.Section
+			for _, s := range report.Sections {
+				if s.Title == "Authentication" {
+					authSec = s
+				}
+			}
+			ep, _ := checkNamed(authSec, "Auth endpoint")
+			if ep.Status == diag.OK || !strings.Contains(ep.Detail, "redirect") || strings.Contains(ep.Detail, "bogus-test-token") {
+				t.Errorf("Auth endpoint after a redirect: %v %q, want a non-OK line naming the redirect", ep.Status, ep.Detail)
+			}
+			if dt, _ := checkNamed(authSec, "Device token"); dt.Status == diag.OK {
+				t.Errorf("Device token after a redirect: %v %q, want not OK", dt.Status, dt.Detail)
+			}
+			if got := report.ResultLine(); strings.Contains(got, "ALL CHECKS PASSED") {
+				t.Errorf("result line after a redirect = %q", got)
+			}
+		})
+	}
+}

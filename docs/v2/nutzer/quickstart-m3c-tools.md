@@ -105,9 +105,11 @@ m3c-tools doctor
 ```
 
 `doctor` checks the active profile, authentication (API key and/or device token), DNS, TLS,
-and the ER1 `/health` and auth endpoints. No ✗ and an `Auth endpoint: ✓` line mean you're
-ready. A ○ marks something found locally that no server answer covers; the server's
-verdict on your credential is that `Auth endpoint` line in the `Authentication` block.
+and the ER1 `/health` and auth endpoints. No ✗, and a ✓ on the `Auth endpoint` line, mean
+you're ready. A ○ marks something found locally that no server answer covers; the server's
+verdict on your credential is that `Auth endpoint` line in the `Authentication` block. A
+last line `Result: NO FAILURES; lines marked ○ ...` means nothing failed, but at least
+one ○ line was not confirmed by a server.
 With no ER1 configured, it says so, names what works without one, and exits `0`.
 For a quick reachability-only check, use `m3c-tools check-er1`.
 

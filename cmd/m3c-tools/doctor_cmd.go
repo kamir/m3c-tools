@@ -461,7 +461,12 @@ func doctorAuthEndpoint() diag.Check {
 	if !auth.HasAuth(cfg.APIKey) {
 		return diag.Check{Name: "Auth endpoint", Status: diag.Skipped, Detail: "no credentials to test"}
 	}
-	client := &http.Client{Timeout: 10 * time.Second, CheckRedirect: httpsafe.NoCredentialRedirect}
+	// No redirect is followed: a hop drops the Authorization header and a login
+	// page answers 200, so only the endpoint's own answer can confirm the
+	// credential (BUG-0447).
+	client := &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
 	if !cfg.VerifySSL {
 		// #nosec G402 -- gegated durch pkg/er1.applyTLSVerificationPolicy (SEC-M7),
 		// die beim Laden der Config VerifySSL fuer JEDEN Nicht-Loopback-Host
@@ -499,6 +504,12 @@ func doctorAuthEndpoint() diag.Check {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	_ = resp.Body.Close() // best-effort close of the read-only diagnostic response body
 
+	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+		return diag.Check{
+			Name: "Auth endpoint", Status: diag.Warn,
+			Detail: fmt.Sprintf("HTTP %d redirect to %s, not followed: the credential was not checked", resp.StatusCode, redirectOrigin(resp)),
+		}
+	}
 	switch resp.StatusCode {
 	case http.StatusOK:
 		return diag.Check{
@@ -516,6 +527,16 @@ func doctorAuthEndpoint() diag.Check {
 			Detail: fmt.Sprintf("HTTP %d (unexpected)", resp.StatusCode),
 		}
 	}
+}
+
+// redirectOrigin names only the scheme and host a redirect points to, never
+// its path or query, which can carry login state.
+func redirectOrigin(resp *http.Response) string {
+	u, err := resp.Location()
+	if err != nil || u.Host == "" {
+		return "an unreadable location"
+	}
+	return u.Scheme + "://" + u.Host
 }
 
 // quoteServerBody renders at most 200 bytes of a server reply as one
