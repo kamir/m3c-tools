@@ -323,6 +323,9 @@ type publishAdmitArgs struct {
 	name, version, skillDir, bundlePath, identity, keyPath string
 	registry                                               string // --registry spec ("self"/"er1://…"/"gitlab://…")
 	kind, agentFile                                        string
+	// result, when non-nil, receives what the admit actually published, so a
+	// caller can hand the same bundle to the attest half (BUG-0244).
+	result *admitResult
 	// catalogLookup is injected by tests. nil means "build the real one from
 	// er1Target/er1Context" (SPEC-0432 §8).
 	catalogLookup                               catalogLookup
@@ -352,6 +355,9 @@ func runPublishAdmit(stdout, stderr io.Writer, a publishAdmitArgs) int {
 	}
 	digestHex, digestBytes := sha256Hex(skb)
 	digest := "sha256:" + digestHex
+	if a.result != nil {
+		*a.result = admitResult{bundlePath: skbPath, version: ver, digest: digest}
+	}
 
 	// SPEC-0432: the kind that is tagged onto the registry item (and with it
 	// the shelf every later verdict is filed on) comes from the manifest inside
@@ -874,6 +880,19 @@ func runPublishRevoke(stdout, stderr io.Writer, a publishRevokeArgs) int {
 
 // ─── --all batch mode (P1.4) ──────────────────────────────────────────────
 
+// admitResult is what one admit published: the bundle it packed or reused,
+// the resolved version and the bundle digest.
+type admitResult struct {
+	bundlePath, version, digest string
+}
+
+// batchAdmit and batchAttest are the two halves of one --all entry. They are
+// variables only so tests can replace the ER1 POST; production never does.
+var (
+	batchAdmit  = runPublishAdmit
+	batchAttest = runPublishAttest
+)
+
 type publishAllArgs struct {
 	manifestPath, identity, keyPath, er1Target, er1Context string
 	inlineMax                                              int
@@ -917,10 +936,17 @@ func runPublishAll(stdout, stderr io.Writer, a publishAllArgs) int {
 
 	// Run each entry (admit then attest) NON-interactively (the batch
 	// confirm covers them all).
+	// BUG-0244: admit and attest are counted and reported apart, so a half
+	// success (admitted, not attested) is visible instead of reading as a
+	// total failure. ok/fail still count whole entries.
 	okCount, failCount := 0, 0
+	admitOK, admitFail, attestOK, attestFail, attestSkip := 0, 0, 0, 0, 0
+	var rows []string
 	for _, e := range entries {
 		fmt.Fprintf(stdout, "\n----  %s@%s  ----\n", e.Name, e.Version)
-		rcA := runPublishAdmit(stdout, stderr, publishAdmitArgs{
+		var res admitResult
+		rcA := batchAdmit(stdout, stderr, publishAdmitArgs{
+			result:       &res,
 			name:         e.Name,
 			version:      e.Version,
 			identity:     a.identity,
@@ -934,13 +960,30 @@ func runPublishAll(stdout, stderr io.Writer, a publishAllArgs) int {
 		})
 		if rcA != 0 {
 			failCount++
+			admitFail++
 			fmt.Fprintf(stderr, "    admit failed (rc=%d)\n", rcA)
+			rows = append(rows, fmt.Sprintf("    %-28s admit FAIL (rc=%d), attest not run", e.Name, rcA))
 			continue
 		}
+		admitOK++
+		// The attest half signs the bundle the admit just published: its path,
+		// its resolved version and its digest. Rebuilding the name from the
+		// manifest row lost the auto version and looked for ./<name>@.skb.
+		ver := res.version
+		if ver == "" {
+			ver = e.Version
+		}
+		label := e.Name + "@" + ver
+		if e.Level == "" {
+			attestSkip++
+			rows = append(rows, fmt.Sprintf("    %-28s admit ok, attest skipped (no level)", label))
+		}
 		if e.Level != "" {
-			rcT := runPublishAttest(stdout, stderr, publishAttestArgs{
+			rcT := batchAttest(stdout, stderr, publishAttestArgs{
 				name:         e.Name,
-				version:      e.Version,
+				version:      ver,
+				digestArg:    res.digest,
+				bundlePath:   res.bundlePath,
 				level:        e.Level,
 				rationale:    e.Rationale,
 				identity:     a.identity,
@@ -953,13 +996,21 @@ func runPublishAll(stdout, stderr io.Writer, a publishAllArgs) int {
 			})
 			if rcT != 0 {
 				failCount++
+				attestFail++
 				fmt.Fprintf(stderr, "    attest failed (rc=%d)\n", rcT)
+				rows = append(rows, fmt.Sprintf("    %-28s admit ok, attest FAIL (rc=%d)", label, rcT))
 				continue
 			}
+			attestOK++
+			rows = append(rows, fmt.Sprintf("    %-28s admit ok, attest ok", label))
 		}
 		okCount++
 	}
 	fmt.Fprintf(stdout, "\n==> batch done: ok=%d fail=%d total=%d\n", okCount, failCount, len(entries))
+	fmt.Fprintf(stdout, "    admit ok=%d fail=%d; attest ok=%d fail=%d skipped=%d\n", admitOK, admitFail, attestOK, attestFail, attestSkip)
+	for _, r := range rows {
+		fmt.Fprintln(stdout, r)
+	}
 	if failCount > 0 {
 		return 1
 	}
