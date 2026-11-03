@@ -66,18 +66,17 @@ secrets:
 	return home, regPfad
 }
 
-// inventar ruft den Befehl mit der Reihenfolge, die er annimmt.
+// inventar ruft den Befehl mit dem Namen VOR den Flaggen.
 //
-// BUG-0450: Flaggen muessen VOR dem Namen stehen. `secretctl inventory <name>
-// --registry <pfad>` scheitert mit einer Verwendungszeile, weil Go's flag-Paket
-// beim ersten Nicht-Flag anhaelt. Im selben Repo nimmt `skillctl publish <name>
-// --kind agent` dieselbe Reihenfolge an, weil publish_cmds.go sie umsortiert.
-//
-// Der Helfer steht hier, damit die Reihenfolge an EINER Stelle festliegt: wird
-// BUG-0450 behoben, aendert sich genau diese Zeile und kein Test.
+// BUG-0450: `secretctl inventory <name> --registry <pfad>` scheiterte mit
+// einer Verwendungszeile, weil Go's flag-Paket beim ersten Nicht-Flag
+// anhaelt. Seit der Behebung sortiert flagsFirst die Flaggen nach vorn, wie
+// publish_cmds.go es fuer `skillctl publish <name> --kind agent` tut. Der
+// Helfer nutzt absichtlich die Reihenfolge, die frueher scheiterte, damit
+// jeder Inventar-Test sie durch das echte Binary mitprueft.
 func inventar(t *testing.T, home, reg string, args ...string) *CLIResult {
 	t.Helper()
-	voll := append([]string{"inventory", "--registry", reg}, args...)
+	voll := append(append([]string{"inventory"}, args...), "--registry", reg)
 	// A real gcloud detaches helpers that still write below HOME when t.TempDir
 	// cleans up, which failed these tests about one run in six (#436).
 	attrappe := filepath.Join(home, "attrappe")

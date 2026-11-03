@@ -813,8 +813,8 @@ sidecar or `--meta`).
 | `-verbose` | Print structured per-step log lines to stderr. |
 
 Machine consumers use `--json` before the name: `skillctl install --json my-skill`
-or `skillctl verify --json --offline my-skill`. Put `--json` first to obtain JSON for flag parsing failures, then all other flags before
-positional operands. An unknown flag before `--json` stops parsing before JSON is enabled.
+or `skillctl verify --json --offline my-skill`. Put `--json` first to obtain JSON for flag parsing failures; the other flags may stand
+before or after the name (BUG-0450). An unknown flag before `--json` stops parsing before JSON is enabled.
 Each supported single-skill path emits one JSON object with `schema` equal to
 `m3c.skillctl.trust-result/v1`, `operation` (`install` or `verify`), `ok` and
 `exit_code`. Failures include `error`; success includes `digest`, `author_identity`,

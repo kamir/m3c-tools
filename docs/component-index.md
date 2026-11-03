@@ -62,6 +62,7 @@ Grouped by domain:
 | `setup` | Foundation of the SPEC-0175 onboarding flow. |
 | `httpsafe` | Small, dependency-free HTTP hardening helpers shared across clients. |
 | `diag` | Diagnostic check types + rendering for the doctor/check surface. |
+| `cliargs` | Argument handling shared by the CLIs: flags are accepted after the positional name (BUG-0450). |
 | `testutil` | Shared test helpers. |
 
 ## E. Desktop UI (`pkg/`)
