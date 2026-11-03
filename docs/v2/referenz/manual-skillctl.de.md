@@ -2310,6 +2310,13 @@ Flags: `[--latest] [--skill <name>] [--er1-target …] [--er1-context …]`.
 Installation) für einen Skill oder Digest anzeigen.
 Aufruf: `registry show <name | sha256:<hex>> [--er1-target …] [--er1-context …]`.
 
+Beide Befehle lösen `--er1-context` auf wie `publish` und `pull`: ein nackter Name
+wie die Vorgabe `skills` bekommt das Besitzerpräfix (`<owner>___skills`, Besitzer
+aus `ER1_USER_ID` oder `ER1_CONTEXT_ID`). `registry ls` nennt den aufgelösten
+Kontext in der ersten Zeile. Ist kein Besitzer auflösbar, kann der nackte Name
+kein ER1-Kontext sein, und beide Befehle enden mit `1` und einem Fehler, statt eine
+leere Registry zu melden (BUG-0437).
+
 ```bash
 skillctl registry ls --latest
 skillctl registry show my-skill

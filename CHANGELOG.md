@@ -23,6 +23,14 @@ version is ldflags-stamped (`skillctl version`). Release tags: `skillctl/vX.Y.Z`
   because Go's flag package stops at the first non-flag argument. The shared
   `pkg/cliargs.FlagsFirst` now moves flags before the name; a literal `--`
   still ends flag parsing, and a flag missing its value is still a usage error.
+- `registry ls` and `registry show` no longer query the bare context `skills`,
+  which does not exist (BUG-0437). They resolve `--er1-context` with the owner
+  prefix, as `publish` and `pull` do, so the default reads `<owner>___skills`. A
+  name that stays bare because no owner is resolvable exits `1` with an error.
+  A prefixed context that does not exist (a typo) still lists empty: the ER1
+  read helper treats HTTP 404 as an empty result, so a missing context and an
+  empty one look the same to the client. The `context:` line that
+  `registry ls` now prints shows which one was read.
 
 ## [skillctl/v0.6.2], 2026-10-30, revocation handling and installers
 
