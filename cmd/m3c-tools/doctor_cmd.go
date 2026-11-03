@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -572,11 +573,7 @@ func doctorPlaud() diag.Section {
 				Detail: err.Error(),
 			})
 		} else {
-			age := time.Since(ts.SavedAt).Truncate(time.Hour)
-			s.Checks = append(s.Checks, diag.Check{
-				Name: "Plaud token", Status: diag.OK,
-				Detail: fmt.Sprintf("valid (%s old, saved %s)", age, ts.SavedAt.Format("2006-01-02")),
-			})
+			s.Checks = append(s.Checks, doctorPlaudTokenVerdict(plaudCfg, ts))
 		}
 	}
 
@@ -686,6 +683,26 @@ func doctorPlaudDevToken(path string) diag.Check {
 	}
 	return diag.Check{Name: name, Status: diag.OK,
 		Detail: fmt.Sprintf("present, expires in %s (%s); not checked against Plaud", left, exp.Format("2006-01-02 15:04"))}
+}
+
+// doctorPlaudTokenVerdict asks the Plaud API whether a locally readable,
+// unexpired token is accepted (BUG-0447). Finding the file is presence; only
+// Plaud's answer is validity, so an unreachable API leaves it unverified.
+func doctorPlaudTokenVerdict(cfg *plaud.Config, ts *plaud.TokenSession) diag.Check {
+	saved := fmt.Sprintf("saved %s, %s ago", ts.SavedAt.Format("2006-01-02"), time.Since(ts.SavedAt).Truncate(time.Hour))
+	ok, err := plaud.NewClient(cfg, ts.Token).TokenAuthenticates()
+	switch {
+	case errors.Is(err, plaud.ErrUnauthorized):
+		return diag.Check{Name: "Plaud token", Status: diag.Fail,
+			Detail: fmt.Sprintf("rejected by Plaud (HTTP 401, %s): run 'm3c-tools plaud auth login'", saved)}
+	case err != nil:
+		return diag.Check{Name: "Plaud token", Status: diag.Warn,
+			Detail: fmt.Sprintf("present, not verified: Plaud API check failed (%v); %s", err, saved)}
+	case !ok:
+		return diag.Check{Name: "Plaud token", Status: diag.Fail,
+			Detail: fmt.Sprintf("not accepted by Plaud (the API did not answer status 0, %s): run 'm3c-tools plaud auth login'", saved)}
+	}
+	return diag.Check{Name: "Plaud token", Status: diag.OK, Detail: "accepted by Plaud (" + saved + ")"}
 }
 
 // doctorDevices checks device pairing status via the ER1 devices API.
