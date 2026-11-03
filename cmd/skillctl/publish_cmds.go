@@ -144,7 +144,7 @@ func runPublish(args []string, stdout, stderr io.Writer) int {
 
 		// UX
 		yes    = fs.Bool("yes", false, "Skip the 🟡 confirm pause (scripted runs).")
-		dryRun = fs.Bool("dry-run", false, "Print the plan + the rendered item body; do not POST or pack.")
+		dryRun = fs.Bool("dry-run", false, "Print the plan; do not POST. Admit (the default mode): needs no signing key and signs nothing, but without --bundle still packs ./<name>@<version>.skb so the digest is real. --attest / --revoke: still load the key and sign locally. --all: prints the batch plan only.")
 	)
 	// SPEC-0096 room mapping (SPEC-0246 §7). Repeatable; each value is a room's
 	// room_label, stamped as a bare tag so room members can read the bundle.
@@ -367,39 +367,44 @@ func runPublishAdmit(stdout, stderr io.Writer, a publishAdmitArgs) int {
 
 	// 3. Load the key and produce the author+registry sigs. The personal
 	// tenant uses one key playing both roles: same sig bytes, two records.
-	priv, err := signing.LoadPrivateKey(a.keyPath)
-	if err != nil {
-		fmt.Fprintf(stderr, "publish: load key: %v\n", err)
-		return 1
-	}
-	defer wipe(priv)
-	sigBytes := ed25519.Sign(priv, digestBytes[:])
-	sigB64 := base64.StdEncoding.EncodeToString(sigBytes)
-	pubFP := pubkeyFingerprint(priv.Public().(ed25519.PublicKey))
-
-	sigs := []registry.SignatureRef{
-		{Role: "author", IdentityID: a.identity, SignatureB64: sigB64, PubKeyFingerprint: pubFP},
-		{Role: "registry", IdentityID: a.identity, SignatureB64: sigB64, PubKeyFingerprint: pubFP},
-	}
-
-	// 4. Build the BundleAdmittedEvent and sign its envelope.
+	// A dry run signs nothing and POSTs nothing, so it needs no key
+	// (BUG-0464): steps 3 and 4 are skipped for it.
 	now := time.Now().UTC()
-	ev, err := registry.BuildBundleAdmittedEvent(registry.AdmittedEventInput{
-		BundleDigest:       digest,
-		Name:               a.name,
-		Version:            ver,
-		AuthorIntent:       "green", // declared author intent; attestation verdict is separate
-		AdmittedByIdentity: a.identity,
-		AdmittedAt:         now,
-		Signatures:         sigs,
-	})
-	if err != nil {
-		fmt.Fprintf(stderr, "publish: build event: %v\n", err)
-		return 1
-	}
-	if _, err := registry.SignEnvelopeSignature(priv, ev); err != nil {
-		fmt.Fprintf(stderr, "publish: sign envelope: %v\n", err)
-		return 1
+	var ev map[string]any
+	if !a.dryRun {
+		priv, err := signing.LoadPrivateKey(a.keyPath)
+		if err != nil {
+			fmt.Fprintf(stderr, "publish: load key: %v\n", err)
+			return 1
+		}
+		defer wipe(priv)
+		sigBytes := ed25519.Sign(priv, digestBytes[:])
+		sigB64 := base64.StdEncoding.EncodeToString(sigBytes)
+		pubFP := pubkeyFingerprint(priv.Public().(ed25519.PublicKey))
+
+		sigs := []registry.SignatureRef{
+			{Role: "author", IdentityID: a.identity, SignatureB64: sigB64, PubKeyFingerprint: pubFP},
+			{Role: "registry", IdentityID: a.identity, SignatureB64: sigB64, PubKeyFingerprint: pubFP},
+		}
+
+		// 4. Build the BundleAdmittedEvent and sign its envelope.
+		ev, err = registry.BuildBundleAdmittedEvent(registry.AdmittedEventInput{
+			BundleDigest:       digest,
+			Name:               a.name,
+			Version:            ver,
+			AuthorIntent:       "green", // declared author intent; attestation verdict is separate
+			AdmittedByIdentity: a.identity,
+			AdmittedAt:         now,
+			Signatures:         sigs,
+		})
+		if err != nil {
+			fmt.Fprintf(stderr, "publish: build event: %v\n", err)
+			return 1
+		}
+		if _, err := registry.SignEnvelopeSignature(priv, ev); err != nil {
+			fmt.Fprintf(stderr, "publish: sign envelope: %v\n", err)
+			return 1
+		}
 	}
 
 	skill := registry.SkillMeta{

@@ -2195,7 +2195,7 @@ und Attestierung für jeden Eintrag im Veröffentlichungsmanifest.
 | `-inline-max` | Obergrenze eingebetteter Base64-Daten, standardmäßig `262144`; größere Bundles benötigen Claim-Check. |
 | `-no-checkpoint` | Keinen Prüfpunkt an die offene Sitzung nach SPEC-0213 anhängen. |
 | `-no-runbook-publish` | Runbook des Skills nicht automatisch im THOH-Katalog registrieren (SPEC-0275). |
-| `-dry-run` | Plan und gerenderten Eintragsinhalt ausgeben; weder POST noch Packen. |
+| `-dry-run` | Plan ausgeben; kein POST. Admit (der Standardmodus): braucht keinen Signierschlüssel und signiert nichts, packt aber ohne `--bundle` trotzdem `./<name>@<version>.skb`, damit der Digest echt ist. `--attest` / `--revoke`: laden weiterhin den Schlüssel und signieren lokal. `--all`: gibt nur den Batch-Plan aus. |
 | `-yes` | 🟡 Bestätigungspause für Skriptläufe überspringen. |
 
 ```bash
