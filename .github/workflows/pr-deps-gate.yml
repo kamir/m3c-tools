@@ -59,6 +59,9 @@ jobs:
     name: PR dependencies (DAG gate)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read # read the PR body and dependency states
     outputs:
       # "true" genau dann, wenn das Skript mit 1 endete (Abhaengigkeit
       # blockiert). Exit 2 (Aufruffehler) laesst den Job rot werden, setzt

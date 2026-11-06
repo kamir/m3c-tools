@@ -63,6 +63,7 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+      actions: read # the SARIF uploader reads workflow-run metadata
       security-events: write # upload SARIF to GitHub Code Scanning
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
