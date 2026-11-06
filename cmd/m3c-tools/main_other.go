@@ -1906,11 +1906,21 @@ func reportPlaudLoginFailure(w io.Writer, err error) {
 	fmt.Fprintln(w, "The token was not found in the Chrome this tool reads. Other ways in:")
 	fmt.Fprintln(w, "  m3c-tools plaud auth --from-er1            (token stored once in the ER1 vault)")
 	fmt.Fprintln(w, "  m3c-tools plaud auth --token-file <path>   (a file holding the token)")
-	fmt.Fprintf(w, "  %s=<token> m3c-tools plaud auth\n", plaud.PlaudTokenEnvVar)
+	printPlaudTokenEnvLoginHint(w, runtime.GOOS)
 	fmt.Fprintln(w, "To copy the token from a browser where you are logged in to Plaud, open DevTools (F12) and")
 	fmt.Fprintln(w, "copy only the part that starts with 'eyJ' (leave out any 'bearer' in front) from either:")
 	fmt.Fprintln(w, "  Network > any api.plaud.ai request > the 'authorization' request header, or")
 	fmt.Fprintln(w, "  Application > Local Storage > the plaud.ai origin > 'tokenstr' (Google/Apple sign-in")
 	fmt.Fprintln(w, "  accounts may have no token there; use the Network route).")
 	fmt.Fprintln(w, "The token is saved without a check; 'm3c-tools plaud list' shows whether it works.")
+}
+
+// printPlaudTokenEnvLoginHint uses the assignment syntax of the target shell.
+func printPlaudTokenEnvLoginHint(w io.Writer, goos string) {
+	if goos == "windows" {
+		fmt.Fprintf(w, "  PowerShell: $env:%s='<token>'; m3c-tools plaud auth\n", plaud.PlaudTokenEnvVar)
+		fmt.Fprintf(w, "  cmd.exe: set \"%s=<token>\" && m3c-tools plaud auth\n", plaud.PlaudTokenEnvVar)
+		return
+	}
+	fmt.Fprintf(w, "  %s=<token> m3c-tools plaud auth\n", plaud.PlaudTokenEnvVar)
 }

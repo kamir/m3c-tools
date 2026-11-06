@@ -690,7 +690,9 @@ func doctorPlaudDevToken(path string) diag.Check {
 // Plaud's answer is validity, so an unreachable API leaves it unverified.
 func doctorPlaudTokenVerdict(cfg *plaud.Config, ts *plaud.TokenSession) diag.Check {
 	saved := fmt.Sprintf("saved %s, %s ago", ts.SavedAt.Format("2006-01-02"), time.Since(ts.SavedAt).Truncate(time.Hour))
-	ok, err := plaud.NewClient(cfg, ts.Token).TokenAuthenticates()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ok, err := plaud.NewClient(cfg, ts.Token).TokenAuthenticatesContext(ctx)
 	switch {
 	case errors.Is(err, plaud.ErrUnauthorized):
 		return diag.Check{Name: "Plaud token", Status: diag.Fail,

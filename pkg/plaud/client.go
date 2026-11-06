@@ -2,6 +2,7 @@ package plaud
 
 import (
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -478,7 +479,11 @@ func extractSummaryText(data []byte) string {
 // get performs an authenticated GET request to the Plaud API.
 // Handles region redirects automatically (status -302).
 func (c *Client) get(path string) ([]byte, error) {
-	body, err := c.doGet(c.cfg.APIURL + path)
+	return c.getContext(context.Background(), path)
+}
+
+func (c *Client) getContext(ctx context.Context, path string) ([]byte, error) {
+	body, err := c.doGetContext(ctx, c.cfg.APIURL+path)
 	if err != nil {
 		return nil, err
 	}
@@ -500,14 +505,14 @@ func (c *Client) get(path string) ([]byte, error) {
 		}
 		log.Printf("[plaud] region redirect: %s -> %s", c.cfg.APIURL, newBase)
 		c.cfg.APIURL = newBase
-		return c.doGet(newBase + path)
+		return c.doGetContext(ctx, newBase+path)
 	}
 
 	return body, nil
 }
 
-func (c *Client) doGet(url string) ([]byte, error) {
-	req, err := http.NewRequest("GET", url, nil)
+func (c *Client) doGetContext(ctx context.Context, rawURL string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", rawURL, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -539,24 +544,31 @@ func (c *Client) DebugGet(path string) ([]byte, error) {
 // the Plaud API accepts this client's token. It returns (true, nil) only on a
 // clean status==0 envelope; (false, nil) when the API is reached but rejects the
 // token (e.g. status -3900 "invalid auth header"); and (false, err) on a
-// transport failure, so callers can distinguish "rejected" from "unreachable".
+// transport failure or an invalid response, so callers can distinguish a
+// confirmed rejection from an unverified result.
 //
 // It is the validation primitive behind self-calibrating token extraction:
 // Plaud renames its localStorage token key often and also stores a user-identity
 // JWT under a token-named key, so the only reliable way to pick the real bearer
 // out of several candidates is to ask the API which one it accepts.
 func (c *Client) TokenAuthenticates() (bool, error) {
-	body, err := c.get("/file/simple/web?skip=0&limit=1&is_trash=2&is_desc=true")
+	return c.TokenAuthenticatesContext(context.Background())
+}
+
+// TokenAuthenticatesContext checks an explicit Plaud status while honoring the
+// caller deadline across the initial request and any region redirect.
+func (c *Client) TokenAuthenticatesContext(ctx context.Context) (bool, error) {
+	body, err := c.getContext(ctx, "/file/simple/web?skip=0&limit=1&is_trash=2&is_desc=true")
 	if err != nil {
 		return false, err
 	}
 	var resp struct {
-		Status int `json:"status"`
+		Status *int `json:"status"`
 	}
-	if json.Unmarshal(body, &resp) != nil {
-		return false, nil // unparseable body → treat as not-authenticated
+	if json.Unmarshal(body, &resp) != nil || resp.Status == nil {
+		return false, fmt.Errorf("plaud: authentication response has no explicit numeric status")
 	}
-	return resp.Status == 0, nil
+	return *resp.Status == 0, nil
 }
 
 // checkStatus maps HTTP error codes to sentinel errors.
