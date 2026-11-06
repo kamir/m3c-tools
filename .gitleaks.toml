@@ -8,16 +8,17 @@ title = "m3c-tools secret scanning"
 
 # Custom rules for project-specific secrets
 
-# ER1 API key, legacy form: a bare UUID. A UUID alone is not a secret, so this
-# rule needs a key name on the same line (ER1, api_key, API_KEY, apikey or
-# X-API-KEY, in any case) and the UUID at most 40 characters after it. That
-# covers env files (ER1_API_KEY=...), Go and JSON maps ("ER1_API_KEY": "..."),
-# HTTP headers (X-API-KEY: ...) and YAML (api_key: ...). It does not see a UUID
-# on a line without a key name, nor one further than 40 characters from it.
+# ER1 API key, legacy form: a bare UUID. A UUID alone is not a secret.
+# One alternative requires a key name on the same line (ER1, api_key,
+# API_KEY, apikey or X-API-KEY, in any case) within 40 characters of the UUID.
+# This covers Go and JSON maps, HTTP headers and YAML configuration.
+# The explicit ER1_API_KEY assignment alternative preserves the original
+# rule, including arbitrary whitespace around the equals sign. Other key
+# names keep the bounded context. A UUID without a key name is not reported.
 [[rules]]
   id = "er1-api-key-legacy"
   description = "ER1 API key, legacy form (a UUID next to an API key name)"
-  regex = '''(?i)(?:\ber1|api[_.-]?key)[^\n]{0,40}?\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b'''
+  regex = '''(?i)(?:(?:\ber1|api[_.-]?key)[^\n]{0,40}?|ER1_API_KEY\s*=\s*)\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b'''
   secretGroup = 1
   keywords = ["er1", "api"]
   tags = ["key", "er1"]

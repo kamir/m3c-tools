@@ -47,6 +47,8 @@ plant() { # plant <path> <line>
 dummy=00000000-0000-4000-8000-000000000000
 
 plant env/prod.env "ER1_API_KEY=$(uuid4)"
+plant env/aligned-after.env "ER1_API_KEY=$(printf '%64s' '')$(uuid4)"
+plant env/aligned-both.env "ER1_API_KEY$(printf '%64s' '')=$(printf '%64s' '')$(uuid4)"
 plant pkg/leak/leak_test.go "	\"ER1_API_KEY\":    \"$(uuid4)\","
 plant pkg/client/upload.go "	req.Header.Set(\"X-API-KEY\", \"$(uuid4)\")"
 plant deploy/values.yaml "api_key: $(uuid4)"
@@ -86,6 +88,8 @@ none() { # none <label> <path>: no finding at all in <path>
   fi
 }
 want 'legacy key in an env file' er1-api-key-legacy env/prod.env
+want 'legacy assignment with long whitespace after equals' er1-api-key-legacy env/aligned-after.env
+want 'legacy assignment with long whitespace around equals' er1-api-key-legacy env/aligned-both.env
 want 'legacy key in a Go map' er1-api-key-legacy pkg/leak/leak_test.go
 want 'legacy key in an X-API-KEY header' er1-api-key-legacy pkg/client/upload.go
 want 'legacy key under api_key in YAML' er1-api-key-legacy deploy/values.yaml
@@ -96,8 +100,8 @@ want 'random key next to the allowlisted file' er1-api-key-legacy pkg/config/els
 want 'random key in a file of the same name below it' er1-api-key-legacy pkg/config/real/doctor_test.go
 none 'UUID without a key name on its line' logs/request.log
 total=$(wc -l <"$fixture/report.txt" | tr -d ' ')
-if [ "$total" -eq 8 ]; then echo "ok: no finding beyond the 8 expected"; else
-  echo "FAIL: want 8 findings in total, got $total" >&2
+if [ "$total" -eq 10 ]; then echo "ok: no finding beyond the 10 expected"; else
+  echo "FAIL: want 10 findings in total, got $total" >&2
   sed 's/^/  found: /' "$fixture/report.txt" >&2
   failures=$((failures + 1))
 fi
