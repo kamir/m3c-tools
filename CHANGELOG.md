@@ -15,6 +15,15 @@ version is ldflags-stamped (`skillctl version`). Release tags: `skillctl/vX.Y.Z`
   a verbatim move ships half-extracted shared state, so it needs a dedicated
   refactor pass, not a release-eve edit.
 
+### Fixed
+- `secretctl inventory`, `secretctl verify`, `skillctl install`,
+  `skillctl verify` and `skillctl export-bundle` accept flags after the name
+  (BUG-0450). `secretctl inventory <name> --registry <path>` and
+  `skillctl install <name> --registry <url>` used to end with a usage line
+  because Go's flag package stops at the first non-flag argument. The shared
+  `pkg/cliargs.FlagsFirst` now moves flags before the name; a literal `--`
+  still ends flag parsing, and a flag missing its value is still a usage error.
+
 ## [skillctl/v0.6.2], 2026-10-30, revocation handling and installers
 
 ### Fixed

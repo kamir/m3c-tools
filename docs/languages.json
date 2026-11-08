@@ -5,8 +5,8 @@
     {
       "de": "docs/component-index.de.md",
       "en": "docs/component-index.md",
-      "de_sha256": "a8803bac934cfb7ac01461db90f3528d564c542511086eb3f846af98b26d0961",
-      "en_sha256": "c01c2e0a5dbd95c77a3df902bcefc460b2635f0fce5b3878d0ab3bfb4d526876"
+      "de_sha256": "c828a7c55b5e97e347cd986c67efc94cc9bf13ca98d458e2039e07179aa01afb",
+      "en_sha256": "50060a8a9fc2e4ec03b73a964b6f66966d69249ec5170bd3ea0f09ee083d01e5"
     },
     {
       "de": "docs/index.md",
@@ -77,8 +77,8 @@
     {
       "de": "docs/v2/entwickler/secretctl.de.md",
       "en": "docs/v2/entwickler/secretctl.md",
-      "de_sha256": "661855624727fa1a2c19ff84cb7df7258ae150c7d6649e210a1992efb101d67e",
-      "en_sha256": "9dc30a4efe77c55aa44c12a6f2eb0e9e922521f02a39669410606b61297b8f03"
+      "de_sha256": "42d6c5a1de2de5adf1cd518a0b16655c0e361c994e33c3e8569e8439bbf9165c",
+      "en_sha256": "67ae9d10890bdc8d5d78ba9d58adcd596fea971d2a92a320ecedb504fc51baac"
     },
     {
       "de": "docs/v2/entwickler/skillctl-sim.de.md",
@@ -179,8 +179,8 @@
     {
       "de": "docs/v2/referenz/manual-skillctl.de.md",
       "en": "docs/v2/referenz/manual-skillctl.md",
-      "de_sha256": "1c245bd750045104b0ef6a0e78e3404c7f2fcfc3abee20b16e434792ef9e4f5e",
-      "en_sha256": "58f85f245b752d783fd95e05e9dea842451673b53a7c5cb450f1006785beb825"
+      "de_sha256": "c6b03d623b7f96dbe68f5fa7180ecbc078b91235bab8689f2c0722999d055282",
+      "en_sha256": "7557f42dacbc949ca1168776110656a4bd0266e5e55a7ac2b5eb16f2e3a48e67"
     },
     {
       "de": "docs/v2/sicherheit/audit-spur.de.md",
