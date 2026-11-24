@@ -771,6 +771,7 @@ m3c-tools cancel vid-001
 | Upload fails, then retries | Failed uploads queue at `~/.m3c-tools/queue.json`. Run `m3c-tools retry`, check `m3c-tools status`. |
 | YouTube 429 / rate limited | Set `YT_PROXY_URL`; transcripts are cached for 7 days and the app degrades gracefully without them. |
 | `plaud dev sync` → HTTP 413 | The recording's audio exceeds the ER1 ingress limit (~32 MiB). `plaud dev sync` already drops audio over `PLAUD_MAX_AUDIO_MB` (default 30) and uploads transcript-only. If you still see 413, lower `PLAUD_MAX_AUDIO_MB`; a stricter proxy may cap below 30 MB. |
+| `plaud dev sync` → `server sync check failed` | The check against ER1 that tells which recordings any machine already synced did not answer. Without it every recording synced from another machine looks new, so `plaud dev sync` uploads nothing and exits 1; `plaud dev list` shows the local state with a warning. Restore ER1 access (`m3c-tools doctor`), then run the sync again. |
 
 ---
 

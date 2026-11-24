@@ -96,15 +96,28 @@ func deriveBaseURL(er1APIURL string) string {
 }
 
 // CheckRecordings checks which recording IDs are already synced server-side.
-// Returns nil, nil if the server is unreachable (graceful degradation).
+// Returns nil, nil when any batch fails; a caller that uploads must treat that
+// as a failed check, not as "nothing synced" (BUG-0617).
 func (s *SyncAPIClient) CheckRecordings(plaudAccountID string, recordingIDs []string) (*SyncCheckResult, error) {
-	if len(recordingIDs) == 0 {
-		return &SyncCheckResult{
-			Synced:   make(map[string]SyncedInfo),
-			Unsynced: []string{},
-		}, nil
+	merged := &SyncCheckResult{Synced: make(map[string]SyncedInfo), Unsynced: []string{}}
+	for start := 0; start < len(recordingIDs); start += checkBatchSize {
+		part, err := s.checkBatch(plaudAccountID, recordingIDs[start:min(start+checkBatchSize, len(recordingIDs))])
+		if err != nil || part == nil {
+			return part, err
+		}
+		for id, info := range part.Synced {
+			merged.Synced[id] = info
+		}
+		merged.Unsynced = append(merged.Unsynced, part.Unsynced...)
 	}
+	return merged, nil
+}
 
+// checkBatchSize keeps each check below the server's limit of 500 ids per
+// request, which a sync of all recordings would otherwise exceed (BUG-0617).
+const checkBatchSize = 200
+
+func (s *SyncAPIClient) checkBatch(plaudAccountID string, recordingIDs []string) (*SyncCheckResult, error) {
 	u, err := url.Parse(s.baseURL + "/api/plaud-sync/check")
 	if err != nil {
 		log.Printf("[plaud] sync API: invalid base URL: %v", err)

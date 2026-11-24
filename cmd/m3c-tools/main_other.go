@@ -593,7 +593,8 @@ func cmdPlaudList() {
 	for i, r := range recordings {
 		ids[i] = r.ID
 	}
-	states := resolvePlaudSyncStates(ids, session.Token)
+	states, stErr := resolvePlaudSyncStates(ids, session.Token)
+	warnPlaudLocalOnly(stErr)
 
 	fmt.Printf("  %3s  %-32s  %-40s  %6s  %s  %-10s  %s\n", "#", "ID", "Title", "Dur", "Date", "Status", "ER1 Doc")
 	fmt.Println("  ---  --------------------------------  ----------------------------------------  ------  ----------  ----------  --------")
