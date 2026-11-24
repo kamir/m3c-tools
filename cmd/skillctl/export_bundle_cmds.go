@@ -37,6 +37,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/kamir/m3c-tools/pkg/cliargs"
 	"github.com/kamir/m3c-tools/pkg/skillctl/install"
 	"github.com/kamir/m3c-tools/pkg/skillctl/registry"
 	"github.com/kamir/m3c-tools/pkg/skillctl/verify"
@@ -71,7 +72,7 @@ func runExportBundle(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "Exit codes are the same as `install` (SPEC-0188 §11).")
 		fs.PrintDefaults()
 	}
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(cliargs.FlagsFirst(fs, args)); err != nil {
 		return exitUsage
 	}
 	if fs.NArg() != 1 {

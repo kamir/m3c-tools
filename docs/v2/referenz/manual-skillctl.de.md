@@ -877,7 +877,7 @@ Dritte benötigt `<file>.skbmeta.json` oder `--meta` als Begleitdaten.
 
 Maschinenleser setzen `--json` vor den Namen: `skillctl install --json my-skill`
 oder `skillctl verify --json --offline my-skill`. `--json` steht zuerst, damit auch Fehler beim Parsen der Flags als JSON erscheinen;
-alle weiteren Flags stehen vor Positionsargumenten. Ein unbekanntes Flag vor `--json`
+die weiteren Flags dürfen vor oder nach dem Namen stehen (BUG-0450). Ein unbekanntes Flag vor `--json`
 beendet das Parsen, bevor die JSON-Ausgabe aktiviert ist.
 Jeder unterstützte Pfad für ein einzelnes Skill gibt genau ein JSON-Objekt mit `schema`
 als `m3c.skillctl.trust-result/v1`, `operation` (`install` oder `verify`), `ok` und
