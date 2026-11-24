@@ -71,6 +71,15 @@ bleibt **dauerhaft erhalten**. Ein späteres gewöhnliches `index` aktiviert die
 LFS-Versionierung nicht stillschweigend wieder für einen bewusst lokal gehaltenen
 Workspace. Zurückgeschaltet wird mit `index` ohne das Flag.
 
+### Welche Dateien in den Index kommen
+
+In einem Git-Arbeitsbaum sind die Kandidaten die Dateien, die `git ls-files`
+auflistet. Ignorierte und unversionierte Dateien kommen nicht in den Index; eine
+neue Datei kommt nach ihrem Commit hinein. So lässt sich ein eingecheckter Index auf
+jedem Klon desselben Commits als frisch bestätigen. Ein Workspace außerhalb von Git
+indexiert jede Datei darunter. In beiden Fällen filtern `include` und `exclude` aus
+`config.default.yaml` die Kandidaten.
+
 ## Bereitstellung über MCP
 
 In `<repo>/.mcp.json` registrieren, damit Agenten `rag_search` / `rag_workspaces` /
