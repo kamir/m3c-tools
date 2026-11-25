@@ -68,6 +68,14 @@ The choice is recorded as `git_tracking: tracked|none` in `.rag/config.yaml` and
 is **sticky**. A later plain `index` will not silently re-arm LFS tracking on a
 workspace you deliberately made local. Switching back is `index` without the flag.
 
+### Which files are indexed
+
+In a git work tree the candidates are the files `git ls-files` lists. Ignored and
+untracked files are not indexed; a new file enters the index after it is committed.
+This keeps a committed index verifiable on every clone of the same commit. A
+workspace outside git indexes every file below it. In both cases `include` and
+`exclude` from `config.default.yaml` filter the candidates.
+
 ## MCP exposure
 
 Register in `<repo>/.mcp.json` so agents get `rag_search` / `rag_workspaces` /

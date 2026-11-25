@@ -12,7 +12,8 @@ chunk:
 
 embed_batch_size: 16
 
-# Files to index: matched by extension (the suffix of each glob).
+# Files to index: matched by extension (the suffix of each glob). In a git work
+# tree only files listed by `git ls-files` are candidates.
 include:
   - "**/*.md"
   - "**/*.markdown"
