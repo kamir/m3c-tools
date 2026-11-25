@@ -50,7 +50,7 @@ m3c-tools transcript dQw4w9WgXcQ
 
 Expected: `version` prints the release version; without ER1, `doctor` prints `ER1 is not configured` and exits `0`. That confirms the local installation. A first capture succeeds when `transcript` prints the video text, or `whisper` transcribes your own audio after its runtime is installed. Uploads need the separate ER1 setup below; an unconfigured `doctor` result does not prove upload readiness. For YouTube HTTP `429`, follow Troubleshooting.
 
-> **Prefer to build from source?** You need Go 1.26.10+. On macOS the menu-bar GUI also needs
+> **Prefer to build from source?** You need Go 1.26.11+. On macOS the menu-bar GUI also needs
 > `brew install pkg-config portaudio ffmpeg` and `python3 -m pip install openai-whisper`.
 > Then `make install`. See [Build from source](../../../README.md#build-from-source).
 

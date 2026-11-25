@@ -25,7 +25,7 @@ Laden Sie die einzelne Binärdatei aus dem
 [neuesten Release](https://github.com/kamir/m3c-tools/releases/latest) herunter oder
 verwenden Sie die plattformspezifischen Einzeiler im
 [Schnellstart](../nutzer/quickstart-m3c-tools.md#1-install) und der
-[README](../../../README.md#build-from-source). Build aus dem Quellcode (Go 1.26.10+):
+[README](../../../README.md#build-from-source). Build aus dem Quellcode (Go 1.26.11+):
 
 ```bash
 go build -o m3c-tools ./cmd/m3c-tools   # plain Go build
