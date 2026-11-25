@@ -248,7 +248,7 @@ jobs:
       # fails the build job and the whole release. anchore/sbom-action uploads it as
       # the workflow artifact `skillctl.sbom.cdx.json` for the release job to consume.
       - name: Generate SBOM (CycloneDX)
-        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           path: .
           format: cyclonedx-json
@@ -258,7 +258,7 @@ jobs:
       # Hand the binaries + SHA256SUMS to the downstream jobs. No id-token here;
       # this job just moves bytes.
       - name: Upload binaries + SHA256SUMS
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: skillctl-dist
           if-no-files-found: error
@@ -335,7 +335,7 @@ jobs:
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
 
       - name: Upload cosign bundle
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: skillctl-cosign-bundle
           if-no-files-found: error
@@ -419,7 +419,7 @@ jobs:
           openssl pkeyutl -verify -pubin -inkey INFRA/skillctl-release.pub -rawin \
             -in "sign/SHA256SUMS" -sigfile "sign/SHA256SUMS.sig"
       - name: Upload signature
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: skillctl-dist-sig
           if-no-files-found: error
@@ -641,7 +641,7 @@ jobs:
 
       - name: Retain CI collection provenance and negative decisions
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-ci-check-provenance
           retention-days: 30
@@ -651,7 +651,7 @@ jobs:
             dist/ci-gates-audit.json
 
       - name: Upload release-evidence (unsigned bundle + statement)
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-evidence
           if-no-files-found: error
@@ -698,7 +698,7 @@ jobs:
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
 
       - name: Upload cosign bundle
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-evidence-cosign
           if-no-files-found: error
