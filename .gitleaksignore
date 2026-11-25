@@ -13,3 +13,8 @@ ab11e26f1879acdd167b107896c10e01c2f02658:demo/kup-training/artifacts/keys/review
 ab11e26f1879acdd167b107896c10e01c2f02658:demo/kup-training/artifacts/keys/attacker.priv:private-key:1
 ab11e26f1879acdd167b107896c10e01c2f02658:demo/kup-training/artifacts/keys/mirko.priv:private-key:1
 284a077f91573c5d1fa502164e1683a4dfef20c4:.claude/skills/deploy-er1/skill.md:curl-auth-header:53
+
+# Synthetic Plaud token in a doctor test on the BUG-0447 branches (PR #474): a
+# 31-character JWT shape with header {"alg":"HS256"}, a 6-character payload
+# and a 3-character signature. Exact fingerprint; no exception for new occurrences.
+85f0bd15cf14039a66dfe55ad3f3c6b09304f6cb:cmd/m3c-tools/doctor_plaud_verify_test.go:generic-api-key:54

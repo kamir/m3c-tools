@@ -51,7 +51,7 @@ m3c-tools transcript dQw4w9WgXcQ
 
 Erwartet: `version` zeigt die Release-Version; ohne ER1 meldet `doctor` `ER1 is not configured` und endet mit `0`. Das bestätigt die lokale Installation. Die erste Erfassung gelingt, wenn `transcript` den Videotext ausgibt oder `whisper` nach Installation seiner Laufzeitwerkzeuge eine eigene Audiodatei transkribiert. Uploads benötigen die folgende ER1-Einrichtung; ein nicht konfiguriertes `doctor` bestätigt keine Upload-Bereitschaft. Bei YouTube-HTTP-`429` hilft die Fehlerbehebung unten.
 
-> **Lieber aus dem Quellcode bauen?** Sie brauchen Go 1.26.10+. Auf macOS braucht die Menüleisten-GUI zusätzlich
+> **Lieber aus dem Quellcode bauen?** Sie brauchen Go 1.26.11+. Auf macOS braucht die Menüleisten-GUI zusätzlich
 > `brew install pkg-config portaudio ffmpeg` und `python3 -m pip install openai-whisper`.
 > Danach `make install`. Siehe [Aus dem Quellcode bauen](../../../README.de.md#aus-dem-quellcode-bauen).
 
