@@ -4447,7 +4447,8 @@ func menubarHandlePlaudSync(app *menubar.App) {
 		recByID[r.ID] = r
 	}
 	// Shared sync truth (same resolver as `plaud check` / `plaud dev`).
-	states := resolvePlaudSyncStates(ids, client.AccessToken())
+	states, stErr := resolvePlaudSyncStates(ids, client.AccessToken())
+	warnPlaudLocalOnly(stErr)
 	er1Cfg := er1.LoadConfig()
 
 	var records []menubar.PlaudSyncRecord
@@ -4519,7 +4520,15 @@ func menubarHandlePlaudSync(app *menubar.App) {
 			})
 		}
 
-		tot := runDevSyncByIDs(client, recByID, recordingIDs, customTags, false, false, prog)
+		tot, err := runDevSyncByIDs(client, recByID, recordingIDs, customTags, false, false, prog)
+		if err != nil {
+			log.Printf("[plaud] dev sync stopped, nothing uploaded: %v", err)
+			app.Notify("Plaud Sync", "Stopped: server sync check failed, nothing uploaded")
+			menubar.SetPlaudSyncProgress(menubar.BulkRunState{
+				Active: false, Total: total, Done: 0, Failed: total,
+			})
+			return
+		}
 		log.Printf("[plaud] dev sync DONE: %d synced (%d Plaud, %d queued server-side, %d whisper), %d skipped, %d deferred, %d failed",
 			tot.Synced, tot.Plaud, tot.Queued, tot.Whisper, tot.Skipped, tot.Deferred, tot.Failed)
 		note := fmt.Sprintf("Fertig: %d synchronisiert, %d übersprungen, %d Fehler", tot.Synced, tot.Skipped, tot.Failed)

@@ -101,14 +101,14 @@
     {
       "de": "docs/v2/nutzer/einstieg.de.md",
       "en": "docs/v2/nutzer/einstieg.en.md",
-      "de_sha256": "d8ce42efd2bebc9ff19074b92912ea26cf031f0550b22dd0c1ab50cb22a1040d",
-      "en_sha256": "4bf7d5ecb4d275214c592dc6a32f274f900640801f9c8f6dfce58470f147dd98"
+      "de_sha256": "09d2e7a153586e91673ec6a2dddeceb1faf891cdd327de13d1e59c94df63adb7",
+      "en_sha256": "68dbf451e8d564db8d9906eeea7d9c351bc3171b6cb43b5b240a34ac84fd2959"
     },
     {
       "de": "docs/v2/nutzer/getting-started.de.md",
       "en": "docs/v2/nutzer/getting-started.md",
-      "de_sha256": "a8145dd2e79adcc5fe208b91240158255c4820a3bd8f8807c7fc572d7f1e80e8",
-      "en_sha256": "08e404591b275e18b5bc6e382e1213a45922f5fddf4f217b047c146d0b753b95"
+      "de_sha256": "ef5d6a19a63ced662cd51d0abd3ebc4dd6776ce8ff076bbce0b7bcdd9a991959",
+      "en_sha256": "b3b4d1e08c0bdc9a63a9fc88ea7bd34787d0f54918ab693a14db126069804f51"
     },
     {
       "de": "docs/v2/nutzer/menubar-app.de.md",
@@ -119,14 +119,14 @@
     {
       "de": "docs/v2/nutzer/prerequisites.de.md",
       "en": "docs/v2/nutzer/prerequisites.md",
-      "de_sha256": "52f3346755f77a1e3049f1afd3a2e95b15185baba205431f079c85e966aac8ed",
-      "en_sha256": "14068c78bb67c9f37920a35ef9290e531008b5a0ead7a88b8e4142aefcac4b47"
+      "de_sha256": "0510c1d13a8ba22f1dfe86f7c5698fb8a7297880535858f03bdbaf64a78ca34c",
+      "en_sha256": "f8592210b7ebb8091a7bb58c010fe11f6d601b672e496553bed0aee61efeff04"
     },
     {
       "de": "docs/v2/nutzer/quickstart-m3c-tools.de.md",
       "en": "docs/v2/nutzer/quickstart-m3c-tools.md",
-      "de_sha256": "334f10674c50340b181b0068e918c3444facc9fb00bed84ce98f29a7f8c137ab",
-      "en_sha256": "3b17064abcdef415156f07e2e903d402a60901b5f5a06830d412b38571df0a21"
+      "de_sha256": "502a57b9b84e259ecf1224bdd94d08c83a91e2b5c3cfe98daf7386fdd87282ec",
+      "en_sha256": "b3d1e3d8d6cbb7fd8d5258da47fc4fddbc53c92584d1f69a32059b708201a4c9"
     },
     {
       "de": "docs/v2/nutzer/quickstart-skillctl-demo.de.md",
@@ -137,8 +137,8 @@
     {
       "de": "docs/v2/nutzer/quickstart-skillctl.de.md",
       "en": "docs/v2/nutzer/quickstart-skillctl.md",
-      "de_sha256": "524dad780a007bfe3b700a37e5e9be82da8b1585c6773bb34b398eb6f0654847",
-      "en_sha256": "64e054fcd6c348410ff4c9a6f0f9f362bc66084a478be0c5b58d233050a4c776"
+      "de_sha256": "dcc7049949bc1f44d83e2b8520725bd51546c37b1232febfe89a2a37b56ce5be",
+      "en_sha256": "3d41f93d659a0305d0fa0e4cacd56427962720e26770a09f7c1e3ca2a82314b4"
     },
     {
       "de": "docs/v2/nutzer/tutorial-katas-und-test-ride.de.md",
@@ -173,8 +173,8 @@
     {
       "de": "docs/v2/referenz/manual-m3c-tools.de.md",
       "en": "docs/v2/referenz/manual-m3c-tools.md",
-      "de_sha256": "c0b4ad6bbd72b8cf72217af3c47257930086e13a8b32ba9121cef22478cb9130",
-      "en_sha256": "2f60dc578c27da922500d07b5d20ab91e05d0e3a4db448b075e4dcecddfa3ff6"
+      "de_sha256": "3560fb4e74378f527da2988bc427bf5fc4ccd47be9216c718aa49e77458426bf",
+      "en_sha256": "3bd2b854d55a2e5b4c883cd130a65a2ce6604691544cdf16a0949ce97c92c31a"
     },
     {
       "de": "docs/v2/referenz/manual-skillctl.de.md",
@@ -197,8 +197,8 @@
     {
       "de": "README.de.md",
       "en": "README.md",
-      "de_sha256": "555d31e2548672ced901680fb5afec378e37f6239bc2d48514516012baa9176d",
-      "en_sha256": "b3762a708e327cba9a487b4c187ec47a05be531bd4dc214aed7daf730d4193ce"
+      "de_sha256": "75e6bfbe5c965e8e02717b50d097476426b7564beb75a1456fc7a69a60189e6b",
+      "en_sha256": "7d5ab498b1ba1831d3ac02d9bea4adc03022af006374a82e641411ac45dfce66"
     },
     {
       "de": "SECURITY.de.md",
@@ -221,8 +221,8 @@
     {
       "de": "CONTRIBUTING.de.md",
       "en": "CONTRIBUTING.md",
-      "de_sha256": "4c37d50559cbc238e764e268af989425402b0f5185cfb173e4bfcf383c75c440",
-      "en_sha256": "cafd244bf85dc90553416e58bfedc859d8c7e632709f01f1dbcf312cbd20b6cb"
+      "de_sha256": "0a2c370aa47a3a2817cdb8260224ea01d1ef20bf3a7ac6877c4577448e4ba528",
+      "en_sha256": "988101aeb6d382761284591e475375966585a46dabfa398cc40172a43b1e0332"
     },
     {
       "de": "CONTENT-TOPOLOGY.de.md",
@@ -275,8 +275,8 @@
     {
       "de": "rag-mcp-server/README.de.md",
       "en": "rag-mcp-server/README.md",
-      "de_sha256": "89e26725c569a819e0c564ae9cb681e16455c269fdd3d86ad0b59cb88dc83487",
-      "en_sha256": "14d136ade700df546f5871033ae4caa0897309fdb944a2f99b08949dfde1d162"
+      "de_sha256": "2f5171b4fdbbac0391a7750d8960f967172067e9297eea07f14e2b5961e24f83",
+      "en_sha256": "9ae4a4c21942520b9f0288b4f53955b27852d401bdc62843881bc7f9d6f645fe"
     },
     {
       "de": "tools/release-templates/README.de.md",

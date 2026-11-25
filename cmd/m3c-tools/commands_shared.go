@@ -615,7 +615,13 @@ func plaudStateSynced(st plaudSyncState) bool {
 // cross-machine visibility (an item synced from another Mac shows as synced
 // with its doc_id even when this machine's DB has no record); the local doc_id
 // is the fallback. The server check requires an ER1 API key.
-func resolvePlaudSyncStates(recIDs []string, plaudToken string) map[string]plaudSyncState {
+//
+// The error is non-nil when the server check did not run or failed. The map
+// then holds the local ledger only, and a caller that uploads must stop: on
+// that basis every recording synced from another machine looks new and would
+// be uploaded again (BUG-0617). Display callers report it with
+// warnPlaudLocalOnly.
+func resolvePlaudSyncStates(recIDs []string, plaudToken string) (map[string]plaudSyncState, error) {
 	out := make(map[string]plaudSyncState, len(recIDs))
 	er1Cfg := er1.LoadConfig()
 
@@ -634,24 +640,36 @@ func resolvePlaudSyncStates(recIDs []string, plaudToken string) map[string]plaud
 	}
 
 	// Server-side sync check: authoritative, cross-machine (SPEC-0117).
-	if er1Cfg.APIKey != "" && plaudToken != "" {
-		syncAPI := plaud.NewSyncAPIClient(er1Cfg.APIURL, er1Cfg.APIKey, er1Cfg.ContextID, !er1Cfg.VerifySSL)
-		accountID := plaud.DeriveAccountIDFromToken(plaudToken)
-		if res, err := syncAPI.CheckRecordings(accountID, recIDs); err == nil && res != nil {
-			for id, info := range res.Synced {
-				st := out[id]
-				st.Status = "synced"
-				if info.ER1DocID != "" {
-					st.DocID = info.ER1DocID
-					st.ItemURL = er1Cfg.MemoryItemURL(info.ER1DocID)
-				}
-				out[id] = st
-			}
-		} else if err != nil {
-			log.Printf("[plaud] server sync check failed (using local DB only): %v", err)
-		}
+	if er1Cfg.APIKey == "" || plaudToken == "" {
+		return out, errors.New("server sync check not run: ER1 API key or Plaud token missing")
 	}
-	return out
+	syncAPI := plaud.NewSyncAPIClient(er1Cfg.APIURL, er1Cfg.APIKey, er1Cfg.ContextID, !er1Cfg.VerifySSL)
+	accountID := plaud.DeriveAccountIDFromToken(plaudToken)
+	res, err := syncAPI.CheckRecordings(accountID, recIDs)
+	if err != nil {
+		return out, fmt.Errorf("server sync check failed: %w", err)
+	}
+	if res == nil {
+		// CheckRecordings logs the cause and returns nil, nil on every failure.
+		return out, errors.New("server sync check failed (cause in the [plaud] sync API log line above)")
+	}
+	for id, info := range res.Synced {
+		st := out[id]
+		st.Status = "synced"
+		if info.ER1DocID != "" {
+			st.DocID = info.ER1DocID
+			st.ItemURL = er1Cfg.MemoryItemURL(info.ER1DocID)
+		}
+		out[id] = st
+	}
+	return out, nil
+}
+
+// warnPlaudLocalOnly reports a failed server sync check on a display path.
+func warnPlaudLocalOnly(err error) {
+	if err != nil {
+		log.Printf("[plaud] WARNING: %v; showing the local ledger only, recordings synced from another machine may show as new", err)
+	}
 }
 
 // cmdPlaudCheck prints a read-only sync-coverage report: how many Plaud
@@ -675,7 +693,8 @@ func cmdPlaudCheck() {
 	for i, r := range recordings {
 		ids[i] = r.ID
 	}
-	states := resolvePlaudSyncStates(ids, session.Token)
+	states, stErr := resolvePlaudSyncStates(ids, session.Token)
+	warnPlaudLocalOnly(stErr)
 
 	synced := 0
 	for _, r := range recordings {
@@ -758,7 +777,8 @@ func cmdPlaudFixTimes(apply bool, since string, limit int) {
 	for i, r := range recordings {
 		ids[i] = r.ID
 	}
-	states := resolvePlaudSyncStates(ids, client.AccessToken())
+	states, stErr := resolvePlaudSyncStates(ids, client.AccessToken())
+	warnPlaudLocalOnly(stErr)
 	er1Cfg := er1.LoadConfig()
 
 	type fixItem struct {

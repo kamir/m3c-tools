@@ -14,7 +14,7 @@ shared service secrets underneath. One repository, zero mandatory cloud middlema
 [![CI](https://github.com/kamir/m3c-tools/actions/workflows/ci.yml/badge.svg)](https://github.com/kamir/m3c-tools/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/kamir/m3c-tools?sort=semver)](https://github.com/kamir/m3c-tools/releases/latest)
 [![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows-blue)](#install)
-[![Made with Go](https://img.shields.io/badge/Go-1.26.10%2B-00ADD8?logo=go)](https://go.dev)
+[![Made with Go](https://img.shields.io/badge/Go-1.26.11%2B-00ADD8?logo=go)](https://go.dev)
 [![Go Report Card](https://goreportcard.com/badge/github.com/kamir/m3c-tools)](https://goreportcard.com/report/github.com/kamir/m3c-tools)
 [![SLSA 3](https://slsa.dev/images/gh-badge-level3.svg)](https://slsa.dev)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
@@ -359,7 +359,7 @@ Report vulnerabilities privately using its disclosure instructions.
 
 ## Build from source
 
-Requires **Go 1.26.10+**. The current `make build` target also checks for `pkg-config`, `ffmpeg` and `whisper`, including on Linux; see [developer setup](docs/v2/entwickler/getting-started.md#part-a-build). `make build-skillctl` and `make build-secretctl` need no capture runtime. The macOS GUI additionally needs PortAudio (cgo).
+Requires **Go 1.26.11+**. The current `make build` target also checks for `pkg-config`, `ffmpeg` and `whisper`, including on Linux; see [developer setup](docs/v2/entwickler/getting-started.md#part-a-build). `make build-skillctl` and `make build-secretctl` need no capture runtime. The macOS GUI additionally needs PortAudio (cgo).
 
 ```bash
 git clone https://github.com/kamir/m3c-tools.git && cd m3c-tools

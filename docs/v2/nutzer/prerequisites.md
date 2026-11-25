@@ -7,7 +7,7 @@ title: Prerequisites
 
 [Deutsch](prerequisites.de.md) · [English](prerequisites.md)
 
-For source builds and self-tests: **git** and **Go 1.26.10 or newer**. Additional
+For source builds and self-tests: **git** and **Go 1.26.11 or newer**. Additional
 requirements for capture and development are named below. If `git --version` and `go version` both answer, skip to
 [Quickstart: skillctl](quickstart-skillctl.md).
 
@@ -37,7 +37,7 @@ git --version
 go version
 ```
 
-`go version` must print **1.26.10 or higher**; that is what `go.mod` requires.
+`go version` must print **1.26.11 or higher**; that is what `go.mod` requires.
 
 ### If `winget` is not there
 
