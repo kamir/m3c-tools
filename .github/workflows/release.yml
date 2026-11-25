@@ -86,7 +86,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Generate SBOM (CycloneDX)
-        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           path: .
           format: cyclonedx-json
@@ -191,7 +191,7 @@ jobs:
           tar czf secretctl-darwin-amd64.tar.gz secretctl-darwin-amd64
 
       - name: Upload macOS artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: macos-binaries
           retention-days: 7
@@ -221,7 +221,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Install GoReleaser
-        uses: goreleaser/goreleaser-action@f06c13b6b1a9625abc9e6e439d9c05a8f2190e94 # v7
+        uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7
         with:
           install-only: true
           version: "~> v2"
@@ -232,7 +232,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload GoReleaser artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: goreleaser-binaries
           retention-days: 7
@@ -283,7 +283,7 @@ jobs:
         run: makensis scripts/installer.nsi
 
       - name: Upload installer
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: windows-installer
           retention-days: 7
@@ -349,7 +349,7 @@ jobs:
           echo "hashes=$(sha256sum *.tar.gz *.zip *.exe | base64 -w0)" >> "$GITHUB_OUTPUT"
 
       - name: Upload checksums.txt
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: product-checksums
           if-no-files-found: error
@@ -387,7 +387,7 @@ jobs:
           openssl pkeyutl -verify -pubin -inkey INFRA/skillctl-release.pub -rawin \
             -in "sign/checksums.txt" -sigfile "sign/checksums.txt.sig"
       - name: Upload signature
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: product-checksums-sig
           if-no-files-found: error
@@ -430,7 +430,7 @@ jobs:
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
 
       - name: Upload cosign bundle
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: product-cosign-bundle
           if-no-files-found: error
