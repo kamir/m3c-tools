@@ -802,6 +802,7 @@ m3c-tools cancel vid-001
 | Upload schlägt fehl und wird wiederholt | Fehlgeschlagene Uploads stehen in `~/.m3c-tools/queue.json`. `m3c-tools retry` ausführen und `m3c-tools status` prüfen. |
 | YouTube 429 / Ratenbegrenzung | `YT_PROXY_URL` setzen. Transkripte werden sieben Tage zwischengespeichert; ohne Transkript arbeitet die App mit eingeschränktem Inhalt weiter. |
 | `plaud dev sync` → HTTP 413 | Die Audiodaten überschreiten das ER1-Eingangslimit von etwa 32 MiB. `plaud dev sync` lässt Audio über `PLAUD_MAX_AUDIO_MB` (Standard 30) bereits weg und lädt nur das Transkript hoch. Bei weiterem HTTP 413 den Wert senken; ein strengerer Proxy kann schon unter 30 MB begrenzen. |
+| `plaud dev sync` → `server sync check failed` | Der Abgleich mit ER1, welche Aufnahmen irgendeine Maschine schon synchronisiert hat, kam nicht zustande. Ohne ihn wirkt jede auf einer anderen Maschine synchronisierte Aufnahme neu; deshalb lädt `plaud dev sync` nichts hoch und endet mit Exit 1, `plaud dev list` zeigt den lokalen Stand mit einer Warnung. ER1-Zugang herstellen (`m3c-tools doctor`), dann den Sync erneut starten. |
 
 ---
 

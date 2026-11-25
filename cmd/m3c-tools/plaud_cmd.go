@@ -804,7 +804,8 @@ func cmdPlaudDevList(preview bool, limit int) {
 	for i, r := range recs {
 		ids[i] = r.ID
 	}
-	states := resolvePlaudSyncStates(ids, client.AccessToken())
+	states, stErr := resolvePlaudSyncStates(ids, client.AccessToken())
+	warnPlaudLocalOnly(stErr)
 
 	fmt.Printf("Plaud recordings via developer API (%d, newest first):\n\n", total)
 	lastCol := "ID"
@@ -1216,13 +1217,16 @@ func syncOneDevRecording(client *plaud.DevClient, er1Cfg *er1.Config, contentTyp
 // sync truth. It is the common core for `plaud dev sync` (CLI) and the menubar
 // Plaud Sync, so the two never diverge. prog may be nil.
 func runDevSyncByIDs(client *plaud.DevClient, recByID map[string]plaud.DevRecording,
-	ids []string, tags string, force, whisper bool, prog devSyncProgress) devSyncTotals {
+	ids []string, tags string, force, whisper bool, prog devSyncProgress) (devSyncTotals, error) {
 
 	var t devSyncTotals
 	cfg := plaud.LoadConfig()
 	er1Cfg := er1.LoadConfig()
 	applyRuntimeER1Context(er1Cfg)
-	states := resolvePlaudSyncStates(ids, client.AccessToken())
+	states, err := resolvePlaudSyncStates(ids, client.AccessToken())
+	if err != nil {
+		return t, err
+	}
 
 	filesDB, dbErr := tracking.OpenFilesDB(defaultFilesDBPath())
 	if dbErr == nil {
@@ -1281,7 +1285,7 @@ func runDevSyncByIDs(client *plaud.DevClient, recByID map[string]plaud.DevRecord
 			prog(id, r.Name, "done", disp, docID, nil)
 		}
 	}
-	return t
+	return t, nil
 }
 
 func cmdPlaudDevSync(selectors []string, all bool, limit int, dryRun, force, whisper bool, tags string) {
@@ -1320,7 +1324,11 @@ func cmdPlaudDevSync(selectors []string, all bool, limit int, dryRun, force, whi
 	}
 
 	if dryRun {
-		states := resolvePlaudSyncStates(ids, client.AccessToken())
+		states, err := resolvePlaudSyncStates(ids, client.AccessToken())
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
 		grace := plaudTranscriptGrace()
 		would, wait := 0, 0
 		for _, r := range todo {
@@ -1351,7 +1359,7 @@ func cmdPlaudDevSync(selectors []string, all bool, limit int, dryRun, force, whi
 	}
 
 	done := 0
-	tot := runDevSyncByIDs(client, recByID, ids, tags, force, whisper, func(id, name, phase, disp, docID string, err error) {
+	tot, err := runDevSyncByIDs(client, recByID, ids, tags, force, whisper, func(id, name, phase, disp, docID string, err error) {
 		switch phase {
 		case "done":
 			done++
@@ -1365,6 +1373,10 @@ func cmdPlaudDevSync(selectors []string, all bool, limit int, dryRun, force, whi
 			fmt.Fprintf(os.Stderr, "  [%d/%d] ✗ %s: %v\n", done, len(ids), stripCtrl(name), err)
 		}
 	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\nNothing was uploaded: without the server check every recording synced from another machine looks new and would be uploaded again.\n", err)
+		os.Exit(1)
+	}
 	fmt.Printf("\nDone. synced=%d  skipped(already)=%d  deferred=%d  failed=%d\n",
 		tot.Synced, tot.Skipped, tot.Deferred, tot.Failed)
 	if tot.Deferred > 0 {
@@ -1411,7 +1423,8 @@ func cmdPlaudList() {
 	for i, rec := range recordings {
 		ids[i] = rec.ID
 	}
-	states := resolvePlaudSyncStates(ids, session.Token)
+	states, stErr := resolvePlaudSyncStates(ids, session.Token)
+	warnPlaudLocalOnly(stErr)
 
 	fmt.Printf("Plaud recordings (%d):\n\n", len(recordings))
 	fmt.Printf("  %3s  %-32s  %-40s  %6s  %s  %-10s  %s\n", "#", "ID", "Title", "Dur", "Date", "Status", "ER1 Doc")

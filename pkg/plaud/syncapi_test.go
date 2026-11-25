@@ -3,6 +3,7 @@ package plaud
 import (
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -514,5 +515,63 @@ func TestRegisterMapping_VerifiesPOSTBody(t *testing.T) {
 	}
 	if received.TranscriptLength != 15000 {
 		t.Errorf("TranscriptLength = %d, want 15000", received.TranscriptLength)
+	}
+}
+
+// BUG-0617: the server rejects a check with more than 500 ids, and a sync of
+// all recordings asks for every one of them. The client asks in batches.
+func TestCheckRecordings_SplitsIntoBatches(t *testing.T) {
+	requests, largest := 0, 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ids := strings.Split(r.URL.Query().Get("recording_ids"), ",")
+		requests++
+		if len(ids) > largest {
+			largest = len(ids)
+		}
+		res := SyncCheckResult{Synced: map[string]SyncedInfo{}, Unsynced: []string{}}
+		for _, id := range ids {
+			res.Synced[id] = SyncedInfo{ER1DocID: "doc-" + id}
+		}
+		json.NewEncoder(w).Encode(res)
+	}))
+	defer srv.Close()
+	client := &SyncAPIClient{baseURL: srv.URL, apiKey: "k", client: srv.Client()}
+	ids := make([]string, 450)
+	for i := range ids {
+		ids[i] = "of_" + strings.Repeat("0", 28) + fmt.Sprintf("%04d", i)
+	}
+
+	result, err := client.CheckRecordings("plaud-abc", ids)
+
+	if err != nil || result == nil {
+		t.Fatalf("CheckRecordings: result %v, err %v", result, err)
+	}
+	if largest > checkBatchSize || requests != (len(ids)+checkBatchSize-1)/checkBatchSize {
+		t.Fatalf("%d request(s), largest %d ids; want batches of at most %d", requests, largest, checkBatchSize)
+	}
+	if len(result.Synced) != len(ids) || result.Synced[ids[449]].ER1DocID != "doc-"+ids[449] {
+		t.Fatalf("merged answer incomplete: %d of %d synced", len(result.Synced), len(ids))
+	}
+}
+
+func TestCheckRecordings_OneFailedBatchFailsTheCheck(t *testing.T) {
+	requests := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if requests == 2 {
+			http.Error(w, "boom", http.StatusInternalServerError)
+			return
+		}
+		json.NewEncoder(w).Encode(SyncCheckResult{Synced: map[string]SyncedInfo{}, Unsynced: []string{}})
+	}))
+	defer srv.Close()
+	client := &SyncAPIClient{baseURL: srv.URL, apiKey: "k", client: srv.Client()}
+	ids := make([]string, 2*checkBatchSize+1)
+	for i := range ids {
+		ids[i] = fmt.Sprintf("rec-%d", i)
+	}
+
+	if result, _ := client.CheckRecordings("plaud-abc", ids); result != nil {
+		t.Fatal("a partial answer must not pass as the whole check")
 	}
 }
