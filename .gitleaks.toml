@@ -7,10 +7,41 @@ title = "m3c-tools secret scanning"
   useDefault = true
 
 # Custom rules for project-specific secrets
+
+# ER1 API key, legacy form: a bare UUID. A UUID alone is not a secret.
+# One alternative requires a key name on the same line (ER1, api_key,
+# API_KEY, apikey or X-API-KEY, in any case) within 40 characters of the UUID.
+# This covers Go and JSON maps, HTTP headers and YAML configuration.
+# The explicit ER1_API_KEY assignment alternative preserves the original
+# rule, including arbitrary whitespace around the equals sign. Other key
+# names keep the bounded context. A UUID without a key name is not reported.
 [[rules]]
-  id = "er1-api-key"
-  description = "ER1 API Key (UUID format)"
-  regex = '''ER1_API_KEY\s*=\s*[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}'''
+  id = "er1-api-key-legacy"
+  description = "ER1 API key, legacy form (a UUID next to an API key name)"
+  regex = '''(?i)(?:(?:\ber1|api[_.-]?key)[^\n]{0,40}?|ER1_API_KEY\s*=\s*)\b([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b'''
+  secretGroup = 1
+  keywords = ["er1", "api"]
+  tags = ["key", "er1"]
+
+  # The one exception: the obvious dummy in the profile doctor test, all zeros
+  # except the version and variant digits. It is written with counted repeats
+  # so that this file holds no UUID literal. gitleaks never scans its own
+  # configuration file, so scripts/gitleaks-rules.test.sh checks that directly.
+  [[rules.allowlists]]
+    description = "Obvious dummy key in a test fixture; not a credential"
+    condition = "AND"
+    paths = ["^pkg/config/doctor_test\\.go$"]
+    regexes = ["^0{8}-0{4}-4000-8000-0{12}$"]
+
+# ER1 API key, prefixed form (SPEC-0438 section 5): "m3cer1_" followed by at
+# least 32 random bytes in a URL-safe encoding, that is at least 43 characters
+# of [A-Za-z0-9_-]. A shorter run after the prefix does not match.
+[[rules]]
+  id = "er1-api-key-prefixed"
+  description = "ER1 API key, prefixed form"
+  regex = '''\b(m3cer1_[A-Za-z0-9_-]{43,})'''
+  secretGroup = 1
+  keywords = ["m3cer1_"]
   tags = ["key", "er1"]
 
 [[rules]]
@@ -38,14 +69,6 @@ title = "m3c-tools secret scanning"
     paths = ["^cmd/skillctl/trustfreeze_hardening_test\\.go$"]
     regexes = [
       "^abcdef0123456789$",
-    ]
-
-  [[rules.allowlists]]
-    description = "Synthetic test input used to exercise credential handling or redaction"
-    condition = "AND"
-    paths = ["^pkg/config/doctor_test\\.go$"]
-    regexes = [
-      "^e25ce814-5bb6-4f99-9f08-88d603db391c$",
     ]
 
   [[rules.allowlists]]

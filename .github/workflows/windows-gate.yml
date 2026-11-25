@@ -273,6 +273,9 @@ jobs:
           fi
           echo "OK: windows-trust runs whole-package, no -run allow-list."
 
+      - name: Plaud login fallback output (Linux)
+        run: go test -count=1 -timeout=60s ./cmd/m3c-tools -run '^Test(ReportPlaudLoginFailure|PlaudLoginEnvHintTargetShell)'
+
       - name: Configuration and secret checks (Linux)
         run: go test -count=1 -timeout=300s ./pkg/config ./pkg/er1 ./cmd/secretctl
 
@@ -328,6 +331,12 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+
+      - name: Plaud login fallback output (Windows)
+        run: |
+          go test -count=1 -timeout=60s ./cmd/m3c-tools -run '^Test(ReportPlaudLoginFailure|PlaudLoginEnvHintTargetShell)'
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        shell: pwsh
 
       - name: Download Windows binaries
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4

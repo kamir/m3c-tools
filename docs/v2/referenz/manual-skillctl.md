@@ -1997,7 +1997,7 @@ Publishes to your personal ER1 `self` registry (SPEC-0225). Three modes: admit a
 | `-inline-max` | Inline base64 cap; larger bundles need a claim-check (default `262144`). |
 | `-no-checkpoint` | Don't append a checkpoint to the open SPEC-0213 session. |
 | `-no-runbook-publish` | Don't auto-register the skill's runbook into the THOH catalog (SPEC-0275). |
-| `-dry-run` | Print the plan + rendered item body; don't POST or pack. |
+| `-dry-run` | Print the plan; don't POST. Admit (the default mode): needs no signing key and signs nothing, but without `--bundle` still packs `./<name>@<version>.skb` so the digest is real. `--attest` / `--revoke`: still load the key and sign locally. `--all`: prints the batch plan only. |
 | `-yes` | Skip the 🟡 confirm pause (scripted runs). |
 
 ```bash
@@ -2094,6 +2094,13 @@ Flags: `[--latest] [--skill <name>] [--er1-target …] [--er1-context …]`.
 **`registry show`**: show the full event timeline (admit / attest / revoke / install) for
 one skill or one digest.
 Usage: `registry show <name | sha256:<hex>> [--er1-target …] [--er1-context …]`.
+
+Both commands resolve `--er1-context` like `publish` and `pull`: a bare name such as
+the default `skills` gets the owner prefix (`<owner>___skills`, owner from
+`ER1_USER_ID` or `ER1_CONTEXT_ID`). `registry ls` prints the resolved context on
+its first line. If no owner can be resolved, the bare name cannot be an ER1
+context, and both commands exit `1` with an error instead of reporting an empty
+registry (BUG-0437).
 
 ```bash
 skillctl registry ls --latest

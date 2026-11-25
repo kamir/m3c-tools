@@ -38,9 +38,16 @@ type TokenSession struct {
 // real expiry is known (ExpiresAt set, e.g. a password-login token) it is honored
 // with a small refresh margin; otherwise the age-based maxAge cap applies (the
 // safe default for scraped session tokens whose true lifetime is unknown).
+//
+// BUG-0446: when ExpiresAt is unset (the CDP and ER1-vault capture paths save
+// none), the token's own JWT `exp` still bounds it. That bound only tightens:
+// a far-future `exp` never lifts the age cap, because `exp` is read unsigned.
 func (s *TokenSession) IsExpired(maxAge time.Duration) bool {
 	if !s.ExpiresAt.IsZero() {
 		return time.Now().After(s.ExpiresAt.Add(-tokenExpiryMargin))
+	}
+	if exp := jwtExpiry(s.Token); !exp.IsZero() && time.Now().After(exp.Add(-tokenExpiryMargin)) {
+		return true
 	}
 	if s.SavedAt.IsZero() {
 		return true // No saved timestamp: treat as expired
@@ -67,6 +74,13 @@ func LoadToken(path string) (*TokenSession, error) {
 		return nil, fmt.Errorf("plaud: token file is empty")
 	}
 	if s.IsExpired(DefaultMaxTokenAge) {
+		exp := s.ExpiresAt
+		if exp.IsZero() {
+			exp = jwtExpiry(s.Token)
+		}
+		if !exp.IsZero() && time.Now().After(exp.Add(-tokenExpiryMargin)) {
+			return nil, fmt.Errorf("plaud: token expired %s ago (at %s): run 'plaud auth login' to re-authenticate", time.Since(exp).Round(time.Hour), exp.Format(time.RFC3339))
+		}
 		age := time.Since(s.SavedAt).Round(time.Hour)
 		// FIX C-H02: Refuse expired tokens instead of just warning.
 		return nil, fmt.Errorf("plaud: token expired (%s old, saved %s): run 'plaud auth login' to re-authenticate", age, s.SavedAt.Format(time.RFC3339))

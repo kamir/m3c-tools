@@ -772,6 +772,12 @@ jobs:
           tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
           sudo install /tmp/gitleaks /usr/local/bin/gitleaks
 
+      # A rule that was never shown a violation proves nothing. This plants
+      # generated fake ER1 keys in a temporary tree and requires the config to
+      # report each one, and checks the config file that gitleaks itself skips.
+      - name: Secret rules report planted keys
+        run: bash scripts/gitleaks-rules.test.sh
+
       - name: Scan full history (config-aware)
         run: gitleaks git . --config .gitleaks.toml --no-banner --redact
 
