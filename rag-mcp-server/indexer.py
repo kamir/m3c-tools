@@ -74,10 +74,20 @@ class Indexer:
         return self._embedder
 
     # ---------- file discovery ----------
+    def _candidates(self):
+        # In a git work tree only tracked files count: ignored and untracked
+        # files exist on one machine only, and an index built from them can
+        # never verify as fresh on a clone (BUG-0618).
+        if not any((d / ".git").exists() for d in (self.ws, *self.ws.parents)):
+            return self.ws.rglob("*")
+        out = subprocess.run(["git", "-C", str(self.ws), "ls-files", "-z"],
+                             capture_output=True, check=True).stdout
+        return (self.ws / os.fsdecode(rel) for rel in out.split(b"\0") if rel)
+
     def _iter_files(self):
         inc_ext = {os.path.splitext(g)[1].lower() for g in self.cfg["include"] if os.path.splitext(g)[1]}
         exc_dirs = {e.replace("\\", "/").split("/")[0] for e in self.cfg["exclude"] if e}
-        for p in self.ws.rglob("*"):
+        for p in self._candidates():
             if not p.is_file():
                 continue
             rel_parts = p.relative_to(self.ws).parts

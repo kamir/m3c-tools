@@ -275,8 +275,8 @@
     {
       "de": "rag-mcp-server/README.de.md",
       "en": "rag-mcp-server/README.md",
-      "de_sha256": "89e26725c569a819e0c564ae9cb681e16455c269fdd3d86ad0b59cb88dc83487",
-      "en_sha256": "14d136ade700df546f5871033ae4caa0897309fdb944a2f99b08949dfde1d162"
+      "de_sha256": "2f5171b4fdbbac0391a7750d8960f967172067e9297eea07f14e2b5961e24f83",
+      "en_sha256": "9ae4a4c21942520b9f0288b4f53955b27852d401bdc62843881bc7f9d6f645fe"
     },
     {
       "de": "tools/release-templates/README.de.md",
