@@ -7,7 +7,7 @@ the checks CI enforces, and the conventions that keep the two tools releasable a
 
 ## Prerequisites
 
-- **Go 1.26.10+**.
+- **Go 1.26.11+**.
 - `make build` currently checks for `pkg-config`, `ffmpeg` and `whisper`, including on Linux.
   `make build-skillctl` needs none of them. See [developer setup](docs/v2/entwickler/getting-started.md#part-a-build).
 - The macOS GUI additionally needs `portaudio` (cgo).

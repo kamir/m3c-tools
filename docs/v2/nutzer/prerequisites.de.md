@@ -7,7 +7,7 @@ title: Voraussetzungen
 
 [Deutsch](prerequisites.de.md) · [English](prerequisites.md)
 
-Für Quellcode-Builds und Selbsttests: **git** und **Go 1.26.10 oder neuer**. Zusätzliche
+Für Quellcode-Builds und Selbsttests: **git** und **Go 1.26.11 oder neuer**. Zusätzliche
 Voraussetzungen für Capture und Entwicklung stehen unten. Wenn `git --version` und
 `go version` antworten, weiter zum [Quickstart: skillctl](quickstart-skillctl.de.md).
 
@@ -37,7 +37,7 @@ git --version
 go version
 ```
 
-`go version` muss **1.26.10 oder höher** ausgeben; das verlangt `go.mod`.
+`go version` muss **1.26.11 oder höher** ausgeben; das verlangt `go.mod`.
 
 ### Wenn `winget` fehlt
 
