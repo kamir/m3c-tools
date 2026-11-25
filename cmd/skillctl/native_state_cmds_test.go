@@ -638,14 +638,20 @@ func TestTrustNativeEvidenceAdoptActualCLI(t *testing.T) {
 	binary, flags, faultChild := qaNativeSourceBinary(t)
 	t.Run("real-pinned-TLS-stale-history-update-only", func(t *testing.T) {
 		f := qaNativeSourceCLIFixture(t)
-		f.doc["native"].(map[string]any)["revocation_policy"].(map[string]any)["max_age_seconds"] = 1
-		f.save(t)
-		j := f.journal(t)
-		issued := time.Now().UTC()
-		if _, err := j.Enroll(context.Background(), qaNativeSourceCLIProof(t, f.base.revocationKey, 1, issued)); err != nil {
+		// Enroll retained history under the initial day policy, then tighten the
+		// selected policy. A one-second lifetime races timestamp truncation and
+		// filesystem work during enrollment, before adoption is even exercised.
+		issued := time.Now().UTC().Add(-2 * time.Hour)
+		retained := qaNativeSourceCLIProof(t, f.base.revocationKey, 1, issued)
+		if _, err := f.journal(t).Enroll(context.Background(), retained); err != nil {
 			t.Fatal(err)
 		}
-		time.Sleep(time.Until(issued.Add(1100 * time.Millisecond)))
+		f.doc["native"].(map[string]any)["revocation_policy"].(map[string]any)["max_age_seconds"] = 3600
+		f.save(t)
+		j := f.journal(t)
+		if _, err := j.Adopt(context.Background(), retained); !errors.Is(err, registry.ErrNativeHistoryStale) {
+			t.Fatal("fixture did not retain stale history under the selected policy", err)
+		}
 		before := qaNativeSourceArtifactInventory(t, f.base.home)
 		code, out := qaNativeSourceRun(t, binary, flags, f, f.args())
 		if code != 0 {

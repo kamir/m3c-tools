@@ -6,6 +6,8 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -571,13 +573,11 @@ func doctorPlaud() diag.Section {
 				Detail: err.Error(),
 			})
 		} else {
-			age := time.Since(ts.SavedAt).Truncate(time.Hour)
-			s.Checks = append(s.Checks, diag.Check{
-				Name: "Plaud token", Status: diag.OK,
-				Detail: fmt.Sprintf("valid (%s old, saved %s)", age, ts.SavedAt.Format("2006-01-02")),
-			})
+			s.Checks = append(s.Checks, doctorPlaudTokenVerdict(plaudCfg, ts))
 		}
 	}
+
+	s.Checks = append(s.Checks, doctorPlaudDevToken(plaud.DefaultMCPTokenPath()))
 
 	// Check plaud-sync API reachability (uses ER1 base URL).
 	cfg := er1.LoadConfig()
@@ -633,6 +633,78 @@ func doctorPlaud() diag.Section {
 	}
 
 	return s
+}
+
+// plaudDevTokenSoon is how close to expiry doctor flags the developer token.
+const plaudDevTokenSoon = 2 * time.Hour
+
+// doctorPlaudDevToken reports the developer-API OAuth token file that
+// 'plaud dev' and the menubar sync read (BUG-0446). It only reads the file: it
+// neither refreshes the token nor asks Plaud whether it is accepted, so an
+// unexpired file is reported as present, not as valid.
+func doctorPlaudDevToken(path string) diag.Check {
+	const name = "Plaud developer token"
+	const relogin = "re-run: node tools/plaud-mcp-login.mjs"
+	data, err := os.ReadFile(path) // #nosec G304 -- path is plaud.DefaultMCPTokenPath() (the user home, else a CWD-relative .plaud); read-only
+	if os.IsNotExist(err) {
+		return diag.Check{Name: name, Status: diag.Skipped, Detail: "not configured (" + path + ")"}
+	}
+	if err != nil {
+		return diag.Check{Name: name, Status: diag.Fail, Detail: fmt.Sprintf("cannot read %s: %v", path, err)}
+	}
+	var t plaud.DevTokenFile
+	if json.Unmarshal(data, &t) != nil || t.AccessToken == "" {
+		return diag.Check{Name: name, Status: diag.Fail, Detail: "no access_token in " + path + ": " + relogin}
+	}
+	if t.ExpiresAt <= 0 {
+		return diag.Check{Name: name, Status: diag.Warn, Detail: "present, no expiry recorded: not checked against Plaud"}
+	}
+	exp := time.UnixMilli(t.ExpiresAt)
+	if time.Now().After(exp) {
+		ago := time.Since(exp).Round(time.Hour)
+		if t.RefreshToken == "" {
+			return diag.Check{Name: name, Status: diag.Fail,
+				Detail: fmt.Sprintf("expired %s ago (%s), no refresh token: %s", ago, exp.Format("2006-01-02 15:04"), relogin)}
+		}
+		return diag.Check{Name: name, Status: diag.Warn,
+			Detail: fmt.Sprintf("access token expired %s ago (%s); the next sync tries a refresh, if that fails: %s", ago, exp.Format("2006-01-02 15:04"), relogin)}
+	}
+	until := time.Until(exp)
+	left := until.Round(time.Minute) // display only; the threshold uses the exact value
+	if until < plaudDevTokenSoon {
+		// AC-05 of BUG-0446: the token lives about 24h, so this close to
+		// expiry a stopped refresh run means the channel dies within hours.
+		if t.RefreshToken == "" {
+			return diag.Check{Name: name, Status: diag.Fail,
+				Detail: fmt.Sprintf("expires in %s (%s), no refresh token: %s", left, exp.Format("2006-01-02 15:04"), relogin)}
+		}
+		return diag.Check{Name: name, Status: diag.Warn,
+			Detail: fmt.Sprintf("expires in %s (%s); from 1h before expiry, or after it, the next sync tries a refresh, if that fails: %s", left, exp.Format("2006-01-02 15:04"), relogin)}
+	}
+	return diag.Check{Name: name, Status: diag.OK,
+		Detail: fmt.Sprintf("present, expires in %s (%s); not checked against Plaud", left, exp.Format("2006-01-02 15:04"))}
+}
+
+// doctorPlaudTokenVerdict asks the Plaud API whether a locally readable,
+// unexpired token is accepted (BUG-0447). Finding the file is presence; only
+// Plaud's answer is validity, so an unreachable API leaves it unverified.
+func doctorPlaudTokenVerdict(cfg *plaud.Config, ts *plaud.TokenSession) diag.Check {
+	saved := fmt.Sprintf("saved %s, %s ago", ts.SavedAt.Format("2006-01-02"), time.Since(ts.SavedAt).Truncate(time.Hour))
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ok, err := plaud.NewClient(cfg, ts.Token).TokenAuthenticatesContext(ctx)
+	switch {
+	case errors.Is(err, plaud.ErrUnauthorized):
+		return diag.Check{Name: "Plaud token", Status: diag.Fail,
+			Detail: fmt.Sprintf("rejected by Plaud (HTTP 401, %s): run 'm3c-tools plaud auth login'", saved)}
+	case err != nil:
+		return diag.Check{Name: "Plaud token", Status: diag.Warn,
+			Detail: fmt.Sprintf("present, not verified: Plaud API check failed (%v); %s", err, saved)}
+	case !ok:
+		return diag.Check{Name: "Plaud token", Status: diag.Fail,
+			Detail: fmt.Sprintf("not accepted by Plaud (the API did not answer status 0, %s): run 'm3c-tools plaud auth login'", saved)}
+	}
+	return diag.Check{Name: "Plaud token", Status: diag.OK, Detail: "accepted by Plaud (" + saved + ")"}
 }
 
 // doctorDevices checks device pairing status via the ER1 devices API.

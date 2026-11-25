@@ -14,6 +14,11 @@ ab11e26f1879acdd167b107896c10e01c2f02658:demo/kup-training/artifacts/keys/attack
 ab11e26f1879acdd167b107896c10e01c2f02658:demo/kup-training/artifacts/keys/mirko.priv:private-key:1
 284a077f91573c5d1fa502164e1683a4dfef20c4:.claude/skills/deploy-er1/skill.md:curl-auth-header:53
 
+# The ER1 key once committed as a test fixture (rotated 2026-09-15; proven
+# rejected by the server on 2026-11-02, 12 of 12 probes). The value is dead;
+# only this exact historical location is suppressed, not the rule.
+78fca8b60c628d86cc32942220570c7234ac3dd3:pkg/config/doctor_test.go:er1-api-key-legacy:24
+
 # Synthetic Plaud token in a doctor test on the BUG-0447 branches (PR #474): a
 # 31-character JWT shape with header {"alg":"HS256"}, a 6-character payload
 # and a 3-character signature. Exact fingerprint; no exception for new occurrences.
